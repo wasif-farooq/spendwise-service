@@ -1,6 +1,6 @@
 export enum ApiVersion {
-    V1 = 'v1',
-    V2 = 'v2',
+  V1 = 'v1',
+  V2 = 'v2',
 }
 
 export const CURRENT_API_VERSION = ApiVersion.V1;

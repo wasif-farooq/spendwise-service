@@ -13,6 +13,9 @@ import { OrganizationRolesControllerFactory } from '@factories/OrganizationRoles
 import { UserControllerFactory } from '@factories/UserControllerFactory';
 import { TOKENS } from '@di/tokens';
 import { FeatureFlagControllerFactory } from '@factories/FeatureFlagControllerFactory';
+import { AccountControllerFactory } from '@factories/AccountControllerFactory';
+import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
+import { AccountService } from '@domains/accounts/services/AccountService';
 
 export class ServiceBootstrap {
     private static instance: ServiceBootstrap;
@@ -95,6 +98,16 @@ export class ServiceBootstrap {
 
             const subscriptionService = serviceFactory.createSubscriptionService();
             this.container.registerInstance(TOKENS.SubscriptionService, subscriptionService);
+
+            // Account domain registrations
+            const accountRepo = new AccountRepository(dbFacade);
+            this.container.registerInstance(TOKENS.AccountRepository, accountRepo);
+
+            const accountService = new AccountService(accountRepo);
+            this.container.registerInstance(TOKENS.AccountService, accountService);
+
+            const accountControllerFactory = new AccountControllerFactory(serviceFactory);
+            this.container.registerInstance(TOKENS.AccountController, accountControllerFactory.create());
 
 
             // Connect Infrastructure

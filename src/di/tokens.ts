@@ -24,4 +24,8 @@ export const TOKENS = {
     SubscriptionPlanRepository: 'SubscriptionPlanRepository',
     OrganizationSubscriptionRepository: 'OrganizationSubscriptionRepository',
     SubscriptionService: 'SubscriptionService',
+    // Account domain
+    AccountRepository: 'AccountRepository',
+    AccountService: 'AccountService',
+    AccountController: 'AccountController',
 };
