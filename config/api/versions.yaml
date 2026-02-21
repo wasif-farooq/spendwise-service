@@ -1,0 +1,11 @@
+versions:
+  - version: v1
+    status: active
+    releaseDate: '2024-01-01'
+    docs: /docs/api/v1
+    
+  - version: v2
+    status: active
+    releaseDate: '2024-06-01'
+    docs: /docs/api/v2
+    notes: 'Introduces enhanced RBAC and new notification preferences'

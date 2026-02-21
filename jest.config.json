@@ -1,0 +1,35 @@
+{
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+        "^@core/(.*)$": "<rootDir>/src/core/$1",
+        "^@api/(.*)$": "<rootDir>/src/api/$1",
+        "^@modules/(.*)$": "<rootDir>/src/modules/$1",
+        "^@messaging/(.*)$": "<rootDir>/src/messaging/$1",
+        "^@database/(.*)$": "<rootDir>/src/database/$1",
+        "^@cache/(.*)$": "<rootDir>/src/cache/$1",
+        "^@server/(.*)$": "<rootDir>/src/server/$1",
+        "^@bootstrap/(.*)$": "<rootDir>/src/bootstrap/$1",
+        "^@utils/(.*)$": "<rootDir>/src/core/utils/$1",
+        "^@middleware/(.*)$": "<rootDir>/src/core/middleware/*",
+        "^@di/(.*)$": "<rootDir>/src/core/di/$1",
+        "^@config/(.*)$": "<rootDir>/config/$1",
+        "^@tests/(.*)$": "<rootDir>/tests/$1"
+    },
+    "testMatch": [
+        "**/tests/**/*.test.ts",
+        "**/?(*.)+(spec|test).ts"
+    ],
+    "transform": {
+        "^.+\\.ts$": "ts-jest"
+    },
+    "moduleFileExtensions": [
+        "ts",
+        "js",
+        "json",
+        "node"
+    ],
+    "setupFilesAfterEnv": [
+        "<rootDir>/tests/setup.ts"
+    ]
+}

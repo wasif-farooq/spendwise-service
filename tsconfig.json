@@ -1,0 +1,81 @@
+{
+    "compilerOptions": {
+        "target": "ES2020",
+        "module": "commonjs",
+        "lib": [
+            "ES2020"
+        ],
+        "outDir": "./dist",
+        "rootDir": ".",
+        "strict": true,
+        "noImplicitAny": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        "resolveJsonModule": true,
+        "baseUrl": "./",
+        "paths": {
+            "@shared/*": [
+                "src/@shared/*"
+            ],
+            "@domains/*": [
+                "src/domains/*"
+            ],
+            "@facades/*": [
+                "src/facades/*"
+            ],
+            "@interfaces/*": [
+                "src/interfaces/*"
+            ],
+            "@abstract-factories/*": [
+                "src/abstract-factories/*"
+            ],
+            "@factories/*": [
+                "src/factories/*"
+            ],
+            "@config/*": [
+                "src/config/*"
+            ],
+            "@di/*": [
+                "src/di/*"
+            ],
+            "@cache/*": [
+                "src/cache/*"
+            ],
+            "@messaging/*": [
+                "src/messaging/*"
+            ],
+            "@monitoring/*": [
+                "src/monitoring/*"
+            ],
+            "@bootstrap/*": [
+                "src/bootstrap/*"
+            ],
+            "@server/*": [
+                "src/server/*"
+            ],
+            "@database/*": [
+                "src/database/*"
+            ],
+            "@processes/*": [
+                "processes/*"
+            ],
+            "@tests/*": [
+                "tests/*"
+            ]
+        }
+    },
+    "include": [
+        "src/**/*",
+        "config/**/*",
+        "processes/**/*",
+        "scripts/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "**/*.test.ts"
+    ]
+}

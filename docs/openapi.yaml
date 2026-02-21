@@ -1,0 +1,50 @@
+openapi: 3.0.0
+info:
+  title: SpendWise Backend API
+  version: 1.0.0
+  description: Antigravity Backend API for SpendWise
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local Development Server
+paths:
+  /auth/login:
+    post:
+      summary: Login user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        200:
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+  /users/profile:
+    get:
+      summary: Get user profile
+      tags: [Users]
+      responses:
+        200:
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string

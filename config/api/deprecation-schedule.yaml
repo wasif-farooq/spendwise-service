@@ -1,0 +1,6 @@
+schedules:
+  - version: v1
+    deprecatedDate: '2024-12-01'
+    sunsetDate: '2025-06-01'
+    migrationLink: /docs/migrations/v1-to-v2
+    reason: 'Legacy authentication flow replacement'
