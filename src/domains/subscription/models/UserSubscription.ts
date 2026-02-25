@@ -6,8 +6,8 @@ export interface SubscriptionSnapshot {
     limits: Record<string, number>;
 }
 
-export interface OrganizationSubscriptionProps {
-    organizationId: string;
+export interface UserSubscriptionProps {
+    userId: string;
     planId: string;
     status: 'active' | 'cancelled' | 'past_due' | 'trialing';
     startDate: Date;
@@ -22,14 +22,14 @@ export interface OrganizationSubscriptionProps {
     updatedAt: Date;
 }
 
-export class OrganizationSubscription extends Entity<OrganizationSubscriptionProps> {
-    private constructor(props: OrganizationSubscriptionProps, id?: string) {
+export class UserSubscription extends Entity<UserSubscriptionProps> {
+    private constructor(props: UserSubscriptionProps, id?: string) {
         super(props, id);
     }
 
-    public static create(organizationId: string, plan: SubscriptionPlan, billingDetails?: { provider: string, subscriptionId: string }): OrganizationSubscription {
-        const props: OrganizationSubscriptionProps = {
-            organizationId,
+    public static create(userId: string, plan: SubscriptionPlan, billingDetails?: { provider: string, subscriptionId: string }): UserSubscription {
+        const props: UserSubscriptionProps = {
+            userId,
             planId: plan.id,
             status: 'active',
             startDate: new Date(),
@@ -43,11 +43,11 @@ export class OrganizationSubscription extends Entity<OrganizationSubscriptionPro
             createdAt: new Date(),
             updatedAt: new Date()
         };
-        return new OrganizationSubscription(props);
+        return new UserSubscription(props);
     }
 
-    public static restore(props: OrganizationSubscriptionProps, id: string): OrganizationSubscription {
-        return new OrganizationSubscription(props, id);
+    public static restore(props: UserSubscriptionProps, id: string): UserSubscription {
+        return new UserSubscription(props, id);
     }
 
     public upgrade(newPlan: SubscriptionPlan, billingDetails?: { provider: string, subscriptionId: string }): void {
@@ -64,7 +64,7 @@ export class OrganizationSubscription extends Entity<OrganizationSubscriptionPro
     }
 
     // Getters
-    get organizationId(): string { return this.props.organizationId; }
+    get userId(): string { return this.props.userId; }
     get planId(): string { return this.props.planId; }
     get status(): string { return this.props.status; }
     get featuresSnapshot(): string[] { return this.props.featuresSnapshot; }

@@ -24,9 +24,9 @@ export class ServiceFactory {
             this.db,
             this.repositoryFactory.createUserRepository(),
             this.repositoryFactory.createAuthRepository(),
-            this.repositoryFactory.createOrganizationRepository(),
-            this.repositoryFactory.createOrganizationRoleRepository(),
-            this.repositoryFactory.createOrganizationMembersRepository(),
+            this.repositoryFactory.createWorkspaceRepository(),
+            this.repositoryFactory.createWorkspaceRoleRepository(),
+            this.repositoryFactory.createWorkspaceMembersRepository(),
             redisInfo
         );
     }
@@ -37,11 +37,11 @@ export class ServiceFactory {
         );
     }
 
-    createOrganizationService(): import('@domains/organizations/services/OrganizationService').OrganizationService {
-        return new (require('@domains/organizations/services/OrganizationService').OrganizationService)(
-            this.repositoryFactory.createOrganizationRepository(),
-            this.repositoryFactory.createOrganizationMembersRepository(),
-            this.repositoryFactory.createOrganizationRoleRepository(),
+    createWorkspaceService(): import('@domains/workspaces/services/WorkspaceService').WorkspaceService {
+        return new (require('@domains/workspaces/services/WorkspaceService').WorkspaceService)(
+            this.repositoryFactory.createWorkspaceRepository(),
+            this.repositoryFactory.createWorkspaceMembersRepository(),
+            this.repositoryFactory.createWorkspaceRoleRepository(),
             this.repositoryFactory.createUserRepository()
         );
     }
@@ -61,8 +61,7 @@ export class ServiceFactory {
     createSubscriptionService(): SubscriptionService {
         return new SubscriptionService(
             this.repositoryFactory.createSubscriptionPlanRepository(),
-            this.repositoryFactory.createOrganizationSubscriptionRepository()
+            this.repositoryFactory.createUserSubscriptionRepository()
         );
     }
 }
-

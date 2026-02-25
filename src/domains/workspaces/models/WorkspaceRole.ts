@@ -1,38 +1,38 @@
 import { Entity } from '@shared/Entity';
 
-export interface OrganizationRoleProps {
+export interface WorkspaceRoleProps {
     name: string;
     description?: string;
-    organizationId: string;
+    workspaceId: string;
     permissions: string[]; // Simplification for now, maybe JSON or array of strings
     isSystem?: boolean; // To identify 'Admin' role that shouldn't be deleted?
     createdAt: Date;
     updatedAt: Date;
 }
 
-export class OrganizationRole extends Entity<OrganizationRoleProps> {
-    private constructor(props: OrganizationRoleProps, id?: string) {
+export class WorkspaceRole extends Entity<WorkspaceRoleProps> {
+    private constructor(props: WorkspaceRoleProps, id?: string) {
         super(props, id);
     }
 
     public static create(props: {
         name: string;
-        organizationId: string;
+        workspaceId: string;
         permissions: string[];
         description?: string;
         isSystem?: boolean;
-    }, id?: string): OrganizationRole {
-        const roleProps: OrganizationRoleProps = {
+    }, id?: string): WorkspaceRole {
+        const roleProps: WorkspaceRoleProps = {
             ...props,
             isSystem: props.isSystem ?? false,
             createdAt: new Date(),
             updatedAt: new Date(),
         };
-        return new OrganizationRole(roleProps, id);
+        return new WorkspaceRole(roleProps, id);
     }
 
-    public static restore(props: OrganizationRoleProps, id: string): OrganizationRole {
-        return new OrganizationRole(props, id);
+    public static restore(props: WorkspaceRoleProps, id: string): WorkspaceRole {
+        return new WorkspaceRole(props, id);
     }
 
     public changePermissions(permissions: string[]): void {
@@ -42,7 +42,7 @@ export class OrganizationRole extends Entity<OrganizationRoleProps> {
 
 
     get name(): string { return this.props.name; }
-    get organizationId(): string { return this.props.organizationId; }
+    get workspaceId(): string { return this.props.workspaceId; }
     get permissions(): string[] { return this.props.permissions; }
     get isSystem(): boolean { return this.props.isSystem ?? false; }
 }

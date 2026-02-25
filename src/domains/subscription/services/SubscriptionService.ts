@@ -1,45 +1,44 @@
-
 import { Inject } from '@di/decorators/inject.decorator';
 import { TOKENS } from '@di/tokens';
 import { AppError } from '@shared/errors/AppError';
-import { SubscriptionPlanRepository, OrganizationSubscriptionRepository } from '../repositories/SubscriptionRepository';
+import { SubscriptionPlanRepository, UserSubscriptionRepository } from '../repositories/SubscriptionRepository';
 import { SubscriptionPlan } from '../models/SubscriptionPlan';
-import { OrganizationSubscription } from '../models/OrganizationSubscription';
+import { UserSubscription } from '../models/UserSubscription';
 
 export class SubscriptionService {
     constructor(
         @Inject(TOKENS.SubscriptionPlanRepository) private planRepo: SubscriptionPlanRepository,
-        @Inject(TOKENS.OrganizationSubscriptionRepository) private subRepo: OrganizationSubscriptionRepository
+        @Inject(TOKENS.UserSubscriptionRepository) private subRepo: UserSubscriptionRepository
     ) { }
 
     async getPlans(): Promise<SubscriptionPlan[]> {
         return this.planRepo.findAll();
     }
 
-    async getCurrentSubscription(organizationId: string): Promise<OrganizationSubscription | null> {
-        return this.subRepo.findByOrganizationId(organizationId);
+    async getCurrentSubscription(userId: string): Promise<UserSubscription | null> {
+        return this.subRepo.findByUserId(userId);
     }
 
-    async subscribe(organizationId: string, planId: string, billingDetails: { provider: string, subscriptionId: string }): Promise<OrganizationSubscription> {
+    async subscribe(userId: string, planId: string, billingDetails: { provider: string, subscriptionId: string }): Promise<UserSubscription> {
         // Check if plan exists
         const plan = await this.planRepo.findById(planId);
         if (!plan) throw new AppError('Plan not found', 404);
 
         // Check if already subscribed
-        const existingSub = await this.subRepo.findByOrganizationId(organizationId);
+        const existingSub = await this.subRepo.findByUserId(userId);
         if (existingSub && existingSub.status === 'active') {
-            throw new AppError('Organization already has an active subscription', 400);
+            throw new AppError('User already has an active subscription', 400);
         }
 
         // Create new subscription
-        const newSub = OrganizationSubscription.create(organizationId, plan, billingDetails);
+        const newSub = UserSubscription.create(userId, plan, billingDetails);
         await this.subRepo.save(newSub);
 
         return newSub;
     }
 
-    async upgrade(organizationId: string, planId: string): Promise<OrganizationSubscription> {
-        const sub = await this.subRepo.findByOrganizationId(organizationId);
+    async upgrade(userId: string, planId: string): Promise<UserSubscription> {
+        const sub = await this.subRepo.findByUserId(userId);
         if (!sub) throw new AppError('No active subscription found', 404);
 
         const newPlan = await this.planRepo.findById(planId);
@@ -62,7 +61,7 @@ export class SubscriptionService {
         return sub;
     }
 
-    async downgrade(organizationId: string, planId: string): Promise<OrganizationSubscription> {
+    async downgrade(userId: string, planId: string): Promise<UserSubscription> {
         // For now, downgrade uses same logic as upgrade (snapshotting the NEW plan's features)
         // But in some business logic, you might want to keep the OLD features until the end of the period.
         // The requirements said "if i made change is subscription plan it will not effect hose users", 
@@ -70,6 +69,6 @@ export class SubscriptionService {
         // When downgrading, usually the user ACCEPTS the new lower limits.
         // So snapshotting the new plan is correct.
 
-        return this.upgrade(organizationId, planId);
+        return this.upgrade(userId, planId);
     }
 }

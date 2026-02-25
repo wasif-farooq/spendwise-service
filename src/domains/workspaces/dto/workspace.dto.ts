@@ -1,4 +1,9 @@
-export interface UpdateOrganizationDto {
+export interface CreateWorkspaceDto {
+    name: string;
+    slug?: string;
+}
+
+export interface UpdateWorkspaceDto {
     name?: string;
     slug?: string; // Optional, might be immutable usually but good to have DTO support
 }
@@ -8,7 +13,7 @@ export interface InviteMemberDto {
     roleName: string; // e.g. 'Admin', 'Member'
 }
 
-export interface OrganizationDto {
+export interface WorkspaceDto {
     id: string;
     name: string;
     slug: string;

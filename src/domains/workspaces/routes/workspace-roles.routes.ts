@@ -7,7 +7,7 @@ import { requirePermission } from '@shared/middleware/permission.middleware';
 const router = Router({ mergeParams: true });
 
 const container = Container.getInstance();
-const factory = container.resolve<any>(TOKENS.OrganizationRolesControllerFactory);
+const factory = container.resolve<any>(TOKENS.WorkspaceRolesControllerFactory);
 const controller = factory.create();
 
 // Protected all routes

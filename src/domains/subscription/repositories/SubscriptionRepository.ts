@@ -1,7 +1,7 @@
 import { BaseRepository } from '@shared/repositories/BaseRepository';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { SubscriptionPlan, SubscriptionPlanProps } from '../models/SubscriptionPlan';
-import { OrganizationSubscription, OrganizationSubscriptionProps } from '../models/OrganizationSubscription';
+import { UserSubscription, UserSubscriptionProps } from '../models/UserSubscription';
 import { Inject } from '@di/decorators/inject.decorator';
 import { TOKENS } from '@di/tokens';
 
@@ -33,14 +33,14 @@ export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan>
     }
 }
 
-export class OrganizationSubscriptionRepository extends BaseRepository<OrganizationSubscription> {
+export class UserSubscriptionRepository extends BaseRepository<UserSubscription> {
     constructor(@Inject(TOKENS.Database) db: DatabaseFacade) {
-        super(db, 'organization_subscriptions');
+        super(db, 'user_subscriptions');
     }
 
-    protected mapToEntity(row: any): OrganizationSubscription {
-        return OrganizationSubscription.restore({
-            organizationId: row.organization_id,
+    protected mapToEntity(row: any): UserSubscription {
+        return UserSubscription.restore({
+            userId: row.user_id,
             planId: row.plan_id,
             status: row.status,
             startDate: row.start_date,
@@ -63,10 +63,10 @@ export class OrganizationSubscriptionRepository extends BaseRepository<Organizat
         return mapped;
     }
 
-    async findByOrganizationId(organizationId: string): Promise<OrganizationSubscription | null> {
+    async findByUserId(userId: string): Promise<UserSubscription | null> {
         const result = await this.db.query(
-            `SELECT * FROM ${this.tableName} WHERE organization_id = $1 ORDER BY created_at DESC LIMIT 1`,
-            [organizationId]
+            `SELECT * FROM ${this.tableName} WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+            [userId]
         );
         return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
     }

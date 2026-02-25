@@ -3,7 +3,6 @@ import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
 import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
 import { IUserRepository } from '@domains/auth/repositories/IUserRepository';
-import { OrganizationService } from '@domains/organizations/services/OrganizationService';
 
 export class SubscriptionController {
 
@@ -11,45 +10,25 @@ export class SubscriptionController {
         return Container.getInstance().resolve<SubscriptionService>(TOKENS.SubscriptionService);
     }
 
-    private get organizationService(): OrganizationService {
-        return Container.getInstance().resolve<OrganizationService>(TOKENS.OrganizationService);
-    }
-
     async getCurrentSubscription(req: Request, res: Response) {
         try {
             const userId = (req as any).user.userId;
-            const orgIdHeader = req.headers['x-organization-id'] as string;
 
-            let organizationId = orgIdHeader;
-
-            // If no header, try to find default org for user
-            if (!organizationId) {
-                const orgs = await this.organizationService.getUserOrganizations(userId);
-                if (orgs.length > 0) {
-                    organizationId = orgs[0].id;
-                }
+            if (!userId) {
+                return res.status(401).json({ message: 'User not authenticated' });
             }
 
-            if (!organizationId) {
-                return res.status(404).json({ message: 'Organization not found' });
-            }
-
-            const subscription = await this.subscriptionService.getCurrentSubscription(organizationId);
+            const subscription = await this.subscriptionService.getCurrentSubscription(userId);
 
             if (!subscription) {
                 // Return default/free plan details if no explicit subscription
-                // Or "Pro" as per previous requirement for new users if we want to stick to that.
-                // But generally the service should handle defaults or return null.
-                // If null, we can return a constructed "Free" or "Pro" response.
-
-                // For now, let's look up the default plan from DB
                 const plans = await this.subscriptionService.getPlans();
-                const defaultPlan = plans.find(p => p.name.toLowerCase() === 'pro') || plans[0]; // Default to Pro as requested
+                const defaultPlan = plans.find(p => p.name.toLowerCase() === 'free') || plans[0];
 
                 return res.json({
                     subscription: {
                         plan: defaultPlan?.name.toLowerCase() || 'free',
-                        status: 'active', // Implicitly active default
+                        status: 'active',
                         startDate: new Date(),
                         features: defaultPlan?.features || [],
                         limits: defaultPlan?.limits || {}
@@ -57,7 +36,7 @@ export class SubscriptionController {
                     featureUsage: {
                         members: 0,
                         accounts: 0,
-                        organizations: 1,
+                        workspaces: 0,
                         customRoles: 0,
                     }
                 });
@@ -65,7 +44,7 @@ export class SubscriptionController {
 
             return res.json({
                 subscription: {
-                    plan: subscription.planId, // This might be UUID, need to fetch plan details if name needed, but ID is fine for now if consistent
+                    plan: subscription.planId,
                     status: subscription.status,
                     startDate: subscription.startDate,
                     features: subscription.featuresSnapshot,
@@ -73,9 +52,9 @@ export class SubscriptionController {
                     paymentProvider: subscription.paymentProvider,
                 },
                 featureUsage: {
-                    members: 0, // Mock usage, needs real implementation later
+                    members: 0,
                     accounts: 0,
-                    organizations: 1,
+                    workspaces: 0,
                     customRoles: 0,
                 }
             });
@@ -104,19 +83,45 @@ export class SubscriptionController {
         }
     }
 
+    async subscribe(req: Request, res: Response) {
+        try {
+            const userId = (req as any).user.userId;
+            const { planId, paymentMethod } = req.body;
+
+            if (!userId) {
+                return res.status(401).json({ message: 'User not authenticated' });
+            }
+
+            const subscription = await this.subscriptionService.subscribe(
+                userId, 
+                planId, 
+                { provider: paymentMethod || '2checkout', subscriptionId: `sub_${Date.now()}` }
+            );
+
+            return res.status(201).json({
+                message: 'Subscription created successfully',
+                subscription: {
+                    plan: subscription.planId,
+                    status: subscription.status,
+                    startDate: subscription.startDate,
+                }
+            });
+
+        } catch (error: any) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
     async upgrade(req: Request, res: Response) {
         try {
             const userId = (req as any).user.userId;
-            const { planId, paymentMethod } = req.body; // paymentMethod token from frontend
-            const orgIdHeader = req.headers['x-organization-id'] as string;
+            const { planId, paymentMethod } = req.body;
 
-            if (!orgIdHeader) {
-                return res.status(400).json({ message: 'Organization ID header is required' });
+            if (!userId) {
+                return res.status(401).json({ message: 'User not authenticated' });
             }
 
-            // In a real app, verify user has permission to upgrade organization
-
-            const subscription = await this.subscriptionService.upgrade(orgIdHeader, planId);
+            const subscription = await this.subscriptionService.upgrade(userId, planId);
 
             return res.json({
                 message: 'Subscription upgraded successfully',
@@ -136,13 +141,12 @@ export class SubscriptionController {
         try {
             const userId = (req as any).user.userId;
             const { planId } = req.body;
-            const orgIdHeader = req.headers['x-organization-id'] as string;
 
-            if (!orgIdHeader) {
-                return res.status(400).json({ message: 'Organization ID header is required' });
+            if (!userId) {
+                return res.status(401).json({ message: 'User not authenticated' });
             }
 
-            const subscription = await this.subscriptionService.downgrade(orgIdHeader, planId);
+            const subscription = await this.subscriptionService.downgrade(userId, planId);
 
             return res.json({
                 message: 'Subscription downgraded successfully',
@@ -164,7 +168,7 @@ export class SubscriptionController {
             usage: {
                 members: 0,
                 accounts: 0,
-                organizations: 1,
+                workspaces: 0,
                 customRoles: 0,
             }
         });

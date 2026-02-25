@@ -30,9 +30,9 @@ export const PERMISSIONS = {
         EDIT: 'accounts:edit', // manage access
         DELETE: 'accounts:delete'
     },
-    ORGANIZATION: {
-        UPDATE: 'organization:update',
-        DELETE: 'organization:delete'
+    WORKSPACE: {
+        UPDATE: 'workspace:update',
+        DELETE: 'workspace:delete'
     }
 } as const;
 

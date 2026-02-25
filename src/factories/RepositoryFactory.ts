@@ -3,12 +3,12 @@ import { IUserRepository } from '@domains/auth/repositories/IUserRepository';
 import { IAuthRepository } from '@domains/auth/repositories/IAuthRepository';
 import { UserRepository } from '@domains/auth/repositories/UserRepository';
 import { AuthRepository } from '@domains/auth/repositories/AuthRepository';
-import { OrganizationRepository } from '@domains/organizations/repositories/OrganizationRepository';
-import { OrganizationRoleRepository } from '@domains/organizations/repositories/OrganizationRoleRepository';
-import { OrganizationMembersRepository } from '@domains/organizations/repositories/OrganizationMembersRepository';
+import { WorkspaceRepository } from '@domains/workspaces/repositories/WorkspaceRepository';
+import { WorkspaceRoleRepository } from '@domains/workspaces/repositories/WorkspaceRoleRepository';
+import { WorkspaceMembersRepository } from '@domains/workspaces/repositories/WorkspaceMembersRepository';
 import { UserPreferencesRepository } from '@domains/users/repositories/UserPreferencesRepository';
 import { FeatureFlagRepository } from '@domains/feature-flags/repositories/FeatureFlagRepository';
-import { SubscriptionPlanRepository, OrganizationSubscriptionRepository } from '@domains/subscription/repositories/SubscriptionRepository';
+import { SubscriptionPlanRepository, UserSubscriptionRepository } from '@domains/subscription/repositories/SubscriptionRepository';
 
 
 export class RepositoryFactory {
@@ -22,16 +22,16 @@ export class RepositoryFactory {
         return new AuthRepository(this.db);
     }
 
-    createOrganizationRepository(): OrganizationRepository {
-        return new OrganizationRepository(this.db);
+    createWorkspaceRepository(): WorkspaceRepository {
+        return new WorkspaceRepository(this.db);
     }
 
-    createOrganizationRoleRepository(): OrganizationRoleRepository {
-        return new OrganizationRoleRepository(this.db);
+    createWorkspaceRoleRepository(): WorkspaceRoleRepository {
+        return new WorkspaceRoleRepository(this.db);
     }
 
-    createOrganizationMembersRepository(): OrganizationMembersRepository {
-        return new OrganizationMembersRepository(this.db);
+    createWorkspaceMembersRepository(): WorkspaceMembersRepository {
+        return new WorkspaceMembersRepository(this.db);
     }
 
     createUserPreferencesRepository(): UserPreferencesRepository {
@@ -46,7 +46,7 @@ export class RepositoryFactory {
         return new SubscriptionPlanRepository(this.db);
     }
 
-    createOrganizationSubscriptionRepository(): OrganizationSubscriptionRepository {
-        return new OrganizationSubscriptionRepository(this.db);
+    createUserSubscriptionRepository(): UserSubscriptionRepository {
+        return new UserSubscriptionRepository(this.db);
     }
 }

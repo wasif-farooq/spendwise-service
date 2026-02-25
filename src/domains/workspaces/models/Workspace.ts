@@ -1,6 +1,6 @@
 import { Entity } from '@shared/Entity';
 
-export interface OrganizationProps {
+export interface WorkspaceProps {
     name: string;
     slug: string;
     ownerId?: string;
@@ -8,22 +8,22 @@ export interface OrganizationProps {
     updatedAt: Date;
 }
 
-export class Organization extends Entity<OrganizationProps> {
-    private constructor(props: OrganizationProps, id?: string) {
+export class Workspace extends Entity<WorkspaceProps> {
+    private constructor(props: WorkspaceProps, id?: string) {
         super(props, id);
     }
 
-    public static create(props: { name: string; slug: string; ownerId?: string }, id?: string): Organization {
-        const orgProps: OrganizationProps = {
+    public static create(props: { name: string; slug: string; ownerId?: string }, id?: string): Workspace {
+        const workspaceProps: WorkspaceProps = {
             ...props,
             createdAt: new Date(),
             updatedAt: new Date(),
         };
-        return new Organization(orgProps, id);
+        return new Workspace(workspaceProps, id);
     }
 
-    public static restore(props: OrganizationProps, id: string): Organization {
-        return new Organization(props, id);
+    public static restore(props: WorkspaceProps, id: string): Workspace {
+        return new Workspace(props, id);
     }
 
     public changeName(name: string): void {

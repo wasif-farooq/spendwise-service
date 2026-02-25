@@ -1,5 +1,5 @@
--- Create Organizations table
-CREATE TABLE IF NOT EXISTS organizations (
+-- Create Workspaces table
+CREATE TABLE IF NOT EXISTS workspaces (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     slug VARCHAR(255) NOT NULL UNIQUE,
@@ -8,24 +8,24 @@ CREATE TABLE IF NOT EXISTS organizations (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create Organization Roles table
-CREATE TABLE IF NOT EXISTS organization_roles (
+-- Create Workspace Roles table
+CREATE TABLE IF NOT EXISTS workspace_roles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     permissions TEXT[] DEFAULT '{}',
     is_system BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create Organization Members table
-CREATE TABLE IF NOT EXISTS organization_members (
+-- Create Workspace Members table
+CREATE TABLE IF NOT EXISTS workspace_members (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    role_id UUID NOT NULL REFERENCES organization_roles(id) ON DELETE RESTRICT,
+    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    role_ids TEXT[] DEFAULT '{}',
     joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, organization_id)
+    UNIQUE(user_id, workspace_id)
 );

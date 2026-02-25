@@ -1,32 +1,32 @@
 import { BaseRepository } from '@shared/repositories/BaseRepository';
-import { OrganizationMember } from '../models/OrganizationMember';
+import { WorkspaceMember } from '../models/WorkspaceMember';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { Inject } from '@di/decorators/inject.decorator';
 import { TOKENS } from '@di/tokens';
 
-export class OrganizationMembersRepository extends BaseRepository<OrganizationMember> {
+export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> {
     constructor(@Inject(TOKENS.Database) db: DatabaseFacade) {
-        super(db, 'organization_members');
+        super(db, 'workspace_members');
     }
 
-    protected mapToEntity(row: any): OrganizationMember {
-        return OrganizationMember.restore({
+    protected mapToEntity(row: any): WorkspaceMember {
+        return WorkspaceMember.restore({
             userId: row.user_id,
-            organizationId: row.organization_id,
+            workspaceId: row.workspace_id,
             roleIds: row.role_ids || [],
             joinedAt: row.joined_at
         }, row.id);
     }
 
-    async findByUserAndOrg(userId: string, organizationId: string): Promise<OrganizationMember | null> {
+    async findByUserAndWorkspace(userId: string, workspaceId: string): Promise<WorkspaceMember | null> {
         const result = await this.db.query(
-            `SELECT * FROM ${this.tableName} WHERE user_id = $1 AND organization_id = $2 LIMIT 1`,
-            [userId, organizationId]
+            `SELECT * FROM ${this.tableName} WHERE user_id = $1 AND workspace_id = $2 LIMIT 1`,
+            [userId, workspaceId]
         );
         return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
     }
 
-    async findByUserId(userId: string): Promise<OrganizationMember[]> {
+    async findByUserId(userId: string): Promise<WorkspaceMember[]> {
         const result = await this.db.query(
             `SELECT * FROM ${this.tableName} WHERE user_id = $1`,
             [userId]
@@ -34,10 +34,10 @@ export class OrganizationMembersRepository extends BaseRepository<OrganizationMe
         return result.rows.map((row: any) => this.mapToEntity(row));
     }
 
-    async findByOrganizationId(organizationId: string): Promise<OrganizationMember[]> {
+    async findByWorkspaceId(workspaceId: string): Promise<WorkspaceMember[]> {
         const result = await this.db.query(
-            `SELECT * FROM ${this.tableName} WHERE organization_id = $1`,
-            [organizationId]
+            `SELECT * FROM ${this.tableName} WHERE workspace_id = $1`,
+            [workspaceId]
         );
         return result.rows.map((row: any) => this.mapToEntity(row));
     }
@@ -50,29 +50,29 @@ export class OrganizationMembersRepository extends BaseRepository<OrganizationMe
         return result.rows[0] ? Number(result.rows[0].count) : 0;
     }
 
-    async findAllWithDetails(organizationId: string): Promise<any[]> {
+    async findAllWithDetails(workspaceId: string): Promise<any[]> {
         const query = `
             SELECT 
-                om.id as member_id,
-                om.user_id,
-                om.organization_id,
-                om.joined_at,
-                om.role_ids,
+                wm.id as member_id,
+                wm.user_id,
+                wm.workspace_id,
+                wm.joined_at,
+                wm.role_ids,
                 u.first_name,
                 u.last_name,
                 u.email
-            FROM ${this.tableName} om
-            JOIN users u ON om.user_id = u.id
-            WHERE om.organization_id = $1
+            FROM ${this.tableName} wm
+            JOIN users u ON wm.user_id = u.id
+            WHERE wm.workspace_id = $1
         `;
-        const result = await this.db.query(query, [organizationId]);
+        const result = await this.db.query(query, [workspaceId]);
 
         // Fetch role names for all members (can be optimized with aggregation in query if needed)
         // For simplicity and speed in this context, we will map them.
         return result.rows.map((row: any) => ({
             id: row.member_id,
             userId: row.user_id,
-            organizationId: row.organization_id,
+            workspaceId: row.workspace_id,
             roleIds: row.role_ids,
             firstName: row.first_name,
             lastName: row.last_name,

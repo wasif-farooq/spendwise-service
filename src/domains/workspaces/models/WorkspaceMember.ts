@@ -1,35 +1,35 @@
 import { Entity } from '@shared/Entity';
 
-export interface OrganizationMemberProps {
+export interface WorkspaceMemberProps {
     userId: string;
-    organizationId: string;
+    workspaceId: string;
     roleIds: string[];
     joinedAt: Date;
 }
 
-export class OrganizationMember extends Entity<OrganizationMemberProps> {
-    private constructor(props: OrganizationMemberProps, id?: string) {
+export class WorkspaceMember extends Entity<WorkspaceMemberProps> {
+    private constructor(props: WorkspaceMemberProps, id?: string) {
         super(props, id);
     }
 
     public static create(props: {
         userId: string;
-        organizationId: string;
+        workspaceId: string;
         roleIds: string[];
-    }, id?: string): OrganizationMember {
-        const memberProps: OrganizationMemberProps = {
+    }, id?: string): WorkspaceMember {
+        const memberProps: WorkspaceMemberProps = {
             ...props,
             joinedAt: new Date(),
         };
-        return new OrganizationMember(memberProps, id);
+        return new WorkspaceMember(memberProps, id);
     }
 
-    public static restore(props: OrganizationMemberProps, id: string): OrganizationMember {
-        return new OrganizationMember(props, id);
+    public static restore(props: WorkspaceMemberProps, id: string): WorkspaceMember {
+        return new WorkspaceMember(props, id);
     }
 
     get userId(): string { return this.props.userId; }
-    get organizationId(): string { return this.props.organizationId; }
+    get workspaceId(): string { return this.props.workspaceId; }
     get roleIds(): string[] { return this.props.roleIds; }
 
     public addRole(roleId: string): void {

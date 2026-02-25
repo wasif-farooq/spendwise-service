@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Organization Subscriptions Table
-CREATE TABLE IF NOT EXISTS organization_subscriptions (
+-- User Subscriptions Table (linked to user, not workspace)
+CREATE TABLE IF NOT EXISTS user_subscriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     plan_id VARCHAR(50) NOT NULL REFERENCES subscription_plans(id),
     status VARCHAR(20) NOT NULL DEFAULT 'active', -- 'active', 'cancelled', 'past_due', 'trialing'
     
@@ -38,8 +38,8 @@ CREATE TABLE IF NOT EXISTS organization_subscriptions (
 );
 
 -- Index for faster lookups
-CREATE INDEX idx_org_subs_org_id ON organization_subscriptions(organization_id);
-CREATE INDEX idx_org_subs_status ON organization_subscriptions(status);
+CREATE INDEX idx_user_subs_user_id ON user_subscriptions(user_id);
+CREATE INDEX idx_user_subs_status ON user_subscriptions(status);
 
 -- Seed Initial Plans
 INSERT INTO subscription_plans (id, name, price, currency, billing_period, description, features, limits) VALUES
@@ -51,7 +51,7 @@ INSERT INTO subscription_plans (id, name, price, currency, billing_period, descr
     'monthly', 
     'Perfect for getting started',
     '["basic_reporting"]',
-    '{"members": 2, "accounts": 2, "organizations": 1, "custom_roles": 0}'
+    '{"members": 2, "accounts": 2, "workspaces": 1, "custom_roles": 0}'
 ),
 (
     'pro', 
@@ -61,7 +61,7 @@ INSERT INTO subscription_plans (id, name, price, currency, billing_period, descr
     'monthly', 
     'For growing teams',
     '["basic_reporting", "advanced_reporting", "ai_advisor", "export_data"]',
-    '{"members": 9999, "accounts": 9999, "organizations": 9999, "custom_roles": 9999}'
+    '{"members": 9999, "accounts": 9999, "workspaces": 9999, "custom_roles": 9999}'
 ),
 (
     'enterprise', 
@@ -69,9 +69,9 @@ INSERT INTO subscription_plans (id, name, price, currency, billing_period, descr
     99, 
     'USD', 
     'monthly', 
-    'For large organizations',
+    'For large teams',
     '["basic_reporting", "advanced_reporting", "ai_advisor", "export_data", "sso", "audit_logs"]',
-    '{"members": 9999, "accounts": 9999, "organizations": 9999, "custom_roles": 9999}'
+    '{"members": 9999, "accounts": 9999, "workspaces": 9999, "custom_roles": 9999}'
 )
 ON CONFLICT (id) DO UPDATE SET 
     price = EXCLUDED.price,
