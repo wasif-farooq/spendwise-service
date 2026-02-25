@@ -8,8 +8,8 @@ import { KafkaMessageQueueFactory } from '@messaging/factories/KafkaMessageQueue
 import { RepositoryFactory } from '@factories/RepositoryFactory';
 import { ServiceFactory } from '@factories/ServiceFactory';
 import { AuthControllerFactory } from '@factories/AuthControllerFactory';
-import { OrganizationControllerFactory } from '@factories/OrganizationControllerFactory';
-import { OrganizationRolesControllerFactory } from '@factories/OrganizationRolesControllerFactory';
+import { WorkspaceControllerFactory } from '@factories/WorkspaceControllerFactory';
+import { WorkspaceRolesControllerFactory } from '@factories/WorkspaceRolesControllerFactory';
 import { UserControllerFactory } from '@factories/UserControllerFactory';
 import { TOKENS } from '@di/tokens';
 import { FeatureFlagControllerFactory } from '@factories/FeatureFlagControllerFactory';
@@ -66,14 +66,14 @@ export class ServiceBootstrap {
             const userControllerFactory = new UserControllerFactory(serviceFactory);
             this.container.registerInstance(TOKENS.UserControllerFactory, userControllerFactory);
 
-            const organizationControllerFactory = new OrganizationControllerFactory(serviceFactory);
-            this.container.registerInstance(TOKENS.OrganizationControllerFactory, organizationControllerFactory);
+            const workspaceControllerFactory = new WorkspaceControllerFactory(serviceFactory);
+            this.container.registerInstance(TOKENS.WorkspaceControllerFactory, workspaceControllerFactory);
 
             const featureFlagControllerFactory = new FeatureFlagControllerFactory(serviceFactory);
             this.container.registerInstance(TOKENS.FeatureFlagControllerFactory, featureFlagControllerFactory);
 
-            const organizationRolesControllerFactory = new OrganizationRolesControllerFactory(serviceFactory);
-            this.container.registerInstance(TOKENS.OrganizationRolesControllerFactory, organizationRolesControllerFactory);
+            const workspaceRolesControllerFactory = new WorkspaceRolesControllerFactory(serviceFactory);
+            this.container.registerInstance(TOKENS.WorkspaceRolesControllerFactory, workspaceRolesControllerFactory);
 
             const userPreferencesService = serviceFactory.createUserPreferencesService();
             this.container.registerInstance(TOKENS.UserPreferencesService, userPreferencesService);
@@ -81,8 +81,8 @@ export class ServiceBootstrap {
             const authService = serviceFactory.createAuthService();
             this.container.registerInstance(TOKENS.AuthService, authService);
 
-            const organizationService = serviceFactory.createOrganizationService();
-            this.container.registerInstance(TOKENS.OrganizationService, organizationService);
+            const workspaceService = serviceFactory.createWorkspaceService();
+            this.container.registerInstance(TOKENS.WorkspaceService, workspaceService);
 
             const userService = serviceFactory.createUserService();
             this.container.registerInstance(TOKENS.UserService, userService);
@@ -93,8 +93,8 @@ export class ServiceBootstrap {
             const subPlanRepo = repoFactory.createSubscriptionPlanRepository();
             this.container.registerInstance(TOKENS.SubscriptionPlanRepository, subPlanRepo);
 
-            const orgSubRepo = repoFactory.createOrganizationSubscriptionRepository();
-            this.container.registerInstance(TOKENS.OrganizationSubscriptionRepository, orgSubRepo);
+            const userSubRepo = repoFactory.createUserSubscriptionRepository();
+            this.container.registerInstance(TOKENS.UserSubscriptionRepository, userSubRepo);
 
             const subscriptionService = serviceFactory.createSubscriptionService();
             this.container.registerInstance(TOKENS.SubscriptionService, subscriptionService);

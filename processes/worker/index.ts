@@ -5,7 +5,7 @@ import { TOKENS } from '@di/tokens';
 import { Container } from '@di/Container';
 import { AuthService } from '@domains/auth/services/AuthService';
 import { UserService } from '@domains/users/services/UserService';
-import { OrganizationService } from '@domains/organizations/services/OrganizationService';
+import { WorkspaceService } from '@domains/workspaces/services/WorkspaceService';
 import { FeatureFlagService } from '@domains/feature-flags/services/FeatureFlagService';
 import { AppError } from '@shared/errors/AppError';
 
@@ -34,7 +34,7 @@ const startWorker = async () => {
     // Resolve Services
     const authService = serviceFactory.createAuthService() as AuthService;
     const userService = serviceFactory.createUserService() as UserService;
-    const organizationService = serviceFactory.createOrganizationService() as OrganizationService;
+    const workspaceService = serviceFactory.createWorkspaceService() as WorkspaceService;
     const featureFlagService = serviceFactory.createFeatureFlagService() as FeatureFlagService;
 
     console.log('Unified Worker Listening...');
@@ -67,18 +67,19 @@ const startWorker = async () => {
     await consumer.subscribe({ topic: 'user.service.updatePreferences', fromBeginning: false });
 
     // Subscribe to Organization Topics
-    await consumer.subscribe({ topic: 'organization.service.update', fromBeginning: false });
-    await consumer.subscribe({ topic: 'organization.service.delete', fromBeginning: false });
-    await consumer.subscribe({ topic: 'organization.service.list', fromBeginning: false });
-    await consumer.subscribe({ topic: 'organization.service.get-members', fromBeginning: false });
-    await consumer.subscribe({ topic: 'organization.service.invite-member', fromBeginning: false });
-    await consumer.subscribe({ topic: 'organization.service.remove-member', fromBeginning: false });
-    await consumer.subscribe({ topic: 'organization.service.get-roles', fromBeginning: false });
-    await consumer.subscribe({ topic: 'organization.service.get-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'organization.service.create-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'organization.service.update-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'organization.service.assign-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'organization.service.delete-role', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.create', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.update', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.delete', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.list', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.get-members', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.invite-member', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.remove-member', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.get-roles', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.get-role', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.create-role', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.update-role', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.assign-role', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.delete-role', fromBeginning: false });
 
     // Subscribe to Feature Flag Topics
     await consumer.subscribe({ topic: 'feature-flags.service.get-all', fromBeginning: false });
@@ -174,43 +175,46 @@ const startWorker = async () => {
                     result = pref.toDTO();
                 }
 
-                // --- Organization Handling ---
-                else if (topic === 'organization.service.update') {
-                    console.log(`[Org] Processing Update for ${correlationId}`);
-                    result = await organizationService.update(payload.orgId, payload.userId, payload);
-                } else if (topic === 'organization.service.delete') {
-                    console.log(`[Org] Processing Delete for ${correlationId}`);
-                    result = await organizationService.delete(payload.orgId, payload.userId);
-                } else if (topic === 'organization.service.list') {
-                    console.log(`[Org] Processing List for ${correlationId}`);
-                    result = await organizationService.getUserOrganizations(payload.userId);
-                } else if (topic === 'organization.service.get-members') {
-                    console.log(`[Org] Processing GetMembers for ${correlationId}`);
-                    result = await organizationService.getMembers(payload.orgId, payload.userId);
-                } else if (topic === 'organization.service.invite-member') {
-                    console.log(`[Org] Processing InviteMember for ${correlationId}`);
-                    result = await organizationService.inviteMember(payload.orgId, payload.userId, payload);
-                } else if (topic === 'organization.service.remove-member') {
-                    console.log(`[Org] Processing RemoveMember for ${correlationId}`);
-                    result = await organizationService.removeMember(payload.orgId, payload.userId, payload.memberId);
-                } else if (topic === 'organization.service.get-roles') {
-                    console.log(`[Org] Processing GetRoles for ${correlationId}`);
-                    result = await organizationService.getRoles(payload.orgId, payload.userId, payload);
-                } else if (topic === 'organization.service.get-role') {
-                    console.log(`[Org] Processing GetRole for ${correlationId}`);
-                    result = await organizationService.getRole(payload.orgId, payload.userId, payload.roleId);
-                } else if (topic === 'organization.service.create-role') {
-                    console.log(`[Org] Processing CreateRole for ${correlationId}`);
-                    result = await organizationService.createRole(payload.orgId, payload.userId, payload);
-                } else if (topic === 'organization.service.update-role') {
-                    console.log(`[Org] Processing UpdateRole for ${correlationId}`);
-                    result = await organizationService.updateRole(payload.orgId, payload.userId, payload.roleId, payload.permissions);
-                } else if (topic === 'organization.service.assign-role') {
-                    console.log(`[Org] Processing AssignRole for ${correlationId}`);
-                    result = await organizationService.assignRole(payload.orgId, payload.userId, payload.memberId, payload.roleId);
-                } else if (topic === 'organization.service.delete-role') {
-                    console.log(`[Org] Processing DeleteRole for ${correlationId}`);
-                    result = await organizationService.deleteRole(payload.orgId, payload.userId, payload.roleId);
+                // --- Workspace Handling ---
+                else if (topic === 'workspace.service.update') {
+                    console.log(`[Workspace] Processing Update for ${correlationId}`);
+                    result = await workspaceService.update(payload.workspaceId, payload.userId, payload);
+                } else if (topic === 'workspace.service.delete') {
+                    console.log(`[Workspace] Processing Delete for ${correlationId}`);
+                    result = await workspaceService.delete(payload.workspaceId, payload.userId);
+                } else if (topic === 'workspace.service.list') {
+                    console.log(`[Workspace] Processing List for ${correlationId}`);
+                    result = await workspaceService.getUserWorkspaces(payload.userId);
+                } else if (topic === 'workspace.service.get-members') {
+                    console.log(`[Workspace] Processing GetMembers for ${correlationId}`);
+                    result = await workspaceService.getMembers(payload.workspaceId, payload.userId);
+                } else if (topic === 'workspace.service.invite-member') {
+                    console.log(`[Workspace] Processing InviteMember for ${correlationId}`);
+                    result = await workspaceService.inviteMember(payload.workspaceId, payload.userId, payload);
+                } else if (topic === 'workspace.service.remove-member') {
+                    console.log(`[Workspace] Processing RemoveMember for ${correlationId}`);
+                    result = await workspaceService.removeMember(payload.workspaceId, payload.userId, payload.memberId);
+                } else if (topic === 'workspace.service.get-roles') {
+                    console.log(`[Workspace] Processing GetRoles for ${correlationId}`);
+                    result = await workspaceService.getRoles(payload.workspaceId, payload.userId, payload);
+                } else if (topic === 'workspace.service.get-role') {
+                    console.log(`[Workspace] Processing GetRole for ${correlationId}`);
+                    result = await workspaceService.getRole(payload.workspaceId, payload.userId, payload.roleId);
+                } else if (topic === 'workspace.service.create-role') {
+                    console.log(`[Workspace] Processing CreateRole for ${correlationId}`);
+                    result = await workspaceService.createRole(payload.workspaceId, payload.userId, payload);
+                } else if (topic === 'workspace.service.update-role') {
+                    console.log(`[Workspace] Processing UpdateRole for ${correlationId}`);
+                    result = await workspaceService.updateRole(payload.workspaceId, payload.userId, payload.roleId, payload.permissions);
+                } else if (topic === 'workspace.service.assign-role') {
+                    console.log(`[Workspace] Processing AssignRole for ${correlationId}`);
+                    result = await workspaceService.assignRole(payload.workspaceId, payload.userId, payload.memberId, payload.roleId);
+                } else if (topic === 'workspace.service.delete-role') {
+                    console.log(`[Workspace] Processing DeleteRole for ${correlationId}`);
+                    result = await workspaceService.deleteRole(payload.workspaceId, payload.userId, payload.roleId);
+                } else if (topic === 'workspace.service.create') {
+                    console.log(`[Workspace] Processing Create for ${correlationId}`);
+                    result = await workspaceService.create(payload.userId, payload);
                 }
 
                 // --- Feature Flag Handling ---

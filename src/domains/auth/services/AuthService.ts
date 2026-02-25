@@ -15,21 +15,21 @@ import QRCode from 'qrcode';
 
 
 import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { OrganizationRepository } from '@domains/organizations/repositories/OrganizationRepository';
-import { OrganizationRoleRepository } from '@domains/organizations/repositories/OrganizationRoleRepository';
-import { OrganizationMembersRepository } from '@domains/organizations/repositories/OrganizationMembersRepository';
-import { Organization } from '@domains/organizations/models/Organization';
-import { OrganizationRole } from '@domains/organizations/models/OrganizationRole';
-import { OrganizationMember } from '@domains/organizations/models/OrganizationMember';
+import { WorkspaceRepository } from '@domains/workspaces/repositories/WorkspaceRepository';
+import { WorkspaceRoleRepository } from '@domains/workspaces/repositories/WorkspaceRoleRepository';
+import { WorkspaceMembersRepository } from '@domains/workspaces/repositories/WorkspaceMembersRepository';
+import { Workspace } from '@domains/workspaces/models/Workspace';
+import { WorkspaceRole } from '@domains/workspaces/models/WorkspaceRole';
+import { WorkspaceMember } from '@domains/workspaces/models/WorkspaceMember';
 
 export class AuthService {
     constructor(
         @Inject(TOKENS.Database) private db: DatabaseFacade,
         @Inject('UserRepository') private userRepo: IUserRepository,
         @Inject('AuthRepository') private authRepo: IAuthRepository,
-        @Inject(TOKENS.OrganizationRepository) private organizationRepository: OrganizationRepository,
-        @Inject(TOKENS.OrganizationRoleRepository) private organizationRoleRepository: OrganizationRoleRepository,
-        @Inject(TOKENS.OrganizationMembersRepository) private organizationMembersRepository: OrganizationMembersRepository,
+        @Inject(TOKENS.WorkspaceRepository) private workspaceRepository: WorkspaceRepository,
+        @Inject(TOKENS.WorkspaceRoleRepository) private workspaceRoleRepository: WorkspaceRoleRepository,
+        @Inject(TOKENS.WorkspaceMembersRepository) private workspaceMembersRepository: WorkspaceMembersRepository,
         // Optional Cache Injection (Manual for now in Factory)
         private cache?: any
     ) { }
@@ -73,30 +73,30 @@ export class AuthService {
             await this.userRepo.save(user, { db: trx });
             await this.authRepo.save(identity, { db: trx });
 
-            // 2. Create Organization "My Account"
-            const organization = Organization.create({
+            // 2. Create Workspace "My Account"
+            const workspace = Workspace.create({
                 name: "My Account",
                 slug: `my-account-${user.id.substring(0, 8)}`, // Simple slug generation
                 ownerId: user.id
             });
-            const trxOrg = await this.organizationRepository.create(organization, { db: trx });
+            const trxWorkspace = await this.workspaceRepository.create(workspace, { db: trx });
 
             // 3. Create Role "Admin"
-            const adminRole = OrganizationRole.create({
+            const adminRole = WorkspaceRole.create({
                 name: "Admin",
-                organizationId: trxOrg.id,
+                workspaceId: trxWorkspace.id,
                 permissions: ['*'],
                 isSystem: true
             });
-            const trxRole = await this.organizationRoleRepository.create(adminRole, { db: trx });
+            const trxRole = await this.workspaceRoleRepository.create(adminRole, { db: trx });
 
             // 4. Assign Role to User
-            const member = OrganizationMember.create({
+            const member = WorkspaceMember.create({
                 userId: user.id,
-                organizationId: trxOrg.id,
+                workspaceId: trxWorkspace.id,
                 roleIds: [trxRole.id]
             });
-            await this.organizationMembersRepository.create(member, { db: trx });
+            await this.workspaceMembersRepository.create(member, { db: trx });
         });
 
         // Mock Send Registration Email
