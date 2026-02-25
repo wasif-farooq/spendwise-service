@@ -80,6 +80,7 @@ const startWorker = async () => {
     await consumer.subscribe({ topic: 'workspace.service.update-role', fromBeginning: false });
     await consumer.subscribe({ topic: 'workspace.service.assign-role', fromBeginning: false });
     await consumer.subscribe({ topic: 'workspace.service.delete-role', fromBeginning: false });
+    await consumer.subscribe({ topic: 'workspace.service.check-permission', fromBeginning: false });
 
     // Subscribe to Feature Flag Topics
     await consumer.subscribe({ topic: 'feature-flags.service.get-all', fromBeginning: false });
@@ -215,6 +216,9 @@ const startWorker = async () => {
                 } else if (topic === 'workspace.service.create') {
                     console.log(`[Workspace] Processing Create for ${correlationId}`);
                     result = await workspaceService.create(payload.userId, payload);
+                } else if (topic === 'workspace.service.check-permission') {
+                    console.log(`[Workspace] Processing CheckPermission for ${correlationId}`);
+                    result = await workspaceService.checkPermission(payload.workspaceId, payload.userId, payload.permission);
                 }
 
                 // --- Feature Flag Handling ---

@@ -39,21 +39,21 @@ export class WorkspaceService {
 
         await this.workspaceRepository.save(workspace);
 
-        // Create default "Admin" role for the workspace
-        const adminRole = WorkspaceRole.create({
-            name: 'Admin',
-            description: 'Full access to all workspace features',
+        // Create default "Owner" role for the workspace with all permissions
+        const ownerRole = WorkspaceRole.create({
+            name: 'Owner',
+            description: 'Full access to all workspace features. This role cannot be deleted or edited.',
             workspaceId: workspace.id,
-            permissions: ['*'],
-            isSystem: true
+            permissions: ['*'], // All permissions
+            isSystem: true // System roles cannot be deleted or edited
         });
-        await this.workspaceRoleRepository.create(adminRole);
+        await this.workspaceRoleRepository.create(ownerRole);
 
-        // Add owner as a member with Admin role
+        // Add owner as a member with Owner role
         const ownerMember = WorkspaceMember.create({
             workspaceId: workspace.id,
             userId: userId,
-            roleIds: [adminRole.id]
+            roleIds: [ownerRole.id]
         });
         await this.workspaceMembersRepository.create(ownerMember);
 
@@ -205,6 +205,10 @@ export class WorkspaceService {
         const role = await this.workspaceRoleRepository.findById(roleId);
         if (!role || role.workspaceId !== workspaceId) throw new AppError('Role not found', 404);
 
+        // Prevent editing of Owner role
+        if (role.name === 'Owner') throw new AppError('Cannot edit Owner role', 400);
+        if (role.isSystem) throw new AppError('Cannot edit system role', 400);
+
         role.changePermissions(permissions);
         await this.workspaceRoleRepository.save(role);
     }
@@ -230,6 +234,8 @@ export class WorkspaceService {
         const role = await this.workspaceRoleRepository.findById(roleId);
         if (!role || role.workspaceId !== workspaceId) throw new AppError('Role not found', 404);
 
+        // Prevent deletion of Owner role
+        if (role.name === 'Owner') throw new AppError('Cannot delete Owner role', 400);
         if (role.isSystem) throw new AppError('Cannot delete system role', 400);
 
         // Check if strictly assigned
