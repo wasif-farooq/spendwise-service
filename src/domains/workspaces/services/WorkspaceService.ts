@@ -10,6 +10,7 @@ import { AppError } from '@shared/errors/AppError';
 import { CreateWorkspaceDto, UpdateWorkspaceDto, InviteMemberDto } from  '@domains/workspaces/dto/workspace.dto';
 import { CreateRoleDto, UpdateRoleDto } from  '@domains/workspaces/dto/role.dto';
 import { WorkspaceRole } from  '@domains/workspaces/models/WorkspaceRole';
+import { PermissionCache } from '@shared/permissionCache';
 
 export class WorkspaceService {
     constructor(
@@ -211,6 +212,9 @@ export class WorkspaceService {
 
         role.changePermissions(permissions);
         await this.workspaceRoleRepository.save(role);
+
+        // Invalidate permission cache for all members in this workspace
+        await PermissionCache.invalidateWorkspace(workspaceId);
     }
 
     async assignRole(workspaceId: string, userId: string, memberId: string, roleId: string): Promise<void> {
@@ -225,6 +229,9 @@ export class WorkspaceService {
 
         member.addRole(roleId);
         await this.workspaceMembersRepository.save(member);
+
+        // Invalidate permission cache for the member whose role changed
+        await PermissionCache.invalidate(member.userId, workspaceId);
     }
 
     async deleteRole(workspaceId: string, userId: string, roleId: string): Promise<void> {
@@ -243,6 +250,9 @@ export class WorkspaceService {
         if (assignedCount > 0) throw new AppError('Cannot delete role with assigned members', 400);
 
         await this.workspaceRoleRepository.delete(roleId);
+
+        // Invalidate permission cache for all members in this workspace
+        await PermissionCache.invalidateWorkspace(workspaceId);
     }
 
     async checkPermission(workspaceId: string, userId: string, permission: string): Promise<boolean> {
@@ -256,22 +266,56 @@ export class WorkspaceService {
 
         if (member.roleIds.length === 0) return false;
 
+        // Check cache first
+        const cachedPermissions = await PermissionCache.get(userId, workspaceId);
+        if (cachedPermissions) {
+            return checkPermissionFromArray(cachedPermissions, permission);
+        }
+
+        // Calculate and cache permissions
         const roles = await this.workspaceRoleRepository.findByIds(member.roleIds);
-        return roles.some(role => {
-            // 1. Full Wildcard
-            if (role.permissions.includes('*')) return true;
+        const allPermissions = this.calculateUserPermissions(roles);
+        await PermissionCache.set(userId, allPermissions, workspaceId);
 
-            // 2. Exact Match
-            if (role.permissions.includes(permission)) return true;
-
-            // 3. Resource Wildcard (e.g. 'members:*' allows 'members:create')
-            const parts = permission.split(':');
-            if (parts.length > 1) {
-                const resourceWildcard = `${parts[0]}:*`;
-                if (role.permissions.includes(resourceWildcard)) return true;
-            }
-
-            return false;
-        });
+        return checkPermissionFromArray(allPermissions, permission);
     }
+
+    /**
+     * Calculate all permissions for a user based on their roles
+     */
+    private calculateUserPermissions(roles: WorkspaceRole[]): string[] {
+        const permissionSet = new Set<string>();
+        
+        for (const role of roles) {
+            for (const perm of role.permissions) {
+                if (perm === '*') {
+                    // Full wildcard - return all permissions immediately
+                    return ['*'];
+                }
+                permissionSet.add(perm);
+            }
+        }
+        
+        return Array.from(permissionSet);
+    }
+}
+
+/**
+ * Check if a permission is granted from a permissions array
+ */
+function checkPermissionFromArray(permissions: string[], permission: string): boolean {
+    // 1. Full Wildcard
+    if (permissions.includes('*')) return true;
+
+    // 2. Exact Match
+    if (permissions.includes(permission)) return true;
+
+    // 3. Resource Wildcard (e.g. 'members:*' allows 'members:create')
+    const parts = permission.split(':');
+    if (parts.length > 1) {
+        const resourceWildcard = `${parts[0]}:*`;
+        if (permissions.includes(resourceWildcard)) return true;
+    }
+
+    return false;
 }

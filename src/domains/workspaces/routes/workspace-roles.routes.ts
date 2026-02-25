@@ -13,6 +13,7 @@ const controller = factory.create();
 // Protected all routes
 router.use(requireAuth);
 
+// Permission checks enabled with caching for fast performance
 router.get('/', requirePermission('roles:view'), controller.list.bind(controller));
 router.get('/:roleId', requirePermission('roles:view'), controller.getById.bind(controller));
 router.post('/', requirePermission('roles:create'), controller.create.bind(controller));
