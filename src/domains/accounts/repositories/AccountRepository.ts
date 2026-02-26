@@ -21,6 +21,14 @@ export class AccountRepository implements IAccountRepository {
         return result.rows.map((row: any) => this.mapToEntity(row));
     }
 
+    async countByOrganizationId(organizationId: string): Promise<number> {
+        const result = await this.db.query(
+            'SELECT COUNT(*) as count FROM accounts WHERE organization_id = $1',
+            [organizationId]
+        );
+        return parseInt(result.rows[0]?.count || '0');
+    }
+
     async findByUserId(userId: string): Promise<Account[]> {
         const result = await this.db.query(
             'SELECT * FROM accounts WHERE user_id = $1 ORDER BY created_at DESC',

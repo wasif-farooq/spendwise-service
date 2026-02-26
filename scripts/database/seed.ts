@@ -54,6 +54,75 @@ async function seed() {
 
         console.log('Feature Flags seeded successfully.');
 
+        console.log('Seeding Subscription Plans...');
+
+        // Delete existing plans and re-insert
+        await client.query('DELETE FROM subscription_plans');
+
+        const plans = [
+            {
+                name: 'Free',
+                price: 0,
+                currency: 'USD',
+                billing_period: 'monthly',
+                description: 'Perfect for getting started',
+                features: ['accounts_view', 'transactions_view', 'exchange_rates'],
+                limits: { accounts: 2, transactions_per_account: 100 },
+                is_active: true
+            },
+            {
+                name: 'Starter',
+                price: 9.99,
+                currency: 'USD',
+                billing_period: 'monthly',
+                description: 'For individuals who want more',
+                features: ['accounts_view', 'transactions_view', 'exchange_rates', 'manage_organization'],
+                limits: { accounts: 5, transactions_per_account: 500 },
+                is_active: true
+            },
+            {
+                name: 'Pro',
+                price: 24.99,
+                currency: 'USD',
+                billing_period: 'monthly',
+                description: 'For power users and small teams',
+                features: ['accounts_view', 'transactions_view', 'exchange_rates', 'manage_organization', 'billing_management'],
+                limits: { accounts: 10, transactions_per_account: 2000 },
+                is_active: true
+            },
+            {
+                name: 'Business',
+                price: 49.99,
+                currency: 'USD',
+                billing_period: 'monthly',
+                description: 'For growing businesses',
+                features: ['accounts_view', 'transactions_view', 'exchange_rates', 'manage_organization', 'billing_management', 'audit_logs', 'two_factor_auth'],
+                limits: { accounts: 25, transactions_per_account: -1 }, // -1 = unlimited
+                is_active: true
+            }
+        ];
+
+        for (const plan of plans) {
+            // Use simple INSERT with generated UUID
+            const id = require('uuid').v4();
+            await client.query(`
+                INSERT INTO subscription_plans (id, name, price, currency, billing_period, description, features, limits, is_active)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            `, [
+                id,
+                plan.name,
+                plan.price,
+                plan.currency,
+                plan.billing_period,
+                plan.description,
+                JSON.stringify(plan.features),
+                JSON.stringify(plan.limits),
+                plan.is_active
+            ]);
+        }
+
+        console.log('Subscription Plans seeded successfully.');
+
     } catch (err) {
         console.error('Seeding error:', err);
         process.exit(1);

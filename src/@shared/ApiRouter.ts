@@ -6,6 +6,7 @@ import settingsRoutesV1 from '@domains/settings/settings.routes';
 import featureFlagsRoutesV1 from '@domains/feature-flags/routes/feature-flags.routes';
 import subscriptionRoutesV1 from '@domains/subscription/routes/subscription.routes';
 import accountsRoutesV1 from '@domains/accounts/routes/accounts.routes';
+import transactionsRoutesV1 from '@domains/transactions/routes/transaction.routes';
 
 export class ApiRouter {
   private router: Router;
@@ -24,6 +25,7 @@ export class ApiRouter {
     this.router.use('/v1/feature-flags', featureFlagsRoutesV1);
     this.router.use('/v1/subscription', subscriptionRoutesV1);
     this.router.use('/v1/accounts', accountsRoutesV1);
+    this.router.use('/v1/transactions', transactionsRoutesV1);
 
     // V2 Routes could go here
     // this.router.use('/v2/auth', authRoutesV2);

@@ -28,4 +28,8 @@ export const TOKENS = {
     AccountRepository: 'AccountRepository',
     AccountService: 'AccountService',
     AccountController: 'AccountController',
+    // Transaction domain
+    TransactionRepository: 'TransactionRepository',
+    TransactionService: 'TransactionService',
+    TransactionController: 'TransactionController',
 };

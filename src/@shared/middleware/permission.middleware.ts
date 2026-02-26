@@ -85,7 +85,8 @@ async function getPermissionsFromDB(db: DatabaseFacade, userId: string, workspac
 export const requirePermission = (permission: string) => {
     return async (req: Request, res: Response, next: NextFunction) => {
         const userId = (req as any).user?.userId || (req as any).user?.sub;
-        const workspaceId = req.params.id;
+        // Check multiple param names for workspace ID
+        const workspaceId = req.params.id || req.params.orgId || req.params.workspaceId;
 
         if (!userId) {
             return res.status(401).json({ message: 'Unauthorized' });

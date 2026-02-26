@@ -2,47 +2,34 @@ import { Request, Response } from 'express';
 import { AccountService } from '../services/AccountService';
 import { AccountValidators } from '../validators';
 import { AppError } from '@shared/errors/AppError';
-import { WorkspaceMembersRepository } from '@domains/workspaces/repositories/WorkspaceMembersRepository';
-import { DatabaseFacade } from '@facades/DatabaseFacade';
+import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
 import { Container } from '@di/Container';
-import { TOKENS } from '@di/tokens';
+import { DatabaseFacade } from '@facades/DatabaseFacade';
+import { AccountRepository } from '../repositories/AccountRepository';
 
 export class AccountController {
-    private membersRepo: WorkspaceMembersRepository;
+    private subscriptionService: SubscriptionService;
+    private accountRepo: AccountRepository;
 
     constructor(private accountService: AccountService) {
-        // Get database from container
-        const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-        this.membersRepo = new WorkspaceMembersRepository(db);
+        const db = Container.getInstance().resolve<DatabaseFacade>('Database');
+        this.subscriptionService = Container.getInstance().resolve<SubscriptionService>('SubscriptionService');
+        this.accountRepo = new AccountRepository(db);
     }
 
     private getWorkspaceId(req: Request): string {
-        return req.params.workspaceId || req.params.orgId;
-    }
-
-    private getUserId(req: Request): string {
-        return (req as any).user?.userId || (req as any).user?.id;
-    }
-
-    private async checkMembership(workspaceId: string, userId: string): Promise<void> {
-        const member = await this.membersRepo.findByUserAndWorkspace(userId, workspaceId);
-        if (!member) {
-            throw new AppError('You are not a member of this workspace', 403);
-        }
+        return req.params.workspaceId;
     }
 
     async getAccounts(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
-            const userId = this.getUserId(req);
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
-            // Verify user is a member
-            await this.checkMembership(workspaceId, userId);
-
+            // Membership & permission checked by middleware
             const accounts = await this.accountService.getAccountsByOrganization(workspaceId);
             res.json(accounts.map(a => a.toJSON()));
         } catch (error: any) {
@@ -54,15 +41,12 @@ export class AccountController {
         try {
             const { id } = AccountValidators.validateId(req.params);
             const workspaceId = this.getWorkspaceId(req);
-            const userId = this.getUserId(req);
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
-            // Verify user is a member
-            await this.checkMembership(workspaceId, userId);
-
+            // Membership & permission checked by middleware
             const account = await this.accountService.getAccountById(id, workspaceId);
             res.json(account.toJSON());
         } catch (error: any) {
@@ -73,15 +57,16 @@ export class AccountController {
     async createAccount(req: Request, res: Response) {
         try {
             const data = AccountValidators.validateCreate(req.body);
-            const userId = this.getUserId(req);
             const workspaceId = this.getWorkspaceId(req);
+            const userId = (req as any).user?.userId || (req as any).user?.id;
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
-            // Verify user is a member
-            await this.checkMembership(workspaceId, userId);
+            // Check subscription limits before creating
+            const currentCount = await this.accountRepo.countByOrganizationId(workspaceId);
+            await this.subscriptionService.checkFeatureLimit(userId, 'accounts', currentCount);
 
             const account = await this.accountService.createAccount(data, userId, workspaceId);
             res.status(201).json(account.toJSON());
@@ -94,16 +79,13 @@ export class AccountController {
         try {
             const { id } = AccountValidators.validateId(req.params);
             const data = AccountValidators.validateUpdate(req.body);
-            const userId = this.getUserId(req);
             const workspaceId = this.getWorkspaceId(req);
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
-            // Verify user is a member
-            await this.checkMembership(workspaceId, userId);
-
+            // Permission checked by middleware
             const account = await this.accountService.updateAccount(id, data, workspaceId);
             res.json(account.toJSON());
         } catch (error: any) {
@@ -114,16 +96,13 @@ export class AccountController {
     async deleteAccount(req: Request, res: Response) {
         try {
             const { id } = AccountValidators.validateId(req.params);
-            const userId = this.getUserId(req);
             const workspaceId = this.getWorkspaceId(req);
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
-            // Verify user is a member
-            await this.checkMembership(workspaceId, userId);
-
+            // Permission checked by middleware
             await this.accountService.deleteAccount(id, workspaceId);
             res.status(204).send();
         } catch (error: any) {
@@ -134,15 +113,12 @@ export class AccountController {
     async getTotalBalance(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
-            const userId = this.getUserId(req);
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
-            // Verify user is a member
-            await this.checkMembership(workspaceId, userId);
-
+            // Membership checked by middleware
             const result = await this.accountService.getTotalBalance(workspaceId);
             res.json(result);
         } catch (error: any) {

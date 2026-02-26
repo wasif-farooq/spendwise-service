@@ -71,4 +71,68 @@ export class SubscriptionService {
 
         return this.upgrade(userId, planId);
     }
+
+    /**
+     * Check if user has reached a feature limit
+     * @param userId - The user ID
+     * @param feature - The feature name (e.g., 'accounts', 'transactions')
+     * @param currentCount - Current count of the feature
+     * @throws AppError if limit exceeded
+     */
+    async checkFeatureLimit(userId: string, feature: string, currentCount: number): Promise<void> {
+        const subscription = await this.subRepo.findByUserId(userId);
+        
+        if (!subscription) {
+            // No subscription - apply default limits or free tier limits
+            const defaultLimit = 1; // Free tier
+            if (currentCount >= defaultLimit) {
+                throw new AppError(`You have reached the limit of ${defaultLimit} ${feature}. Please upgrade your plan.`, 403);
+            }
+            return;
+        }
+
+        const limits = subscription.limitsSnapshot;
+        const limit = limits[feature];
+
+        // If no limit defined for this feature, allow unlimited
+        if (limit === undefined || limit === -1) {
+            return;
+        }
+
+        if (currentCount >= limit) {
+            throw new AppError(`You have reached the limit of ${limit} ${feature}. Please upgrade your plan.`, 403);
+        }
+    }
+
+    /**
+     * Check if account has reached monthly transaction limit
+     * @param userId - The user ID (workspace owner)
+     * @param accountId - The account ID to check
+     * @param currentMonthCount - Current transaction count for this account this month
+     * @throws AppError if limit exceeded
+     */
+    async checkAccountTransactionLimit(userId: string, accountId: string, currentMonthCount: number): Promise<void> {
+        const subscription = await this.subRepo.findByUserId(userId);
+        
+        if (!subscription) {
+            // No subscription - apply default limit
+            const defaultLimit = 100; // Free tier
+            if (currentMonthCount >= defaultLimit) {
+                throw new AppError(`This account has reached ${defaultLimit} transactions this month. Please upgrade your plan to add more.`, 403);
+            }
+            return;
+        }
+
+        const limits = subscription.limitsSnapshot;
+        const limit = limits['transactions_per_account'];
+
+        // If no limit defined or -1 (unlimited), allow
+        if (limit === undefined || limit === -1) {
+            return;
+        }
+
+        if (currentMonthCount >= limit) {
+            throw new AppError(`This account has reached ${limit} transactions this month. Please upgrade your plan to add more.`, 403);
+        }
+    }
 }
