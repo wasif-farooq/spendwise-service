@@ -24,8 +24,9 @@ export class ApiRouter {
     this.router.use('/v1/settings', settingsRoutesV1);
     this.router.use('/v1/feature-flags', featureFlagsRoutesV1);
     this.router.use('/v1/subscription', subscriptionRoutesV1);
-    this.router.use('/v1/accounts', accountsRoutesV1);
-    this.router.use('/v1/transactions', transactionsRoutesV1);
+    // Account and Transaction routes at /v1/:workspaceId/
+    this.router.use('/v1', accountsRoutesV1);
+    this.router.use('/v1', transactionsRoutesV1);
 
     // V2 Routes could go here
     // this.router.use('/v2/auth', authRoutesV2);

@@ -22,14 +22,14 @@ const WorkspaceIdParamSchema = z.object({
 // All routes require authentication + permission
 router.use(requireAuth);
 
-// Read operations
-router.get('/:workspaceId', validateParams(WorkspaceIdParamSchema), requirePermission('account:read'), controller.getAccounts.bind(controller));
-router.get('/:workspaceId/balance', validateParams(WorkspaceIdParamSchema), requirePermission('account:read'), controller.getTotalBalance.bind(controller));
-router.get('/:workspaceId/:id', validateParams(WorkspaceIdParamSchema), validateParams(AccountIdParamSchema), requirePermission('account:read'), controller.getAccountById.bind(controller));
+// Write operations first (more specific)
+router.post('/:workspaceId/accounts', validateParams(WorkspaceIdParamSchema), validateBody(CreateAccountSchema), requirePermission('account:create'), controller.createAccount.bind(controller));
+router.put('/:workspaceId/accounts/:id', validateParams(WorkspaceIdParamSchema), validateParams(AccountIdParamSchema), validateBody(UpdateAccountSchema), requirePermission('account:update'), controller.updateAccount.bind(controller));
+router.delete('/:workspaceId/accounts/:id', validateParams(WorkspaceIdParamSchema), validateParams(AccountIdParamSchema), requirePermission('account:delete'), controller.deleteAccount.bind(controller));
 
-// Write operations
-router.post('/:workspaceId', validateParams(WorkspaceIdParamSchema), validateBody(CreateAccountSchema), requirePermission('account:create'), controller.createAccount.bind(controller));
-router.put('/:workspaceId/:id', validateParams(WorkspaceIdParamSchema), validateParams(AccountIdParamSchema), validateBody(UpdateAccountSchema), requirePermission('account:update'), controller.updateAccount.bind(controller));
-router.delete('/:workspaceId/:id', validateParams(WorkspaceIdParamSchema), validateParams(AccountIdParamSchema), requirePermission('account:delete'), controller.deleteAccount.bind(controller));
+// Read operations (less specific)
+router.get('/:workspaceId/accounts/balance', validateParams(WorkspaceIdParamSchema), requirePermission('account:read'), controller.getTotalBalance.bind(controller));
+router.get('/:workspaceId/accounts/:id', validateParams(WorkspaceIdParamSchema), validateParams(AccountIdParamSchema), requirePermission('account:read'), controller.getAccountById.bind(controller));
+router.get('/:workspaceId/accounts', validateParams(WorkspaceIdParamSchema), requirePermission('account:read'), controller.getAccounts.bind(controller));
 
 export default router;

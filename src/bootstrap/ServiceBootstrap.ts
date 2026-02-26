@@ -16,6 +16,9 @@ import { FeatureFlagControllerFactory } from '@factories/FeatureFlagControllerFa
 import { AccountControllerFactory } from '@factories/AccountControllerFactory';
 import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
 import { AccountService } from '@domains/accounts/services/AccountService';
+import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
+import { TransactionService } from '@domains/transactions/services/TransactionService';
+import { TransactionController } from '@domains/transactions/controllers/TransactionController';
 
 export class ServiceBootstrap {
     private static instance: ServiceBootstrap;
@@ -108,6 +111,16 @@ export class ServiceBootstrap {
 
             const accountControllerFactory = new AccountControllerFactory(serviceFactory);
             this.container.registerInstance(TOKENS.AccountController, accountControllerFactory.create());
+
+            // Transaction domain registrations
+            const transactionRepo = new TransactionRepository(dbFacade);
+            this.container.registerInstance(TOKENS.TransactionRepository, transactionRepo);
+
+            const transactionService = new TransactionService(transactionRepo);
+            this.container.registerInstance(TOKENS.TransactionService, transactionService);
+
+            const transactionController = new TransactionController(transactionService);
+            this.container.registerInstance(TOKENS.TransactionController, transactionController);
 
 
             // Connect Infrastructure
