@@ -7,12 +7,24 @@ export class WorkspaceRolesController {
     async list(req: Request, res: Response) {
         const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
         const workspaceId = req.params.id;
-        const { page, limit, search } = req.query;
+        const { page, limit, search, types, minPermissions } = req.query;
+
+        // Handle types - can be array from query string or string
+        let typesArray: string[] | undefined;
+        if (types) {
+            if (Array.isArray(types)) {
+                typesArray = types as string[];
+            } else if (typeof types === 'string') {
+                typesArray = types.split(',');
+            }
+        }
 
         const result = await this.workspaceRequestRepository.getRoles(workspaceId, userId, {
             page: page ? parseInt(page as string) : undefined,
             limit: limit ? parseInt(limit as string) : undefined,
-            search: search as string
+            search: search as string,
+            types: typesArray,
+            minPermissions: minPermissions ? parseInt(minPermissions as string) : undefined
         });
 
         if (result.error) {

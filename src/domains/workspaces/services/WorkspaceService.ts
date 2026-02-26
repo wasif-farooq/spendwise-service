@@ -155,7 +155,13 @@ export class WorkspaceService {
         await this.workspaceMembersRepository.delete(memberIdToRemove);
     }
 
-    async getRoles(workspaceId: string, userId: string, params: { page?: number; limit?: number; search?: string } = {}): Promise<{ roles: any[]; total: number }> {
+    async getRoles(workspaceId: string, userId: string, params: { 
+        page?: number; 
+        limit?: number; 
+        search?: string;
+        types?: string[];
+        minPermissions?: number;
+    } = {}): Promise<{ roles: any[]; total: number }> {
         const member = await this.workspaceMembersRepository.findByUserAndWorkspace(userId, workspaceId);
         if (!member) throw new AppError('Not a member of this workspace', 403);
 
@@ -166,7 +172,9 @@ export class WorkspaceService {
         const { roles, total } = await this.workspaceRoleRepository.findPaginated(workspaceId, {
             limit,
             offset,
-            search: params.search
+            search: params.search,
+            types: params.types,
+            minPermissions: params.minPermissions
         });
 
         return { roles, total };

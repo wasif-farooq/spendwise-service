@@ -39,7 +39,13 @@ export class WorkspaceRequestRepository {
         return this.rpcClient.request('workspace.service.remove-member', { workspaceId, userId, memberId });
     }
 
-    async getRoles(workspaceId: string, userId: string, params: { page?: number; limit?: number; search?: string } = {}) {
+    async getRoles(workspaceId: string, userId: string, params: { 
+        page?: number; 
+        limit?: number; 
+        search?: string;
+        types?: string[];
+        minPermissions?: number;
+    } = {}) {
         return this.rpcClient.request('workspace.service.get-roles', { workspaceId, userId, ...params });
     }
 
