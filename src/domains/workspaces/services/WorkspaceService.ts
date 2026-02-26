@@ -113,9 +113,6 @@ export class WorkspaceService {
         startDate?: string;
         endDate?: string;
     } = {}): Promise<{ members: any[]; total: number }> {
-        
-        console.log('[WorkspaceService] getMembers params:', params);
-        
         const member = await this.workspaceMembersRepository.findByUserAndWorkspace(userId, workspaceId);
         if (!member) {
             throw new AppError('Not a member of this workspace', 403);

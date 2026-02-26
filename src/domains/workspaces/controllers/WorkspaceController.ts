@@ -56,8 +56,6 @@ export class WorkspaceController {
         const workspaceId = req.params.id;
         const { page, limit, search, roles, statuses, startDate, endDate } = req.query;
 
-        console.log('[WorkspaceController] getMembers params:', { page, limit, search, roles, statuses, startDate, endDate });
-
         // Handle roles - can be array or string
         let rolesArray: string[] | undefined;
         if (roles) {

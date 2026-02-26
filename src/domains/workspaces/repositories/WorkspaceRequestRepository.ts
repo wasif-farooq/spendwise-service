@@ -36,7 +36,6 @@ export class WorkspaceRequestRepository {
         startDate?: string;
         endDate?: string;
     } = {}) {
-        console.log('[WorkspaceRequestRepository] getMembers:', params);
         return this.rpcClient.request('workspace.service.get-members', { workspaceId, userId, ...params });
     }
 

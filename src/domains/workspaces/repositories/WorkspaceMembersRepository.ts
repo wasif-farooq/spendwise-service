@@ -62,8 +62,6 @@ export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> 
         
         const { limit = 10, offset = 0, search, roles, statuses, startDate, endDate } = options;
 
-        console.log('[WorkspaceMembersRepository] findAllWithDetails:', { workspaceId, limit, offset, search, roles, statuses, startDate, endDate });
-
         let whereClause = 'WHERE wm.workspace_id = $1';
         const params: any[] = [workspaceId];
         let paramIndex = 2;
