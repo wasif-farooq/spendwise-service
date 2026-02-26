@@ -1,7 +1,18 @@
 import { NextFunction, Request, Response } from 'express';
 import { UserRequestRepository } from '@domains/users/repositories/UserRequestRepository';
 import { AuthRequestRepository } from '@domains/auth/repositories/AuthRequestRepository';
+import { UserPreferencesService } from '@domains/users/services/UserPreferencesService';
+import { ServiceFactory } from '@factories/ServiceFactory';
+import { DatabaseFacade } from '@facades/DatabaseFacade';
+import { PostgresFactory } from '@database/factories/PostgresFactory';
+import { RepositoryFactory } from '@factories/RepositoryFactory';
 import { AppError } from '@shared/errors/AppError';
+
+// Create service instances directly
+const dbFacade = new DatabaseFacade(new PostgresFactory());
+const repoFactory = new RepositoryFactory(dbFacade);
+const serviceFactory = new ServiceFactory(repoFactory, dbFacade);
+const userPreferencesService = serviceFactory.createUserPreferencesService();
 
 export class SettingsController {
     constructor(
@@ -12,13 +23,8 @@ export class SettingsController {
     async getPreferences(req: Request, res: Response, next: NextFunction) {
         try {
             const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.userRequestRepository.getPreferences(userId);
-
-            if (result.error) {
-                throw new AppError(result.error, result.statusCode || 400);
-            }
-
-            res.json({ data: result });
+            const prefs = await userPreferencesService.getPreferences(userId);
+            res.json({ data: prefs.toDTO() });
         } catch (error) {
             next(error);
         }
@@ -27,13 +33,8 @@ export class SettingsController {
     async updatePreferences(req: Request, res: Response, next: NextFunction) {
         try {
             const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.userRequestRepository.updatePreferences(userId, req.body);
-
-            if (result.error) {
-                throw new AppError(result.error, result.statusCode || 400);
-            }
-
-            res.json({ data: result });
+            const prefs = await userPreferencesService.updatePreferences(userId, req.body);
+            res.json({ data: prefs.toDTO() });
         } catch (error) {
             next(error);
         }
@@ -220,5 +221,3 @@ export class SettingsController {
         }
     }
 }
-
-
