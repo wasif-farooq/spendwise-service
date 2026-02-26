@@ -104,13 +104,36 @@ export class WorkspaceService {
         return this.workspaceRepository.findByIds(workspaceIds);
     }
 
-    async getMembers(workspaceId: string, userId: string): Promise<any[]> {
+    async getMembers(workspaceId: string, userId: string, params: { 
+        page?: number; 
+        limit?: number; 
+        search?: string;
+        roles?: string[];
+        statuses?: string[];
+        startDate?: string;
+        endDate?: string;
+    } = {}): Promise<{ members: any[]; total: number }> {
+        
+        console.log('[WorkspaceService] getMembers params:', params);
+        
         const member = await this.workspaceMembersRepository.findByUserAndWorkspace(userId, workspaceId);
         if (!member) {
             throw new AppError('Not a member of this workspace', 403);
         }
 
-        return this.workspaceMembersRepository.findAllWithDetails(workspaceId);
+        const page = params.page || 1;
+        const limit = params.limit || 10;
+        const offset = (page - 1) * limit;
+
+        return this.workspaceMembersRepository.findAllWithDetails(workspaceId, {
+            limit,
+            offset,
+            search: params.search,
+            roles: params.roles,
+            statuses: params.statuses,
+            startDate: params.startDate,
+            endDate: params.endDate
+        });
     }
 
     async inviteMember(workspaceId: string, userId: string, dto: InviteMemberDto): Promise<void> {

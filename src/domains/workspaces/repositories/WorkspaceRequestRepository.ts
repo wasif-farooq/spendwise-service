@@ -27,8 +27,17 @@ export class WorkspaceRequestRepository {
         return this.rpcClient.request('workspace.service.list', { userId });
     }
 
-    async getMembers(workspaceId: string, userId: string) {
-        return this.rpcClient.request('workspace.service.get-members', { workspaceId, userId });
+    async getMembers(workspaceId: string, userId: string, params: { 
+        page?: number; 
+        limit?: number; 
+        search?: string;
+        roles?: string[];
+        statuses?: string[];
+        startDate?: string;
+        endDate?: string;
+    } = {}) {
+        console.log('[WorkspaceRequestRepository] getMembers:', params);
+        return this.rpcClient.request('workspace.service.get-members', { workspaceId, userId, ...params });
     }
 
     async inviteMember(workspaceId: string, userId: string, dto: InviteMemberDto) {

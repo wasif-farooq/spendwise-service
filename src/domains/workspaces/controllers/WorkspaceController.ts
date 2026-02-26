@@ -54,7 +54,39 @@ export class WorkspaceController {
     async getMembers(req: Request, res: Response) {
         const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
         const workspaceId = req.params.id;
-        const result = await this.workspaceRequestRepository.getMembers(workspaceId, userId);
+        const { page, limit, search, roles, statuses, startDate, endDate } = req.query;
+
+        console.log('[WorkspaceController] getMembers params:', { page, limit, search, roles, statuses, startDate, endDate });
+
+        // Handle roles - can be array or string
+        let rolesArray: string[] | undefined;
+        if (roles) {
+            if (Array.isArray(roles)) {
+                rolesArray = roles as string[];
+            } else if (typeof roles === 'string') {
+                rolesArray = roles.split(',');
+            }
+        }
+
+        // Handle statuses - can be array or string
+        let statusesArray: string[] | undefined;
+        if (statuses) {
+            if (Array.isArray(statuses)) {
+                statusesArray = statuses as string[];
+            } else if (typeof statuses === 'string') {
+                statusesArray = statuses.split(',');
+            }
+        }
+
+        const result = await this.workspaceRequestRepository.getMembers(workspaceId, userId, {
+            page: page ? parseInt(page as string) : undefined,
+            limit: limit ? parseInt(limit as string) : undefined,
+            search: search as string,
+            roles: rolesArray,
+            statuses: statusesArray,
+            startDate: startDate as string,
+            endDate: endDate as string
+        });
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });
