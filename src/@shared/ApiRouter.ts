@@ -7,6 +7,7 @@ import featureFlagsRoutesV1 from '@domains/feature-flags/routes/feature-flags.ro
 import subscriptionRoutesV1 from '@domains/subscription/routes/subscription.routes';
 import accountsRoutesV1 from '@domains/accounts/routes/accounts.routes';
 import transactionsRoutesV1 from '@domains/transactions/routes/transaction.routes';
+import exchangeRatesRoutesV1 from '@domains/exchange-rates/routes/exchange-rates.routes';
 
 export class ApiRouter {
   private router: Router;
@@ -27,6 +28,8 @@ export class ApiRouter {
     // Account and Transaction routes at /v1/:workspaceId/
     this.router.use('/v1', accountsRoutesV1);
     this.router.use('/v1', transactionsRoutesV1);
+    // Exchange rates (global, not workspace-specific)
+    this.router.use('/v1/exchange-rates', exchangeRatesRoutesV1);
 
     // V2 Routes could go here
     // this.router.use('/v2/auth', authRoutesV2);

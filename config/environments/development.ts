@@ -96,6 +96,15 @@ export default {
         mode: process.env.REPOSITORY_MODE || 'direct', // 'rpc' or 'direct'
     },
 
+    // Exchange Rates Configuration
+    exchangeRates: {
+        apiKey: process.env.EXCHANGE_RATE_API_KEY || '',
+        baseUrl: process.env.EXCHANGE_RATE_BASE_URL || 'https://api.exchangerate-api.com/v4/latest',
+        // Cron job settings
+        cronEnabled: process.env.CRON_EXCHANGE_RATES_ENABLED !== 'false',
+        cronSchedule: process.env.CRON_EXCHANGE_RATES_SCHEDULE || '0 2 * * *', // Daily at 2 AM
+    },
+
     auth: {
         jwt: {
             secret: process.env.JWT_SECRET || 'development-secret-change-in-production',

@@ -26,6 +26,8 @@
         "migrate:v1": "npm run migrate -- --version=v1",
         "migrate:v2": "npm run migrate -- --version=v2",
         "seed": "ts-node -r tsconfig-paths/register scripts/database/seed.ts",
+        "exchange-rates": "ts-node -r tsconfig-paths/register src/cli/exchange-rates.cli.ts",
+        "exchange-rates:fetch": "ts-node -r tsconfig-paths/register src/cli/exchange-rates.cli.ts fetch",
         "docker:up": "docker compose up -d",
         "docker:down": "docker compose down",
         "docker:logs": "docker compose logs -f",

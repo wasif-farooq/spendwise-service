@@ -69,25 +69,25 @@ router.use(requireAuth);
 // ====================
 
 // List transactions (with filters: account, category, date range)
-router.get('/', validateParams(WorkspaceIdParamSchema), requirePermission('transaction:read'), controller.getTransactions.bind(controller));
+router.get('/:workspaceId/transactions', validateParams(WorkspaceIdParamSchema), requirePermission('transaction:read'), controller.getTransactions.bind(controller));
 
 // Get single transaction
-router.get('/:workspaceId/:id', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), requirePermission('transaction:read'), controller.getTransactionById.bind(controller));
+router.get('/:workspaceId/transactions/:id', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), requirePermission('transaction:read'), controller.getTransactionById.bind(controller));
 
 // Create transaction
-router.post('/:workspaceId', validateParams(WorkspaceIdParamSchema), validateBody(CreateTransactionSchema), requirePermission('transaction:create'), controller.createTransaction.bind(controller));
+router.post('/:workspaceId/transactions', validateParams(WorkspaceIdParamSchema), validateBody(CreateTransactionSchema), requirePermission('transaction:create'), controller.createTransaction.bind(controller));
 
 // Update transaction
-router.put('/:workspaceId/:id', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), validateBody(UpdateTransactionSchema), requirePermission('transaction:edit'), controller.updateTransaction.bind(controller));
+router.put('/:workspaceId/transactions/:id', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), validateBody(UpdateTransactionSchema), requirePermission('transaction:edit'), controller.updateTransaction.bind(controller));
 
 // Delete transaction
-router.delete('/:workspaceId/:id', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), requirePermission('transaction:delete'), controller.deleteTransaction.bind(controller));
+router.delete('/:workspaceId/transactions/:id', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), requirePermission('transaction:delete'), controller.deleteTransaction.bind(controller));
 
 // Link transaction to another
-router.post('/:workspaceId/:id/link', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), validateBody(LinkTransactionSchema), requirePermission('transaction:edit'), controller.linkTransaction.bind(controller));
+router.post('/:workspaceId/transactions/:id/link', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), validateBody(LinkTransactionSchema), requirePermission('transaction:edit'), controller.linkTransaction.bind(controller));
 
 // Unlink transaction
-router.delete('/:workspaceId/:id/link', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), requirePermission('transaction:edit'), controller.unlinkTransaction.bind(controller));
+router.delete('/:workspaceId/transactions/:id/link', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), requirePermission('transaction:edit'), controller.unlinkTransaction.bind(controller));
 
 // ====================
 // Stats Routes
@@ -99,7 +99,7 @@ router.get('/:workspaceId/transactions/stats', validateParams(WorkspaceIdParamSc
 // Get all accounts stats for workspace
 router.get('/:workspaceId/transactions/accounts/stats', validateParams(WorkspaceIdParamSchema), requirePermission('transaction:read'), controller.getWorkspaceAccountStats.bind(controller));
 
-// Get single account stats
-router.get('/transactions/accounts/:accountId/stats', validateParams(AccountIdParamSchema), requirePermission('transaction:read'), controller.getAccountStats.bind(controller));
+// Get single account stats (with workspaceId)
+router.get('/:workspaceId/transactions/accounts/:accountId/stats', validateParams(WorkspaceIdParamSchema), requirePermission('transaction:read'), controller.getAccountStats.bind(controller));
 
 export default router;
