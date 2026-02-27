@@ -48,7 +48,8 @@ export class WorkspaceController {
             res.status(result.statusCode || 400).json({ message: result.error });
             return;
         }
-        res.json(result);
+        // Handle both array and object responses
+        res.json(result.data || result);
     }
 
     async getMembers(req: Request, res: Response) {
@@ -90,7 +91,8 @@ export class WorkspaceController {
             res.status(result.statusCode || 400).json({ message: result.error });
             return;
         }
-        res.json(result);
+        // Handle both array and object responses
+        res.json(result.data || result);
     }
 
     async inviteMember(req: Request, res: Response) {

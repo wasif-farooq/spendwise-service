@@ -90,6 +90,12 @@ export default {
         }
     },
 
+    // Toggle between 'rpc' or 'direct' for repository communication
+    // Use 'direct' for faster performance, 'rpc' for microservices architecture
+    repository: {
+        mode: process.env.REPOSITORY_MODE || 'direct', // 'rpc' or 'direct'
+    },
+
     auth: {
         jwt: {
             secret: process.env.JWT_SECRET || 'development-secret-change-in-production',

@@ -1,83 +1,134 @@
-import { KafkaRequestReply } from '@messaging/implementations/kafka/KafkaRequestReply';
-import { CreateWorkspaceDto, UpdateWorkspaceDto, InviteMemberDto } from '@domains/workspaces/dto/workspace.dto';
+import { ConfigLoader } from '@config/ConfigLoader';
+import { DatabaseFacade } from '@facades/DatabaseFacade';
+import { PostgresFactory } from '@database/factories/PostgresFactory';
+import { RepositoryFactory } from '@factories/RepositoryFactory';
+import { ServiceFactory } from '@factories/ServiceFactory';
 
 export class WorkspaceRequestRepository {
-    private rpcClient: KafkaRequestReply;
+    private config = ConfigLoader.getInstance();
+    private getMode(): string {
+        return this.config.get('repository.mode') || 'direct';
+    }
 
-    constructor(autoConnect: boolean = true) {
-        this.rpcClient = new KafkaRequestReply();
-        if (autoConnect) {
-            this.rpcClient.connect().catch(err => console.error('Failed to connect RPC Client', err));
+    private get service() {
+        const db = new DatabaseFacade(new PostgresFactory());
+        const repoFactory = new RepositoryFactory(db);
+        const serviceFactory = new ServiceFactory(repoFactory, db);
+        return serviceFactory.createWorkspaceService();
+    }
+
+    // Helper to wrap responses in RPC-style format
+    private wrap(promise: Promise<any>): Promise<any> {
+        return promise
+            .then(data => {
+                // Handle array responses (like workspace list)
+                if (Array.isArray(data)) {
+                    return { data, error: null, statusCode: 200 };
+                }
+                return { ...data, error: null, statusCode: 200 };
+            })
+            .catch(error => ({ 
+                error: error.message || 'An error occurred', 
+                statusCode: error.statusCode || 500,
+                data: null 
+            }));
+    }
+
+    async create(userId: string, dto: any) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.create(userId, dto));
         }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
-    async create(userId: string, dto: CreateWorkspaceDto) {
-        return this.rpcClient.request('workspace.service.create', { userId, ...dto });
-    }
-
-    async update(workspaceId: string, userId: string, dto: UpdateWorkspaceDto) {
-        return this.rpcClient.request('workspace.service.update', { workspaceId, userId, ...dto });
+    async update(workspaceId: string, userId: string, dto: any) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.update(workspaceId, userId, dto));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async delete(workspaceId: string, userId: string) {
-        return this.rpcClient.request('workspace.service.delete', { workspaceId, userId });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.delete(workspaceId, userId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async list(userId: string) {
-        return this.rpcClient.request('workspace.service.list', { userId });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getUserWorkspaces(userId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
-    async getMembers(workspaceId: string, userId: string, params: { 
-        page?: number; 
-        limit?: number; 
-        search?: string;
-        roles?: string[];
-        statuses?: string[];
-        startDate?: string;
-        endDate?: string;
-    } = {}) {
-        return this.rpcClient.request('workspace.service.get-members', { workspaceId, userId, ...params });
+    async getMembers(workspaceId: string, userId: string, params: any = {}) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getMembers(workspaceId, userId, params));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
-    async inviteMember(workspaceId: string, userId: string, dto: InviteMemberDto) {
-        return this.rpcClient.request('workspace.service.invite-member', { workspaceId, userId, ...dto });
+    async inviteMember(workspaceId: string, userId: string, dto: any) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.inviteMember(workspaceId, userId, dto));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async removeMember(workspaceId: string, userId: string, memberId: string) {
-        return this.rpcClient.request('workspace.service.remove-member', { workspaceId, userId, memberId });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.removeMember(workspaceId, userId, memberId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
-    async getRoles(workspaceId: string, userId: string, params: { 
-        page?: number; 
-        limit?: number; 
-        search?: string;
-        types?: string[];
-        minPermissions?: number;
-    } = {}) {
-        return this.rpcClient.request('workspace.service.get-roles', { workspaceId, userId, ...params });
+    async getRoles(workspaceId: string, userId: string, params: any = {}) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getRoles(workspaceId, userId, params));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async getRole(workspaceId: string, userId: string, roleId: string) {
-        return this.rpcClient.request('workspace.service.get-role', { workspaceId, userId, roleId });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getRole(workspaceId, userId, roleId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async createRole(workspaceId: string, userId: string, dto: any) {
-        return this.rpcClient.request('workspace.service.create-role', { workspaceId, userId, ...dto });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.createRole(workspaceId, userId, dto));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async updateRole(workspaceId: string, userId: string, roleId: string, dto: any) {
-        return this.rpcClient.request('workspace.service.update-role', { workspaceId, userId, roleId, ...dto });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.updateRole(workspaceId, userId, roleId, dto));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async assignRole(workspaceId: string, userId: string, memberId: string, dto: any) {
-        return this.rpcClient.request('workspace.service.assign-role', { workspaceId, userId, memberId, ...dto });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.assignRole(workspaceId, userId, memberId, dto));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async deleteRole(workspaceId: string, userId: string, roleId: string) {
-        return this.rpcClient.request('workspace.service.delete-role', { workspaceId, userId, roleId });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.deleteRole(workspaceId, userId, roleId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async checkPermission(workspaceId: string, userId: string, permission: string) {
-        return this.rpcClient.request('workspace.service.check-permission', { workspaceId, userId, permission });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.checkPermission(workspaceId, userId, permission));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 }

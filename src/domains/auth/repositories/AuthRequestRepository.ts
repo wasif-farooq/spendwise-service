@@ -1,93 +1,171 @@
-import { KafkaRequestReply } from '@messaging/implementations/kafka/KafkaRequestReply';
-import { LoginDto, RegisterDto } from '@domains/auth/dto/auth.dto';
+import { ConfigLoader } from '@config/ConfigLoader';
+import { DatabaseFacade } from '@facades/DatabaseFacade';
+import { PostgresFactory } from '@database/factories/PostgresFactory';
+import { RepositoryFactory } from '@factories/RepositoryFactory';
+import { ServiceFactory } from '@factories/ServiceFactory';
 
 export class AuthRequestRepository {
-    private rpcClient: KafkaRequestReply;
+    private config = ConfigLoader.getInstance();
+    private getMode(): string {
+        return this.config.get('repository.mode') || 'direct';
+    }
 
-    constructor(autoConnect: boolean = true) {
-        this.rpcClient = new KafkaRequestReply();
-        if (autoConnect) {
-            this.rpcClient.connect().catch(err => console.error('Failed to connect RPC Client', err));
+    // Get the service using ServiceFactory
+    private get service() {
+        const db = new DatabaseFacade(new PostgresFactory());
+        const repoFactory = new RepositoryFactory(db);
+        const serviceFactory = new ServiceFactory(repoFactory, db);
+        return serviceFactory.createAuthService();
+    }
+
+    // Helper to wrap responses in RPC-style format
+    private wrap(promise: Promise<any>): Promise<any> {
+        return promise
+            .then(data => ({ ...data, error: null, statusCode: 200 }))
+            .catch(error => ({ 
+                error: error.message || 'An error occurred', 
+                statusCode: error.statusCode || 500,
+                data: null 
+            }));
+    }
+
+    async login(dto: any) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.login(dto));
         }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
-    async login(dto: LoginDto) {
-        return this.rpcClient.request('auth.service.login', dto);
-    }
-
-    async register(dto: RegisterDto) {
-        return this.rpcClient.request('auth.service.register', dto);
+    async register(dto: any) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.register(dto));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async verify2FA(dto: any) {
-        return this.rpcClient.request('auth.service.verify-2fa', dto);
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.verify2FA(dto.tempToken || dto.temp_token, dto.code, dto.method));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async resend2FA(dto: any) {
-        return this.rpcClient.request('auth.service.resend-2fa', dto);
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.resend2FA(dto.tempToken || dto.temp_token, dto.method));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async verifyBackupCode(dto: any) {
-        return this.rpcClient.request('auth.service.verify-backup-code', dto);
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.verifyBackupCode(dto.tempToken || dto.temp_token, dto.code));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async forgotPassword(dto: any) {
-        return this.rpcClient.request('auth.service.forgot-password', dto);
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.forgotPassword(dto.email));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async verifyResetCode(dto: any) {
-        return this.rpcClient.request('auth.service.verify-reset-code', dto);
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.verifyResetCode(dto.email, dto.code));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async resetPassword(dto: any) {
-        return this.rpcClient.request('auth.service.reset-password', dto);
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.resetPassword(dto.token, dto.newPassword || dto.new_password));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
-    async verifyEmail(dto: { email: string, code: string }) {
-        return this.rpcClient.request('auth.service.verify-email', dto);
+    async verifyEmail(dto: any) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.verifyEmail(dto.email, dto.code));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async getMe(userId: string) {
-        return this.rpcClient.request('auth.service.get-me', { userId });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getUserById(userId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
-    async refresh(dto: { refreshToken: string }) {
-        return this.rpcClient.request('auth.service.refresh', dto);
+    async refresh(dto: any) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.refreshToken(dto.refreshToken || dto.refresh_token));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async changePassword(userId: string, dto: any) {
-        return this.rpcClient.request('auth.service.change-password', { userId, ...dto });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.changePassword(userId, dto.currentPassword || dto.current_password, dto.newPassword || dto.new_password));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async generate2FASecret(userId: string, method: string = 'app', email?: string) {
-        return this.rpcClient.request('auth.service.generate-2fa-secret', { userId, method, email });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.generate2FASecret(userId, method as any, email));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async enable2FA(userId: string, code: string, method: string = 'app') {
-        return this.rpcClient.request('auth.service.enable-2fa', { userId, code, method });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.enable2FA(userId, code, method as any));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async disable2FA(userId: string) {
-        return this.rpcClient.request('auth.service.disable-2fa', { userId });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.disable2FA(userId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async disable2FAMethod(userId: string, method: string) {
-        return this.rpcClient.request('auth.service.disable-2fa-method', { userId, method });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.disable2FAMethod(userId, method as any));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async regenerateBackupCodes(userId: string) {
-        return this.rpcClient.request('auth.service.regenerate-backup-codes', { userId });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.regenerateBackupCodes(userId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async getActiveSessions(userId: string) {
-        return this.rpcClient.request('auth.service.get-active-sessions', { userId });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getActiveSessions(userId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async revokeSession(userId: string, sessionId: string) {
-        return this.rpcClient.request('auth.service.revoke-session', { userId, sessionId });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.revokeSession(userId, sessionId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 
     async getLoginHistory(userId: string) {
-        return this.rpcClient.request('auth.service.get-login-history', { userId });
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getLoginHistory(userId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
     }
 }
