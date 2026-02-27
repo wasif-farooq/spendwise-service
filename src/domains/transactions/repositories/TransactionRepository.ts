@@ -25,10 +25,11 @@ export class TransactionRepository {
         offset?: number;
         search?: string;
         accountId?: string;
+        categoryId?: string;
         startDate?: string;
         endDate?: string;
     } = {}): Promise<{ transactions: Transaction[]; total: number }> {
-        const { limit = 50, offset = 0, search, accountId, startDate, endDate } = options;
+        const { limit = 50, offset = 0, search, accountId, categoryId, startDate, endDate } = options;
 
         let whereClause = 'WHERE t.workspace_id = $1';
         const params: any[] = [workspaceId];
@@ -37,6 +38,12 @@ export class TransactionRepository {
         if (accountId) {
             whereClause += ` AND t.account_id = $${paramIndex}`;
             params.push(accountId);
+            paramIndex++;
+        }
+
+        if (categoryId) {
+            whereClause += ` AND t.category_id = $${paramIndex}`;
+            params.push(categoryId);
             paramIndex++;
         }
 
@@ -99,6 +106,136 @@ export class TransactionRepository {
         return parseInt(result.rows[0]?.count || '0');
     }
 
+    // Get account stats: total income, expense, and balance
+    async getAccountStats(accountId: string, startDate?: string, endDate?: string): Promise<{
+        totalIncome: number;
+        totalExpense: number;
+        balance: number;
+    }> {
+        let whereClause = 'WHERE account_id = $1';
+        const params: any[] = [accountId];
+        let paramIndex = 2;
+
+        if (startDate) {
+            whereClause += ` AND date >= $${paramIndex}`;
+            params.push(startDate);
+            paramIndex++;
+        }
+
+        if (endDate) {
+            whereClause += ` AND date <= $${paramIndex}`;
+            params.push(endDate);
+            paramIndex++;
+        }
+
+        const result = await this.db.query(
+            `SELECT 
+                COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as total_income,
+                COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) as total_expense
+             FROM transactions ${whereClause}`,
+            params
+        );
+
+        const totalIncome = parseFloat(result.rows[0]?.total_income || '0');
+        const totalExpense = parseFloat(result.rows[0]?.total_expense || '0');
+
+        return {
+            totalIncome,
+            totalExpense,
+            balance: totalIncome - totalExpense
+        };
+    }
+
+    // Get all account stats for a workspace
+    async getWorkspaceAccountStats(workspaceId: string, startDate?: string, endDate?: string): Promise<Array<{
+        accountId: string;
+        accountName: string;
+        totalIncome: number;
+        totalExpense: number;
+        balance: number;
+    }>> {
+        let whereClause = 'WHERE t.workspace_id = $1';
+        const params: any[] = [workspaceId];
+        let paramIndex = 2;
+
+        if (startDate) {
+            whereClause += ` AND t.date >= $${paramIndex}`;
+            params.push(startDate);
+            paramIndex++;
+        }
+
+        if (endDate) {
+            whereClause += ` AND t.date <= $${paramIndex}`;
+            params.push(endDate);
+            paramIndex++;
+        }
+
+        const result = await this.db.query(
+            `SELECT 
+                t.account_id,
+                a.name as account_name,
+                COALESCE(SUM(CASE WHEN t.type = 'income' THEN t.amount ELSE 0 END), 0) as total_income,
+                COALESCE(SUM(CASE WHEN t.type = 'expense' THEN t.amount ELSE 0 END), 0) as total_expense
+             FROM transactions t
+             JOIN accounts a ON t.account_id = a.id
+             ${whereClause}
+             GROUP BY t.account_id, a.name
+             ORDER BY a.name`,
+            params
+        );
+
+        return result.rows.map((row: any) => ({
+            accountId: row.account_id,
+            accountName: row.account_name,
+            totalIncome: parseFloat(row.total_income),
+            totalExpense: parseFloat(row.total_expense),
+            balance: parseFloat(row.total_income) - parseFloat(row.total_expense)
+        }));
+    }
+
+    // Get workspace-wide stats
+    async getWorkspaceStats(workspaceId: string, startDate?: string, endDate?: string): Promise<{
+        totalIncome: number;
+        totalExpense: number;
+        balance: number;
+        transactionCount: number;
+    }> {
+        let whereClause = 'WHERE workspace_id = $1';
+        const params: any[] = [workspaceId];
+        let paramIndex = 2;
+
+        if (startDate) {
+            whereClause += ` AND date >= $${paramIndex}`;
+            params.push(startDate);
+            paramIndex++;
+        }
+
+        if (endDate) {
+            whereClause += ` AND date <= $${paramIndex}`;
+            params.push(endDate);
+            paramIndex++;
+        }
+
+        const result = await this.db.query(
+            `SELECT 
+                COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as total_income,
+                COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) as total_expense,
+                COUNT(*) as transaction_count
+             FROM transactions ${whereClause}`,
+            params
+        );
+
+        const totalIncome = parseFloat(result.rows[0]?.total_income || '0');
+        const totalExpense = parseFloat(result.rows[0]?.total_expense || '0');
+
+        return {
+            totalIncome,
+            totalExpense,
+            balance: totalIncome - totalExpense,
+            transactionCount: parseInt(result.rows[0]?.transaction_count || '0')
+        };
+    }
+
     async save(transaction: Transaction): Promise<Transaction> {
         const data = transaction.getProps();
         const mappedData = {
@@ -112,7 +249,8 @@ export class TransactionRepository {
             description: data.description,
             date: data.date,
             category_id: data.categoryId,
-            to_account_id: data.toAccountId,
+            linked_transaction_id: data.linkedTransactionId,
+            linked_account_id: data.linkedAccountId,
             exchange_rate: data.exchangeRate,
             base_amount: data.baseAmount,
             created_at: data.createdAt,
@@ -145,11 +283,12 @@ export class TransactionRepository {
                 description = $5,
                 date = $6,
                 category_id = $7,
-                to_account_id = $8,
-                exchange_rate = $9,
-                base_amount = $10,
-                updated_at = $11
-            WHERE id = $12
+                linked_transaction_id = $8,
+                linked_account_id = $9,
+                exchange_rate = $10,
+                base_amount = $11,
+                updated_at = $12
+            WHERE id = $13
             RETURNING *
         `;
 
@@ -161,7 +300,8 @@ export class TransactionRepository {
             data.description,
             data.date,
             data.categoryId,
-            data.toAccountId,
+            data.linkedTransactionId,
+            data.linkedAccountId,
             data.exchangeRate,
             data.baseAmount,
             new Date(),
@@ -186,7 +326,8 @@ export class TransactionRepository {
             description: row.description,
             date: row.date,
             categoryId: row.category_id,
-            toAccountId: row.to_account_id,
+            linkedTransactionId: row.linked_transaction_id,
+            linkedAccountId: row.linked_account_id,
             exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
             baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
             createdAt: row.created_at,

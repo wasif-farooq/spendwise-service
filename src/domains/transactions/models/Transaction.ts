@@ -4,14 +4,15 @@ export interface TransactionProps {
     accountId: string;
     userId: string;
     workspaceId: string;
-    type: 'income' | 'expense' | 'transfer';
+    type: 'income' | 'expense';
     amount: number;
     currency: string;
     description?: string;
     date: Date;
     categoryId?: string;
-    // For transfer
-    toAccountId?: string;
+    // For linked transactions (replaces internal transfer)
+    linkedTransactionId?: string;
+    linkedAccountId?: string;
     exchangeRate?: number;
     // Base amount in USD for conversions
     baseAmount?: number;
@@ -47,7 +48,8 @@ export class Transaction extends Entity<TransactionProps> {
     get description(): string | undefined { return this.props.description; }
     get date(): Date { return this.props.date; }
     get categoryId(): string | undefined { return this.props.categoryId; }
-    get toAccountId(): string | undefined { return this.props.toAccountId; }
+    get linkedTransactionId(): string | undefined { return this.props.linkedTransactionId; }
+    get linkedAccountId(): string | undefined { return this.props.linkedAccountId; }
     get exchangeRate(): number | undefined { return this.props.exchangeRate; }
     get baseAmount(): number | undefined { return this.props.baseAmount; }
     get createdAt(): Date { return this.props.createdAt; }
@@ -65,7 +67,8 @@ export class Transaction extends Entity<TransactionProps> {
             description: this.description,
             date: this.date,
             categoryId: this.categoryId,
-            toAccountId: this.toAccountId,
+            linkedTransactionId: this.linkedTransactionId,
+            linkedAccountId: this.linkedAccountId,
             exchangeRate: this.exchangeRate,
             baseAmount: this.baseAmount,
             createdAt: this.createdAt,
