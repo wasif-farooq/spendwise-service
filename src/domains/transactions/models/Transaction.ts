@@ -10,6 +10,7 @@ export interface TransactionProps {
     description?: string;
     date: Date;
     categoryId?: string;
+    categoryName?: string | null;
     // For linked transactions (replaces internal transfer)
     linkedTransactionId?: string;
     linkedAccountId?: string;
@@ -48,6 +49,7 @@ export class Transaction extends Entity<TransactionProps> {
     get description(): string | undefined { return this.props.description; }
     get date(): Date { return this.props.date; }
     get categoryId(): string | undefined { return this.props.categoryId; }
+    get categoryName(): string | null | undefined { return this.props.categoryName; }
     get linkedTransactionId(): string | undefined { return this.props.linkedTransactionId; }
     get linkedAccountId(): string | undefined { return this.props.linkedAccountId; }
     get exchangeRate(): number | undefined { return this.props.exchangeRate; }
@@ -67,6 +69,7 @@ export class Transaction extends Entity<TransactionProps> {
             description: this.description,
             date: this.date,
             categoryId: this.categoryId,
+            categoryName: this.categoryName,
             linkedTransactionId: this.linkedTransactionId,
             linkedAccountId: this.linkedAccountId,
             exchangeRate: this.exchangeRate,

@@ -110,9 +110,11 @@ export class TransactionRepository {
         );
         const total = parseInt(countResult.rows[0]?.total || '0');
 
-        // Get paginated results
+        // Get paginated results with category name
         const query = `
-            SELECT * FROM transactions t
+            SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color
+            FROM transactions t
+            LEFT JOIN categories c ON t.category_id = c.id
             ${whereClause}
             ORDER BY t.date DESC, t.created_at DESC
             LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -121,7 +123,7 @@ export class TransactionRepository {
         const result = await this.db.query(query, [...params, limit, offset]);
         
         return {
-            transactions: result.rows.map((row: any) => this.mapToEntity(row)),
+            transactions: result.rows.map((row: any) => this.mapToEntityWithCategory(row)),
             total
         };
     }
@@ -386,6 +388,28 @@ export class TransactionRepository {
             description: row.description,
             date: row.date,
             categoryId: row.category_id,
+            linkedTransactionId: row.linked_transaction_id,
+            linkedAccountId: row.linked_account_id,
+            exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
+            baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+        };
+        return Transaction.restore(props, row.id);
+    }
+
+    private mapToEntityWithCategory(row: any): Transaction {
+        const props: TransactionProps = {
+            accountId: row.account_id,
+            userId: row.user_id,
+            workspaceId: row.workspace_id,
+            type: row.type,
+            amount: parseFloat(row.amount),
+            currency: row.currency,
+            description: row.description,
+            date: row.date,
+            categoryId: row.category_id,
+            categoryName: row.category_name || null,
             linkedTransactionId: row.linked_transaction_id,
             linkedAccountId: row.linked_account_id,
             exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
