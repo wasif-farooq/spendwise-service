@@ -29,7 +29,6 @@ const TransactionIdParamSchema = z.object({
 
 // Create transaction schema (no transfer type)
 const CreateTransactionSchema = z.object({
-    accountId: z.string().uuid('Invalid account ID'),
     type: z.enum(['income', 'expense']),
     amount: z.number().positive('Amount must be positive'),
     currency: z.string().length(3, 'Currency must be 3 characters'),
@@ -43,7 +42,6 @@ const CreateTransactionSchema = z.object({
 
 // Update transaction schema
 const UpdateTransactionSchema = z.object({
-    accountId: z.string().uuid().optional(),
     type: z.enum(['income', 'expense']).optional(),
     amount: z.number().positive().optional(),
     currency: z.string().length(3).optional(),
@@ -65,41 +63,97 @@ const LinkTransactionSchema = z.object({
 router.use(requireAuth);
 
 // ====================
-// Transaction Routes
+// Transaction Routes - /v1/:workspaceId/accounts/:accountId/transactions
 // ====================
 
-// List transactions (with filters: account, category, date range)
-router.get('/:workspaceId/transactions', validateParams(WorkspaceIdParamSchema), requirePermission('transaction:read'), controller.getTransactions.bind(controller));
+// List transactions for an account
+router.get('/:workspaceId/accounts/:accountId/transactions', 
+    validateParams(WorkspaceIdParamSchema), 
+    validateParams(AccountIdParamSchema),
+    requirePermission('transaction:read'), 
+    controller.getTransactions.bind(controller)
+);
 
 // Get single transaction
-router.get('/:workspaceId/transactions/:id', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), requirePermission('transaction:read'), controller.getTransactionById.bind(controller));
+router.get('/:workspaceId/accounts/:accountId/transactions/:id', 
+    validateParams(WorkspaceIdParamSchema), 
+    validateParams(AccountIdParamSchema),
+    validateParams(TransactionIdParamSchema), 
+    requirePermission('transaction:read'), 
+    controller.getTransactionById.bind(controller)
+);
 
 // Create transaction
-router.post('/:workspaceId/transactions', validateParams(WorkspaceIdParamSchema), validateBody(CreateTransactionSchema), requirePermission('transaction:create'), controller.createTransaction.bind(controller));
+router.post('/:workspaceId/accounts/:accountId/transactions', 
+    validateParams(WorkspaceIdParamSchema), 
+    validateParams(AccountIdParamSchema),
+    validateBody(CreateTransactionSchema), 
+    requirePermission('transaction:create'), 
+    controller.createTransaction.bind(controller)
+);
 
 // Update transaction
-router.put('/:workspaceId/transactions/:id', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), validateBody(UpdateTransactionSchema), requirePermission('transaction:edit'), controller.updateTransaction.bind(controller));
+router.put('/:workspaceId/accounts/:accountId/transactions/:id', 
+    validateParams(WorkspaceIdParamSchema), 
+    validateParams(AccountIdParamSchema),
+    validateParams(TransactionIdParamSchema), 
+    validateBody(UpdateTransactionSchema), 
+    requirePermission('transaction:edit'), 
+    controller.updateTransaction.bind(controller)
+);
 
 // Delete transaction
-router.delete('/:workspaceId/transactions/:id', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), requirePermission('transaction:delete'), controller.deleteTransaction.bind(controller));
+router.delete('/:workspaceId/accounts/:accountId/transactions/:id', 
+    validateParams(WorkspaceIdParamSchema), 
+    validateParams(AccountIdParamSchema),
+    validateParams(TransactionIdParamSchema), 
+    requirePermission('transaction:delete'), 
+    controller.deleteTransaction.bind(controller)
+);
 
 // Link transaction to another
-router.post('/:workspaceId/transactions/:id/link', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), validateBody(LinkTransactionSchema), requirePermission('transaction:edit'), controller.linkTransaction.bind(controller));
+router.post('/:workspaceId/accounts/:accountId/transactions/:id/link', 
+    validateParams(WorkspaceIdParamSchema), 
+    validateParams(AccountIdParamSchema),
+    validateParams(TransactionIdParamSchema), 
+    validateBody(LinkTransactionSchema), 
+    requirePermission('transaction:edit'), 
+    controller.linkTransaction.bind(controller)
+);
 
 // Unlink transaction
-router.delete('/:workspaceId/transactions/:id/link', validateParams(WorkspaceIdParamSchema), validateParams(TransactionIdParamSchema), requirePermission('transaction:edit'), controller.unlinkTransaction.bind(controller));
+router.delete('/:workspaceId/accounts/:accountId/transactions/:id/link', 
+    validateParams(WorkspaceIdParamSchema), 
+    validateParams(AccountIdParamSchema),
+    validateParams(TransactionIdParamSchema), 
+    requirePermission('transaction:edit'), 
+    controller.unlinkTransaction.bind(controller)
+);
 
 // ====================
 // Stats Routes
 // ====================
 
-// Get workspace-wide stats
-router.get('/:workspaceId/transactions/stats', validateParams(WorkspaceIdParamSchema), requirePermission('transaction:read'), controller.getWorkspaceStats.bind(controller));
+// Get account stats
+router.get('/:workspaceId/accounts/:accountId/transactions/stats', 
+    validateParams(WorkspaceIdParamSchema), 
+    validateParams(AccountIdParamSchema),
+    requirePermission('transaction:read'), 
+    controller.getAccountStats.bind(controller)
+);
 
 // Get all accounts stats for workspace
-router.get('/:workspaceId/transactions/accounts/stats', validateParams(WorkspaceIdParamSchema), requirePermission('transaction:read'), controller.getWorkspaceAccountStats.bind(controller));
+router.get('/:workspaceId/transactions/accounts/stats', 
+    validateParams(WorkspaceIdParamSchema), 
+    requirePermission('transaction:read'), 
+    controller.getWorkspaceAccountStats.bind(controller)
+);
 
-// Get single account stats (with workspaceId)
-router.get('/:workspaceId/transactions/accounts/:accountId/stats', validateParams(WorkspaceIdParamSchema), requirePermission('transaction:read'), controller.getAccountStats.bind(controller));
+// Get workspace-wide stats
+router.get('/:workspaceId/transactions/stats', 
+    validateParams(WorkspaceIdParamSchema), 
+    requirePermission('transaction:read'), 
+    controller.getWorkspaceStats.bind(controller)
+);
 
 export default router;

@@ -1,6 +1,44 @@
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { Transaction, TransactionProps } from '../models/Transaction';
 
+// In-memory cache for stats (fallback when Redis unavailable)
+interface CacheEntry<T> {
+    data: T;
+    expiresAt: number;
+}
+
+class StatsCache {
+    private cache = new Map<string, CacheEntry<any>>();
+    private defaultTTL = 5 * 60 * 1000; // 5 minutes
+
+    get<T>(key: string): T | null {
+        const entry = this.cache.get(key);
+        if (!entry) return null;
+        if (Date.now() > entry.expiresAt) {
+            this.cache.delete(key);
+            return null;
+        }
+        return entry.data as T;
+    }
+
+    set<T>(key: string, data: T, ttl = this.defaultTTL): void {
+        this.cache.set(key, { data, expiresAt: Date.now() + ttl });
+    }
+
+    invalidate(key: string): void {
+        this.cache.delete(key);
+    }
+
+    invalidatePattern(pattern: string): void {
+        for (const key of this.cache.keys()) {
+            if (key.includes(pattern)) this.cache.delete(key);
+        }
+    }
+}
+
+const statsCache = new StatsCache();
+const ACCOUNTS_STATS_TTL = 5 * 60 * 1000; // 5 minutes
+
 export class TransactionRepository {
     constructor(private db: DatabaseFacade) { }
 
@@ -106,12 +144,24 @@ export class TransactionRepository {
         return parseInt(result.rows[0]?.count || '0');
     }
 
-    // Get account stats: total income, expense, and balance
+    // Get account stats: total income, expense, and balance (cached)
     async getAccountStats(accountId: string, startDate?: string, endDate?: string): Promise<{
         totalIncome: number;
         totalExpense: number;
         balance: number;
+        fromCache?: boolean;
     }> {
+        // Check cache first
+        const cacheKey = `stats:${accountId}:${startDate || 'none'}:${endDate || 'none'}`;
+        const cached = statsCache.get<{ totalIncome: number; totalExpense: number; balance: number }>(cacheKey);
+        
+        if (cached) {
+            console.log(`[Cache] Account stats HIT for ${accountId}`);
+            return { ...cached, fromCache: true };
+        }
+
+        console.log(`[Cache] Account stats MISS for ${accountId}`);
+
         let whereClause = 'WHERE account_id = $1';
         const params: any[] = [accountId];
         let paramIndex = 2;
@@ -139,11 +189,21 @@ export class TransactionRepository {
         const totalIncome = parseFloat(result.rows[0]?.total_income || '0');
         const totalExpense = parseFloat(result.rows[0]?.total_expense || '0');
 
-        return {
+        const stats = {
             totalIncome,
             totalExpense,
             balance: totalIncome - totalExpense
         };
+
+        // Cache the result
+        statsCache.set(cacheKey, stats, ACCOUNTS_STATS_TTL);
+
+        return { ...stats, fromCache: false };
+    }
+
+    // Invalidate cache when transactions change
+    invalidateAccountStatsCache(accountId: string): void {
+        statsCache.invalidatePattern(`stats:${accountId}:`);
     }
 
     // Get all account stats for a workspace

@@ -75,6 +75,9 @@ export class TransactionService {
 
         const saved = await this.transactionRepo.save(transaction);
 
+        // Invalidate stats cache
+        this.transactionRepo.invalidateAccountStatsCache(data.accountId);
+
         // If linking to another transaction, update the linked transaction
         if (data.linkedTransactionId && data.linkedAccountId) {
             const linkedTx = await this.transactionRepo.findById(data.linkedTransactionId);
@@ -88,6 +91,8 @@ export class TransactionService {
                 });
                 (updatedLinked as any).id = linkedTx.id;
                 await this.transactionRepo.update(updatedLinked);
+                // Invalidate cache for linked account too
+                this.transactionRepo.invalidateAccountStatsCache(data.linkedAccountId);
             }
         }
 
@@ -105,6 +110,7 @@ export class TransactionService {
         }
 
         const updatedProps = existing.getProps();
+        const oldAccountId = existing.accountId;
         
         const updatedTransaction = Transaction.create({
             accountId: data.accountId || updatedProps.accountId,
@@ -124,7 +130,15 @@ export class TransactionService {
         // Preserve the ID
         (updatedTransaction as any).id = id;
         
-        return this.transactionRepo.update(updatedTransaction);
+        const saved = await this.transactionRepo.update(updatedTransaction);
+
+        // Invalidate cache for old and new account if account changed
+        this.transactionRepo.invalidateAccountStatsCache(oldAccountId);
+        if (data.accountId && data.accountId !== oldAccountId) {
+            this.transactionRepo.invalidateAccountStatsCache(data.accountId);
+        }
+
+        return saved;
     }
 
     async linkTransaction(id: string, dto: LinkTransactionDTO, workspaceId: string): Promise<Transaction> {
@@ -220,12 +234,18 @@ export class TransactionService {
             throw new AppError('Transaction not found', 404);
         }
 
+        // Store accountId before deleting for cache invalidation
+        const accountId = existing.accountId;
+
         // Unlink from linked transaction before deleting
         if (existing.linkedTransactionId) {
             await this.unlinkTransaction(id, workspaceId);
         }
 
-        return this.transactionRepo.delete(id);
+        await this.transactionRepo.delete(id);
+
+        // Invalidate stats cache
+        this.transactionRepo.invalidateAccountStatsCache(accountId);
     }
 
     // Stats methods

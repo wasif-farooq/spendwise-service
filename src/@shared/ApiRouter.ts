@@ -8,6 +8,7 @@ import subscriptionRoutesV1 from '@domains/subscription/routes/subscription.rout
 import accountsRoutesV1 from '@domains/accounts/routes/accounts.routes';
 import transactionsRoutesV1 from '@domains/transactions/routes/transaction.routes';
 import exchangeRatesRoutesV1 from '@domains/exchange-rates/routes/exchange-rates.routes';
+import categoriesRoutesV1 from '@domains/categories/routes/category.routes';
 
 export class ApiRouter {
   private router: Router;
@@ -30,6 +31,8 @@ export class ApiRouter {
     this.router.use('/v1', transactionsRoutesV1);
     // Exchange rates (global, not workspace-specific)
     this.router.use('/v1/exchange-rates', exchangeRatesRoutesV1);
+    // Categories (at /v1/:workspaceId/categories)
+    this.router.use('/v1', categoriesRoutesV1);
 
     // V2 Routes could go here
     // this.router.use('/v2/auth', authRoutesV2);
