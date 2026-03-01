@@ -123,6 +123,70 @@ async function seed() {
 
         console.log('Subscription Plans seeded successfully.');
 
+        console.log('Subscription Plans seeded successfully.');
+
+        // Seed Categories
+        console.log('Seeding Categories...');
+        
+        // Get workspace IDs to associate categories with
+        const workspacesResult = await client.query('SELECT id FROM workspaces LIMIT 5');
+        const workspaceIds = workspacesResult.rows.map(r => r.id);
+        
+        if (workspaceIds.length > 0) {
+            const categories = [
+                // Expense Categories
+                { name: 'Food & Dining', type: 'expense', icon: 'Utensils', color: '#f97316' },
+                { name: 'Transport', type: 'expense', icon: 'Car', color: '#3b82f6' },
+                { name: 'Shopping', type: 'expense', icon: 'ShoppingBag', color: '#8b5cf6' },
+                { name: 'Housing', type: 'expense', icon: 'Home', color: '#10b981' },
+                { name: 'Utilities', type: 'expense', icon: 'Zap', color: '#f59e0b' },
+                { name: 'Health', type: 'expense', icon: 'Heart', color: '#f43f5e' },
+                { name: 'Entertainment', type: 'expense', icon: 'Gamepad2', color: '#ec4899' },
+                { name: 'Education', type: 'expense', icon: 'GraduationCap', color: '#6366f1' },
+                { name: 'Travel', type: 'expense', icon: 'Plane', color: '#0ea5e9' },
+                { name: 'Groceries', type: 'expense', icon: 'ShoppingCart', color: '#22c55e' },
+                { name: 'Insurance', type: 'expense', icon: 'Shield', color: '#64748b' },
+                { name: 'Personal Care', type: 'expense', icon: 'Sparkles', color: '#f472b6' },
+                { name: 'Other Expense', type: 'expense', icon: 'MoreHorizontal', color: '#6b7280' },
+                
+                // Income Categories
+                { name: 'Salary', type: 'income', icon: 'Briefcase', color: '#10b981' },
+                { name: 'Freelance', type: 'income', icon: 'Laptop', color: '#3b82f6' },
+                { name: 'Investment', type: 'income', icon: 'TrendingUp', color: '#8b5cf6' },
+                { name: 'Gift', type: 'income', icon: 'Gift', color: '#f97316' },
+                { name: 'Refund', type: 'income', icon: 'RotateCcw', color: '#06b6d4' },
+                { name: 'Other Income', type: 'income', icon: 'MoreHorizontal', color: '#6b7280' },
+            ];
+
+            for (const cat of categories) {
+                for (const workspaceId of workspaceIds) {
+                    // Check if category already exists
+                    const existing = await client.query(
+                        'SELECT id FROM categories WHERE workspace_id = $1 AND name = $2',
+                        [workspaceId, cat.name]
+                    );
+                    
+                    if (existing.rows.length === 0) {
+                        await client.query(`
+                            INSERT INTO categories (id, name, type, icon, color, workspace_id, created_at, updated_at)
+                            VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+                        `, [
+                            require('uuid').v4(),
+                            cat.name,
+                            cat.type,
+                            cat.icon,
+                            cat.color,
+                            workspaceId
+                        ]);
+                    }
+                }
+            }
+            
+            console.log(`Categories seeded successfully for ${workspaceIds.length} workspace(s).`);
+        } else {
+            console.log('No workspaces found, skipping category seeding.');
+        }
+
     } catch (err) {
         console.error('Seeding error:', err);
         process.exit(1);

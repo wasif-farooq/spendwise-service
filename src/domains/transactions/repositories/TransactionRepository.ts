@@ -64,10 +64,12 @@ export class TransactionRepository {
         search?: string;
         accountId?: string;
         categoryId?: string;
+        category?: string;
+        type?: string;
         startDate?: string;
         endDate?: string;
     } = {}): Promise<{ transactions: Transaction[]; total: number }> {
-        const { limit = 50, offset = 0, search, accountId, categoryId, startDate, endDate } = options;
+        const { limit = 50, offset = 0, search, accountId, categoryId, category, type, startDate, endDate } = options;
 
         let whereClause = 'WHERE t.workspace_id = $1';
         const params: any[] = [workspaceId];
@@ -82,6 +84,19 @@ export class TransactionRepository {
         if (categoryId) {
             whereClause += ` AND t.category_id = $${paramIndex}`;
             params.push(categoryId);
+            paramIndex++;
+        }
+
+        // Filter by category name
+        if (category) {
+            whereClause += ` AND c.name ILIKE $${paramIndex}`;
+            params.push(`%${category}%`);
+            paramIndex++;
+        }
+
+        if (type) {
+            whereClause += ` AND t.type = $${paramIndex}`;
+            params.push(type);
             paramIndex++;
         }
 
