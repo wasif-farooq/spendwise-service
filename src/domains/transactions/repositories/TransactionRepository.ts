@@ -68,8 +68,9 @@ export class TransactionRepository {
         type?: string;
         startDate?: string;
         endDate?: string;
+        linkedStatus?: 'all' | 'linked' | 'unlinked';
     } = {}): Promise<{ transactions: Transaction[]; total: number }> {
-        const { limit = 50, offset = 0, search, accountId, categoryId, category, type, startDate, endDate } = options;
+        const { limit = 50, offset = 0, search, accountId, categoryId, category, type, startDate, endDate, linkedStatus } = options;
 
         let whereClause = 'WHERE t.workspace_id = $1';
         const params: any[] = [workspaceId];
@@ -116,6 +117,15 @@ export class TransactionRepository {
             whereClause += ` AND (t.description ILIKE $${paramIndex} OR t.amount::text ILIKE $${paramIndex})`;
             params.push(`%${search}%`);
             paramIndex++;
+        }
+
+        // Filter by linked status
+        if (linkedStatus && linkedStatus !== 'all') {
+            if (linkedStatus === 'linked') {
+                whereClause += ` AND t.linked_transaction_id IS NOT NULL`;
+            } else if (linkedStatus === 'unlinked') {
+                whereClause += ` AND t.linked_transaction_id IS NULL`;
+            }
         }
 
         // Get total count
