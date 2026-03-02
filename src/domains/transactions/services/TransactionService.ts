@@ -23,6 +23,7 @@ export interface UpdateTransactionDTO {
     currency?: string;
     description?: string;
     date?: string;
+    category?: string;
     categoryId?: string;
     linkedTransactionId?: string;
     linkedAccountId?: string;
@@ -112,7 +113,7 @@ export class TransactionService {
         const updatedProps = existing.getProps();
         const oldAccountId = existing.accountId;
         
-        const updatedTransaction = Transaction.create({
+        const updatedTransaction = Transaction.restore({
             accountId: data.accountId || updatedProps.accountId,
             userId: updatedProps.userId,
             workspaceId: updatedProps.workspaceId,
@@ -122,13 +123,14 @@ export class TransactionService {
             description: data.description ?? updatedProps.description,
             date: data.date ? new Date(data.date) : updatedProps.date,
             categoryId: data.categoryId ?? updatedProps.categoryId,
+            categoryName: data.category ?? updatedProps.categoryName,
             linkedTransactionId: data.linkedTransactionId ?? updatedProps.linkedTransactionId,
             linkedAccountId: data.linkedAccountId ?? updatedProps.linkedAccountId,
             exchangeRate: data.exchangeRate ?? updatedProps.exchangeRate,
-        });
-
-        // Preserve the ID
-        (updatedTransaction as any).id = id;
+            baseAmount: updatedProps.baseAmount,
+            createdAt: updatedProps.createdAt,
+            updatedAt: new Date(),
+        }, id);
         
         const saved = await this.transactionRepo.update(updatedTransaction);
 
