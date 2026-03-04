@@ -21,6 +21,8 @@ import { TransactionService } from '@domains/transactions/services/TransactionSe
 import { TransactionController } from '@domains/transactions/controllers/TransactionController';
 import { ExchangeRateRepository } from '@domains/exchange-rates/repositories/ExchangeRateRepository';
 import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
+import { AnalyticsService } from '@domains/analytics/services/AnalyticsService';
+import analyticsRoutes from '@domains/analytics/routes/analytics.routes';
 
 export class ServiceBootstrap {
     private static instance: ServiceBootstrap;
@@ -128,6 +130,10 @@ export class ServiceBootstrap {
 
             const transactionController = new TransactionController(transactionService);
             this.container.registerInstance(TOKENS.TransactionController, transactionController);
+
+            // Analytics domain
+            const analyticsService = new AnalyticsService();
+            this.container.registerInstance(TOKENS.AnalyticsService, analyticsService);
 
 
             // Connect Infrastructure

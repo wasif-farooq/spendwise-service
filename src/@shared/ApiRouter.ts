@@ -9,6 +9,7 @@ import accountsRoutesV1 from '@domains/accounts/routes/accounts.routes';
 import transactionsRoutesV1 from '@domains/transactions/routes/transaction.routes';
 import exchangeRatesRoutesV1 from '@domains/exchange-rates/routes/exchange-rates.routes';
 import categoriesRoutesV1 from '@domains/categories/routes/category.routes';
+import analyticsRoutesV1 from '@domains/analytics/routes/analytics.routes';
 
 export class ApiRouter {
   private router: Router;
@@ -33,6 +34,8 @@ export class ApiRouter {
     this.router.use('/v1/exchange-rates', exchangeRatesRoutesV1);
     // Categories (at /v1/:workspaceId/categories)
     this.router.use('/v1', categoriesRoutesV1);
+    // Analytics (at /v1/:workspaceId/analytics)
+    this.router.use('/v1', analyticsRoutesV1);
 
     // V2 Routes could go here
     // this.router.use('/v2/auth', authRoutesV2);
