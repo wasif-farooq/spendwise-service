@@ -3,10 +3,20 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { IAccountRepository } from './IAccountRepository';
 
 export class AccountRepository implements IAccountRepository {
-    constructor(private db: DatabaseFacade) { }
+    private dbToUse: DatabaseFacade;
+
+    constructor(private db: DatabaseFacade) {
+        this.dbToUse = db;
+    }
+
+    // For using a different DB client (e.g., in transactions)
+    withDb(db: DatabaseFacade): AccountRepository {
+        this.dbToUse = db;
+        return this;
+    }
 
     async findById(id: string): Promise<Account | null> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             'SELECT * FROM accounts WHERE id = $1',
             [id]
         );
@@ -14,7 +24,7 @@ export class AccountRepository implements IAccountRepository {
     }
 
     async findByOrganizationId(organizationId: string): Promise<Account[]> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             'SELECT * FROM accounts WHERE organization_id = $1 ORDER BY created_at DESC',
             [organizationId]
         );
@@ -22,7 +32,7 @@ export class AccountRepository implements IAccountRepository {
     }
 
     async countByOrganizationId(organizationId: string): Promise<number> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             'SELECT COUNT(*) as count FROM accounts WHERE organization_id = $1',
             [organizationId]
         );
@@ -30,7 +40,7 @@ export class AccountRepository implements IAccountRepository {
     }
 
     async findByUserId(userId: string): Promise<Account[]> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             'SELECT * FROM accounts WHERE user_id = $1 ORDER BY created_at DESC',
             [userId]
         );
@@ -63,7 +73,7 @@ export class AccountRepository implements IAccountRepository {
             RETURNING *
         `;
 
-        const result = await this.db.query(query, values);
+        const result = await this.dbToUse.query(query, values);
         return this.mapToEntity(result.rows[0]);
     }
 
@@ -77,7 +87,7 @@ export class AccountRepository implements IAccountRepository {
             RETURNING *
         `;
 
-        const result = await this.db.query(query, [
+        const result = await this.dbToUse.query(query, [
             data.name,
             data.type,
             data.balance,
@@ -95,15 +105,22 @@ export class AccountRepository implements IAccountRepository {
     }
 
     async delete(id: string): Promise<void> {
-        await this.db.query('DELETE FROM accounts WHERE id = $1', [id]);
+        await this.dbToUse.query('DELETE FROM accounts WHERE id = $1', [id]);
     }
 
     async getTotalBalance(organizationId: string): Promise<number> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             'SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE organization_id = $1',
             [organizationId]
         );
         return parseFloat(result.rows[0]?.total || '0');
+    }
+
+    async updateBalance(id: string, balance: number): Promise<void> {
+        await this.dbToUse.query(
+            'UPDATE accounts SET balance = $1, last_activity = NOW(), updated_at = NOW() WHERE id = $2',
+            [balance, id]
+        );
     }
 
     private mapToEntity(row: any): Account {

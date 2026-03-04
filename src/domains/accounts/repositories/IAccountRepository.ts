@@ -1,4 +1,5 @@
 import { Account } from '../models/Account';
+import { DatabaseFacade } from '@facades/DatabaseFacade';
 
 export interface IAccountRepository {
     findById(id: string): Promise<Account | null>;
@@ -8,4 +9,6 @@ export interface IAccountRepository {
     update(account: Account): Promise<Account>;
     delete(id: string): Promise<void>;
     getTotalBalance(organizationId: string): Promise<number>;
+    updateBalance(id: string, balance: number): Promise<void>;
+    withDb(db: DatabaseFacade): IAccountRepository;
 }

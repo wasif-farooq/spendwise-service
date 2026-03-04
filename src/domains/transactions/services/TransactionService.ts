@@ -1,6 +1,8 @@
 import { TransactionRepository } from '../repositories/TransactionRepository';
 import { Transaction } from '../models/Transaction';
 import { AppError } from '@shared/errors/AppError';
+import { IAccountRepository } from '@domains/accounts/repositories/IAccountRepository';
+import { DatabaseFacade } from '@facades/DatabaseFacade';
 
 export interface CreateTransactionDTO {
     accountId: string;
@@ -36,7 +38,24 @@ export interface LinkTransactionDTO {
 }
 
 export class TransactionService {
-    constructor(private transactionRepo: TransactionRepository) { }
+    constructor(
+        private transactionRepo: TransactionRepository,
+        private accountRepo: IAccountRepository,
+        private db: DatabaseFacade
+    ) { }
+
+    // Helper to recalculate and update account balance (uses transaction if provided)
+    private async updateAccountBalance(accountId: string, trxDb?: DatabaseFacade): Promise<void> {
+        const stats = trxDb 
+            ? await this.transactionRepo.withDb(trxDb).getAccountStats(accountId)
+            : await this.transactionRepo.getAccountStats(accountId);
+        
+        if (trxDb) {
+            await this.accountRepo.withDb(trxDb).updateBalance(accountId, stats.balance);
+        } else {
+            await this.accountRepo.updateBalance(accountId, stats.balance);
+        }
+    }
 
     async getTransactionsByWorkspace(workspaceId: string, options: {
         limit?: number;
@@ -59,88 +78,106 @@ export class TransactionService {
     }
 
     async createTransaction(data: CreateTransactionDTO, userId: string, workspaceId: string): Promise<Transaction> {
-        const transaction = Transaction.create({
-            accountId: data.accountId,
-            userId,
-            workspaceId,
-            type: data.type,
-            amount: data.amount,
-            currency: data.currency,
-            description: data.description,
-            date: new Date(data.date),
-            categoryId: data.categoryId,
-            linkedTransactionId: data.linkedTransactionId,
-            linkedAccountId: data.linkedAccountId,
-            exchangeRate: data.exchangeRate,
-        });
+        return this.db.transaction(async (trxDb) => {
+            const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
+            const trxAccountRepo = this.accountRepo.withDb(trxDb);
 
-        const saved = await this.transactionRepo.save(transaction);
+            const transaction = Transaction.create({
+                accountId: data.accountId,
+                userId,
+                workspaceId,
+                type: data.type,
+                amount: data.amount,
+                currency: data.currency,
+                description: data.description,
+                date: new Date(data.date),
+                categoryId: data.categoryId,
+                linkedTransactionId: data.linkedTransactionId,
+                linkedAccountId: data.linkedAccountId,
+                exchangeRate: data.exchangeRate,
+            });
 
-        // Invalidate stats cache
-        this.transactionRepo.invalidateAccountStatsCache(data.accountId);
+            const saved = await trxTransactionRepo.save(transaction);
 
-        // If linking to another transaction, update the linked transaction
-        if (data.linkedTransactionId && data.linkedAccountId) {
-            const linkedTx = await this.transactionRepo.findById(data.linkedTransactionId);
-            if (linkedTx) {
-                // Update the linked transaction to reference back
-                const linkedProps = linkedTx.getProps();
-                const updatedLinked = Transaction.create({
-                    ...linkedProps,
-                    linkedTransactionId: saved.id,
-                    linkedAccountId: data.accountId,
-                });
-                (updatedLinked as any).id = linkedTx.id;
-                await this.transactionRepo.update(updatedLinked);
-                // Invalidate cache for linked account too
-                this.transactionRepo.invalidateAccountStatsCache(data.linkedAccountId);
+            // Invalidate stats cache and update account balance
+            trxTransactionRepo.invalidateAccountStatsCache(data.accountId);
+            const stats = await trxTransactionRepo.getAccountStats(data.accountId);
+            await trxAccountRepo.updateBalance(data.accountId, stats.balance);
+
+            // If linking to another transaction, update the linked transaction
+            if (data.linkedTransactionId && data.linkedAccountId) {
+                const linkedTx = await trxTransactionRepo.findById(data.linkedTransactionId);
+                if (linkedTx) {
+                    const linkedProps = linkedTx.getProps();
+                    const updatedLinked = Transaction.create({
+                        ...linkedProps,
+                        linkedTransactionId: saved.id,
+                        linkedAccountId: data.accountId,
+                    });
+                    (updatedLinked as any).id = linkedTx.id;
+                    await trxTransactionRepo.update(updatedLinked);
+                    // Invalidate cache and update balance for linked account too
+                    trxTransactionRepo.invalidateAccountStatsCache(data.linkedAccountId);
+                    const linkedStats = await trxTransactionRepo.getAccountStats(data.linkedAccountId);
+                    await trxAccountRepo.updateBalance(data.linkedAccountId, linkedStats.balance);
+                }
             }
-        }
 
-        return saved;
+            return saved;
+        });
     }
 
     async updateTransaction(id: string, data: UpdateTransactionDTO, workspaceId: string): Promise<Transaction> {
-        const existing = await this.transactionRepo.findById(id);
-        if (!existing) {
-            throw new AppError('Transaction not found', 404);
-        }
+        return this.db.transaction(async (trxDb) => {
+            const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
+            const trxAccountRepo = this.accountRepo.withDb(trxDb);
 
-        if (existing.workspaceId !== workspaceId) {
-            throw new AppError('Transaction not found', 404);
-        }
+            const existing = await trxTransactionRepo.findById(id);
+            if (!existing) {
+                throw new AppError('Transaction not found', 404);
+            }
 
-        const updatedProps = existing.getProps();
-        const oldAccountId = existing.accountId;
-        
-        const updatedTransaction = Transaction.restore({
-            accountId: data.accountId || updatedProps.accountId,
-            userId: updatedProps.userId,
-            workspaceId: updatedProps.workspaceId,
-            type: (data.type as 'income' | 'expense') || updatedProps.type,
-            amount: data.amount ?? updatedProps.amount,
-            currency: data.currency || updatedProps.currency,
-            description: data.description ?? updatedProps.description,
-            date: data.date ? new Date(data.date) : updatedProps.date,
-            categoryId: data.categoryId ?? updatedProps.categoryId,
-            categoryName: data.category ?? updatedProps.categoryName,
-            linkedTransactionId: data.linkedTransactionId ?? updatedProps.linkedTransactionId,
-            linkedAccountId: data.linkedAccountId ?? updatedProps.linkedAccountId,
-            exchangeRate: data.exchangeRate ?? updatedProps.exchangeRate,
-            baseAmount: updatedProps.baseAmount,
-            createdAt: updatedProps.createdAt,
-            updatedAt: new Date(),
-        }, id);
-        
-        const saved = await this.transactionRepo.update(updatedTransaction);
+            if (existing.workspaceId !== workspaceId) {
+                throw new AppError('Transaction not found', 404);
+            }
 
-        // Invalidate cache for old and new account if account changed
-        this.transactionRepo.invalidateAccountStatsCache(oldAccountId);
-        if (data.accountId && data.accountId !== oldAccountId) {
-            this.transactionRepo.invalidateAccountStatsCache(data.accountId);
-        }
+            const updatedProps = existing.getProps();
+            const oldAccountId = existing.accountId;
+            
+            const updatedTransaction = Transaction.restore({
+                accountId: data.accountId || updatedProps.accountId,
+                userId: updatedProps.userId,
+                workspaceId: updatedProps.workspaceId,
+                type: (data.type as 'income' | 'expense') || updatedProps.type,
+                amount: data.amount ?? updatedProps.amount,
+                currency: data.currency || updatedProps.currency,
+                description: data.description ?? updatedProps.description,
+                date: data.date ? new Date(data.date) : updatedProps.date,
+                categoryId: data.categoryId ?? updatedProps.categoryId,
+                categoryName: data.category ?? updatedProps.categoryName,
+                linkedTransactionId: data.linkedTransactionId ?? updatedProps.linkedTransactionId,
+                linkedAccountId: data.linkedAccountId ?? updatedProps.linkedAccountId,
+                exchangeRate: data.exchangeRate ?? updatedProps.exchangeRate,
+                baseAmount: updatedProps.baseAmount,
+                createdAt: updatedProps.createdAt,
+                updatedAt: new Date(),
+            }, id);
+            
+            const saved = await trxTransactionRepo.update(updatedTransaction);
 
-        return saved;
+            // Invalidate cache and update balance for old and new account if account changed
+            trxTransactionRepo.invalidateAccountStatsCache(oldAccountId);
+            const oldStats = await trxTransactionRepo.getAccountStats(oldAccountId);
+            await trxAccountRepo.updateBalance(oldAccountId, oldStats.balance);
+            
+            if (data.accountId && data.accountId !== oldAccountId) {
+                trxTransactionRepo.invalidateAccountStatsCache(data.accountId);
+                const newStats = await trxTransactionRepo.getAccountStats(data.accountId);
+                await trxAccountRepo.updateBalance(data.accountId, newStats.balance);
+            }
+
+            return saved;
+        });
     }
 
     async linkTransaction(id: string, dto: LinkTransactionDTO, workspaceId: string): Promise<Transaction> {
@@ -227,27 +264,71 @@ export class TransactionService {
     }
 
     async deleteTransaction(id: string, workspaceId: string): Promise<void> {
-        const existing = await this.transactionRepo.findById(id);
-        if (!existing) {
-            throw new AppError('Transaction not found', 404);
+        return this.db.transaction(async (trxDb) => {
+            const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
+            const trxAccountRepo = this.accountRepo.withDb(trxDb);
+
+            const existing = await trxTransactionRepo.findById(id);
+            if (!existing) {
+                throw new AppError('Transaction not found', 404);
+            }
+
+            if (existing.workspaceId !== workspaceId) {
+                throw new AppError('Transaction not found', 404);
+            }
+
+            // Store accountId before deleting for cache invalidation
+            const accountId = existing.accountId;
+
+            // Unlink from linked transaction before deleting
+            if (existing.linkedTransactionId) {
+                await this.unlinkTransactionInTransaction(id, workspaceId, trxDb);
+            }
+
+            await trxTransactionRepo.delete(id);
+
+            // Invalidate stats cache and update account balance
+            trxTransactionRepo.invalidateAccountStatsCache(accountId);
+            const stats = await trxTransactionRepo.getAccountStats(accountId);
+            await trxAccountRepo.updateBalance(accountId, stats.balance);
+        });
+    }
+
+    // Helper for unlink within a transaction
+    private async unlinkTransactionInTransaction(id: string, workspaceId: string, trxDb: DatabaseFacade): Promise<void> {
+        const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
+        
+        const existing = await trxTransactionRepo.findById(id);
+        if (!existing) return;
+
+        const linkedTxId = existing.linkedTransactionId;
+        
+        const updatedProps = existing.getProps();
+        
+        const updatedTransaction = Transaction.create({
+            ...updatedProps,
+            linkedTransactionId: undefined,
+            linkedAccountId: undefined,
+        });
+
+        (updatedTransaction as any).id = id;
+        
+        await trxTransactionRepo.update(updatedTransaction);
+
+        // Also unlink the linked transaction
+        if (linkedTxId) {
+            const linkedTx = await trxTransactionRepo.findById(linkedTxId);
+            if (linkedTx) {
+                const linkedProps = linkedTx.getProps();
+                const updatedLinked = Transaction.create({
+                    ...linkedProps,
+                    linkedTransactionId: undefined,
+                    linkedAccountId: undefined,
+                });
+                (updatedLinked as any).id = linkedTxId;
+                await trxTransactionRepo.update(updatedLinked);
+            }
         }
-
-        if (existing.workspaceId !== workspaceId) {
-            throw new AppError('Transaction not found', 404);
-        }
-
-        // Store accountId before deleting for cache invalidation
-        const accountId = existing.accountId;
-
-        // Unlink from linked transaction before deleting
-        if (existing.linkedTransactionId) {
-            await this.unlinkTransaction(id, workspaceId);
-        }
-
-        await this.transactionRepo.delete(id);
-
-        // Invalidate stats cache
-        this.transactionRepo.invalidateAccountStatsCache(accountId);
     }
 
     // Stats methods

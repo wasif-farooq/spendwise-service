@@ -40,10 +40,20 @@ const statsCache = new StatsCache();
 const ACCOUNTS_STATS_TTL = 5 * 60 * 1000; // 5 minutes
 
 export class TransactionRepository {
-    constructor(private db: DatabaseFacade) { }
+    private dbToUse: DatabaseFacade;
+
+    constructor(private db: DatabaseFacade) {
+        this.dbToUse = db;
+    }
+
+    // For using a different DB client (e.g., in transactions)
+    withDb(db: DatabaseFacade): TransactionRepository {
+        this.dbToUse = db;
+        return this;
+    }
 
     async findById(id: string): Promise<Transaction | null> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             'SELECT * FROM transactions WHERE id = $1',
             [id]
         );
@@ -51,7 +61,7 @@ export class TransactionRepository {
     }
 
     async findByAccountId(accountId: string, limit = 100, offset = 0): Promise<Transaction[]> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             'SELECT * FROM transactions WHERE account_id = $1 ORDER BY date DESC, created_at DESC LIMIT $2 OFFSET $3',
             [accountId, limit, offset]
         );
@@ -129,7 +139,7 @@ export class TransactionRepository {
         }
 
         // Get total count
-        const countResult = await this.db.query(
+        const countResult = await this.dbToUse.query(
             `SELECT COUNT(*) as total FROM transactions t ${whereClause}`,
             params
         );
@@ -145,7 +155,7 @@ export class TransactionRepository {
             LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
         `;
         
-        const result = await this.db.query(query, [...params, limit, offset]);
+        const result = await this.dbToUse.query(query, [...params, limit, offset]);
         
         return {
             transactions: result.rows.map((row: any) => this.mapToEntityWithCategory(row)),
@@ -154,7 +164,7 @@ export class TransactionRepository {
     }
 
     async countByAccountThisMonth(accountId: string): Promise<number> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             `SELECT COUNT(*) as count FROM transactions 
              WHERE account_id = $1 
              AND created_at >= date_trunc('month', NOW())`,
@@ -164,7 +174,7 @@ export class TransactionRepository {
     }
 
     async countByWorkspaceId(workspaceId: string): Promise<number> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             'SELECT COUNT(*) as count FROM transactions WHERE workspace_id = $1',
             [workspaceId]
         );
@@ -205,7 +215,7 @@ export class TransactionRepository {
             paramIndex++;
         }
 
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             `SELECT 
                 COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as total_income,
                 COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) as total_expense
@@ -257,7 +267,7 @@ export class TransactionRepository {
             paramIndex++;
         }
 
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             `SELECT 
                 t.account_id,
                 a.name as account_name,
@@ -303,7 +313,7 @@ export class TransactionRepository {
             paramIndex++;
         }
 
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             `SELECT 
                 COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as total_income,
                 COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) as total_expense,
@@ -354,7 +364,7 @@ export class TransactionRepository {
             RETURNING *
         `;
 
-        const result = await this.db.query(query, values);
+        const result = await this.dbToUse.query(query, values);
         return this.mapToEntity(result.rows[0]);
     }
 
@@ -379,7 +389,7 @@ export class TransactionRepository {
             RETURNING *
         `;
 
-        const result = await this.db.query(query, [
+        const result = await this.dbToUse.query(query, [
             data.accountId,
             data.type,
             data.amount,
@@ -399,7 +409,7 @@ export class TransactionRepository {
     }
 
     async delete(id: string): Promise<void> {
-        await this.db.query('DELETE FROM transactions WHERE id = $1', [id]);
+        await this.dbToUse.query('DELETE FROM transactions WHERE id = $1', [id]);
     }
 
     private mapToEntity(row: any): Transaction {

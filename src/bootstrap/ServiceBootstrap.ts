@@ -116,7 +116,7 @@ export class ServiceBootstrap {
             const transactionRepo = new TransactionRepository(dbFacade);
             this.container.registerInstance(TOKENS.TransactionRepository, transactionRepo);
 
-            const transactionService = new TransactionService(transactionRepo);
+            const transactionService = new TransactionService(transactionRepo, accountRepo, dbFacade);
             this.container.registerInstance(TOKENS.TransactionService, transactionService);
 
             const transactionController = new TransactionController(transactionService);
