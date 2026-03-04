@@ -349,6 +349,7 @@ export class TransactionRepository {
             linked_transaction_id: data.linkedTransactionId,
             linked_account_id: data.linkedAccountId,
             exchange_rate: data.exchangeRate,
+            converted_amount: data.convertedAmount,
             base_amount: data.baseAmount,
             created_at: data.createdAt,
             updated_at: data.updatedAt,
@@ -383,9 +384,10 @@ export class TransactionRepository {
                 linked_transaction_id = $8,
                 linked_account_id = $9,
                 exchange_rate = $10,
-                base_amount = $11,
-                updated_at = $12
-            WHERE id = $13
+                converted_amount = $11,
+                base_amount = $12,
+                updated_at = $13
+            WHERE id = $14
             RETURNING *
         `;
 
@@ -400,6 +402,7 @@ export class TransactionRepository {
             data.linkedTransactionId,
             data.linkedAccountId,
             data.exchangeRate,
+            data.convertedAmount,
             data.baseAmount,
             new Date(),
             transaction.id
@@ -426,6 +429,7 @@ export class TransactionRepository {
             linkedTransactionId: row.linked_transaction_id,
             linkedAccountId: row.linked_account_id,
             exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
+            convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
             baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
@@ -448,6 +452,7 @@ export class TransactionRepository {
             linkedTransactionId: row.linked_transaction_id,
             linkedAccountId: row.linked_account_id,
             exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
+            convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
             baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
             createdAt: row.created_at,
             updatedAt: row.updated_at,

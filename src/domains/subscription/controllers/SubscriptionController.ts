@@ -3,11 +3,52 @@ import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
 import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
 import { IUserRepository } from '@domains/auth/repositories/IUserRepository';
+import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
+import { WorkspaceMembersRepository } from '@domains/workspaces/repositories/WorkspaceMembersRepository';
 
 export class SubscriptionController {
 
     private get subscriptionService(): SubscriptionService {
         return Container.getInstance().resolve<SubscriptionService>(TOKENS.SubscriptionService);
+    }
+
+    private get accountRepo(): AccountRepository {
+        return Container.getInstance().resolve<AccountRepository>(TOKENS.AccountRepository);
+    }
+
+    private get membersRepo(): WorkspaceMembersRepository {
+        return Container.getInstance().resolve<WorkspaceMembersRepository>(TOKENS.WorkspaceMembersRepository);
+    }
+
+    private async calculateFeatureUsage(userId: string): Promise<{
+        members: number;
+        accounts: number;
+        workspaces: number;
+        customRoles: number;
+    }> {
+        try {
+            // Get account count for this user
+            const accounts = await this.accountRepo.findByUserId(userId);
+            
+            // For now, members and workspaces are mocked as 0
+            // In a full implementation, you'd count workspaces the user belongs to
+            // and members in those workspaces
+            
+            return {
+                members: 0,
+                accounts: accounts.length,
+                workspaces: 0,
+                customRoles: 0,
+            };
+        } catch (error) {
+            console.error('Error calculating feature usage:', error);
+            return {
+                members: 0,
+                accounts: 0,
+                workspaces: 0,
+                customRoles: 0,
+            };
+        }
     }
 
     async getCurrentSubscription(req: Request, res: Response) {
@@ -19,6 +60,7 @@ export class SubscriptionController {
             }
 
             const subscription = await this.subscriptionService.getCurrentSubscription(userId);
+            const featureUsage = await this.calculateFeatureUsage(userId);
 
             if (!subscription) {
                 // Return default/free plan details if no explicit subscription
@@ -33,30 +75,24 @@ export class SubscriptionController {
                         features: defaultPlan?.features || [],
                         limits: defaultPlan?.limits || {}
                     },
-                    featureUsage: {
-                        members: 0,
-                        accounts: 0,
-                        workspaces: 0,
-                        customRoles: 0,
-                    }
+                    featureUsage
                 });
             }
 
+            // Get the plan details for limits
+            const plans = await this.subscriptionService.getPlans();
+            const plan = plans.find(p => p.id === subscription.planId);
+
             return res.json({
                 subscription: {
-                    plan: subscription.planId,
+                    plan: plan?.name.toLowerCase() || 'pro', // Return plan name like 'pro', 'free', etc.
                     status: subscription.status,
                     startDate: subscription.startDate,
-                    features: subscription.featuresSnapshot,
-                    limits: subscription.limitsSnapshot,
+                    features: subscription.featuresSnapshot || plan?.features || [],
+                    limits: subscription.limitsSnapshot || plan?.limits || {},
                     paymentProvider: subscription.paymentProvider,
                 },
-                featureUsage: {
-                    members: 0,
-                    accounts: 0,
-                    workspaces: 0,
-                    customRoles: 0,
-                }
+                featureUsage
             });
         } catch (error: any) {
             return res.status(500).json({ message: error.message });
@@ -163,14 +199,16 @@ export class SubscriptionController {
     }
 
     async getFeatureUsage(req: Request, res: Response) {
-        // Mock usage for now
-        return res.json({
-            usage: {
-                members: 0,
-                accounts: 0,
-                workspaces: 0,
-                customRoles: 0,
+        try {
+            const userId = (req as any).user.userId;
+            if (!userId) {
+                return res.status(401).json({ message: 'User not authenticated' });
             }
-        });
+
+            const usage = await this.calculateFeatureUsage(userId);
+            return res.json({ usage });
+        } catch (error: any) {
+            return res.status(500).json({ message: error.message });
+        }
     }
 }

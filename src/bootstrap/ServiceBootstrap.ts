@@ -19,6 +19,8 @@ import { AccountService } from '@domains/accounts/services/AccountService';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { TransactionService } from '@domains/transactions/services/TransactionService';
 import { TransactionController } from '@domains/transactions/controllers/TransactionController';
+import { ExchangeRateRepository } from '@domains/exchange-rates/repositories/ExchangeRateRepository';
+import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
 
 export class ServiceBootstrap {
     private static instance: ServiceBootstrap;
@@ -116,7 +118,12 @@ export class ServiceBootstrap {
             const transactionRepo = new TransactionRepository(dbFacade);
             this.container.registerInstance(TOKENS.TransactionRepository, transactionRepo);
 
-            const transactionService = new TransactionService(transactionRepo, accountRepo, dbFacade);
+            // Exchange rate domain
+            const exchangeRateRepo = new ExchangeRateRepository(dbFacade);
+            this.container.registerInstance(TOKENS.ExchangeRateRepository, exchangeRateRepo);
+            const exchangeRateService = new ExchangeRateService(exchangeRateRepo);
+
+            const transactionService = new TransactionService(transactionRepo, accountRepo, dbFacade, exchangeRateService);
             this.container.registerInstance(TOKENS.TransactionService, transactionService);
 
             const transactionController = new TransactionController(transactionService);

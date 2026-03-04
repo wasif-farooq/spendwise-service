@@ -15,6 +15,8 @@ export interface TransactionProps {
     linkedTransactionId?: string;
     linkedAccountId?: string;
     exchangeRate?: number;
+    // Converted amount in destination currency (for transfers)
+    convertedAmount?: number;
     // Base amount in USD for conversions
     baseAmount?: number;
     // Metadata
@@ -53,6 +55,7 @@ export class Transaction extends Entity<TransactionProps> {
     get linkedTransactionId(): string | undefined { return this.props.linkedTransactionId; }
     get linkedAccountId(): string | undefined { return this.props.linkedAccountId; }
     get exchangeRate(): number | undefined { return this.props.exchangeRate; }
+    get convertedAmount(): number | undefined { return this.props.convertedAmount; }
     get baseAmount(): number | undefined { return this.props.baseAmount; }
     get createdAt(): Date { return this.props.createdAt; }
     get updatedAt(): Date { return this.props.updatedAt; }
@@ -73,6 +76,7 @@ export class Transaction extends Entity<TransactionProps> {
             linkedTransactionId: this.linkedTransactionId,
             linkedAccountId: this.linkedAccountId,
             exchangeRate: this.exchangeRate,
+            convertedAmount: this.convertedAmount,
             baseAmount: this.baseAmount,
             createdAt: this.createdAt,
             updatedAt: this.updatedAt

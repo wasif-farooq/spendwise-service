@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { TransactionService, CreateTransactionDTO, UpdateTransactionDTO, LinkTransactionDTO } from '../services/TransactionService';
+import { TransactionService, CreateTransactionDTO, UpdateTransactionDTO, LinkTransactionDTO, TransferDTO } from '../services/TransactionService';
 import { AppError } from '@shared/errors/AppError';
 import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
 import { TransactionRepository } from '../repositories/TransactionRepository';
@@ -26,17 +26,21 @@ export class TransactionController {
     async getTransactions(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
-            const { page, limit, search, accountId, categoryId, startDate, endDate } = req.query;
+            const accountIdFromParams = req.params.accountId; // accountId from URL path
+            const { page, limit, search, categoryId, startDate, endDate } = req.query;
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
+            // Use accountId from URL path, fallback to query (for backward compatibility)
+            const accountId = accountIdFromParams || (req.query.accountId as string);
+
             const result = await this.transactionService.getTransactionsByWorkspace(workspaceId, {
                 limit: limit ? parseInt(limit as string) : undefined,
                 offset: page ? (parseInt(page as string) - 1) * (parseInt(limit as string) || 50) : undefined,
                 search: search as string,
-                accountId: accountId as string,
+                accountId: accountId,
                 categoryId: categoryId as string,
                 startDate: startDate as string,
                 endDate: endDate as string,
@@ -224,6 +228,27 @@ export class TransactionController {
             );
 
             res.json(stats);
+        } catch (error: any) {
+            res.status(error.statusCode || 500).json({ message: error.message });
+        }
+    }
+
+    // Transfer funds between accounts
+    async transfer(req: Request, res: Response) {
+        try {
+            const data: TransferDTO = req.body;
+            const workspaceId = this.getWorkspaceId(req);
+            const userId = (req as any).user?.userId || (req as any).user?.id;
+
+            if (!workspaceId) {
+                throw new AppError('Workspace not found', 404);
+            }
+
+            const result = await this.transactionService.transfer(data, userId, workspaceId);
+            res.status(201).json({
+                withdraw: result.withdraw.toJSON(),
+                deposit: result.deposit.toJSON(),
+            });
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
         }

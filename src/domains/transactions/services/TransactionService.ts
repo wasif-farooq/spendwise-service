@@ -3,6 +3,7 @@ import { Transaction } from '../models/Transaction';
 import { AppError } from '@shared/errors/AppError';
 import { IAccountRepository } from '@domains/accounts/repositories/IAccountRepository';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
+import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
 
 export interface CreateTransactionDTO {
     accountId: string;
@@ -37,11 +38,27 @@ export interface LinkTransactionDTO {
     linkedAccountId: string;
 }
 
+export interface TransferDTO {
+    fromAccountId: string;
+    toAccountId: string;
+    amount: number;
+    currency: string;
+    exchangeRate?: number; // optional - if provided, use it; otherwise fetch from DB
+    date: string;
+    description?: string;
+}
+
+export interface TransferResult {
+    withdraw: Transaction;
+    deposit: Transaction;
+}
+
 export class TransactionService {
     constructor(
         private transactionRepo: TransactionRepository,
         private accountRepo: IAccountRepository,
-        private db: DatabaseFacade
+        private db: DatabaseFacade,
+        private exchangeRateService?: ExchangeRateService
     ) { }
 
     // Helper to recalculate and update account balance (uses transaction if provided)
@@ -55,6 +72,122 @@ export class TransactionService {
         } else {
             await this.accountRepo.updateBalance(accountId, stats.balance);
         }
+    }
+
+    // Transfer funds between accounts with currency conversion
+    async transfer(data: TransferDTO, userId: string, workspaceId: string): Promise<TransferResult> {
+        // Validate accounts exist
+        const fromAccount = await this.accountRepo.findById(data.fromAccountId);
+        if (!fromAccount) {
+            throw new AppError('Source account not found', 404);
+        }
+        
+        const toAccount = await this.accountRepo.findById(data.toAccountId);
+        if (!toAccount) {
+            throw new AppError('Destination account not found', 404);
+        }
+
+        // Validate both accounts belong to same organization
+        if (fromAccount.organizationId !== toAccount.organizationId) {
+            throw new AppError('Accounts must belong to the same organization', 400);
+        }
+
+        // Validate not transferring to same account
+        if (data.fromAccountId === data.toAccountId) {
+            throw new AppError('Cannot transfer to the same account', 400);
+        }
+
+        // Check sufficient balance
+        const fromStats = await this.transactionRepo.getAccountStats(data.fromAccountId);
+        if (fromStats.balance < data.amount) {
+            throw new AppError('Insufficient balance', 400);
+        }
+
+        // Get exchange rate
+        let exchangeRate: number;
+        let convertedAmount: number;
+        
+        if (data.exchangeRate) {
+            // Use provided exchange rate
+            exchangeRate = data.exchangeRate;
+            convertedAmount = data.amount * exchangeRate;
+        } else if (this.exchangeRateService) {
+            // Fetch from exchange rate service
+            const conversion = await this.exchangeRateService.convert(
+                data.amount,
+                data.currency,
+                toAccount.currency
+            );
+            exchangeRate = conversion.rate;
+            convertedAmount = conversion.convertedAmount;
+        } else if (fromAccount.currency === toAccount.currency) {
+            // Same currency - no conversion needed
+            exchangeRate = 1;
+            convertedAmount = data.amount;
+        } else {
+            throw new AppError('Exchange rate not available. Please provide one.', 400);
+        }
+
+        return this.db.transaction(async (trxDb) => {
+            const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
+            const trxAccountRepo = this.accountRepo.withDb(trxDb);
+
+            // Create withdraw transaction (expense) on source account
+            const withdrawTx = Transaction.create({
+                accountId: data.fromAccountId,
+                userId,
+                workspaceId,
+                type: 'expense',
+                amount: data.amount,
+                currency: data.currency,
+                description: data.description || `Transfer to ${toAccount.name}`,
+                date: new Date(data.date),
+                linkedAccountId: data.toAccountId,
+                exchangeRate,
+                convertedAmount,
+            });
+
+            const savedWithdraw = await trxTransactionRepo.save(withdrawTx);
+
+            // Create deposit transaction (income) on destination account
+            const depositTx = Transaction.create({
+                accountId: data.toAccountId,
+                userId,
+                workspaceId,
+                type: 'income',
+                amount: convertedAmount,
+                currency: toAccount.currency,
+                description: data.description || `Transfer from ${fromAccount.name}`,
+                date: new Date(data.date),
+                linkedAccountId: data.fromAccountId,
+                linkedTransactionId: savedWithdraw.id,
+                exchangeRate,
+                convertedAmount: data.amount, // store original amount
+            });
+
+            const savedDeposit = await trxTransactionRepo.save(depositTx);
+
+            // Update withdraw to reference the deposit
+            const updatedWithdraw = Transaction.restore({
+                ...savedWithdraw.getProps(),
+                linkedTransactionId: savedDeposit.id,
+            }, savedWithdraw.id);
+            await trxTransactionRepo.update(updatedWithdraw);
+
+            // Update both account balances
+            trxTransactionRepo.invalidateAccountStatsCache(data.fromAccountId);
+            const fromStats = await trxTransactionRepo.getAccountStats(data.fromAccountId);
+            await trxAccountRepo.updateBalance(data.fromAccountId, fromStats.balance);
+
+            trxTransactionRepo.invalidateAccountStatsCache(data.toAccountId);
+            const toStats = await trxTransactionRepo.getAccountStats(data.toAccountId);
+            await trxAccountRepo.updateBalance(data.toAccountId, toStats.balance);
+
+            return {
+                withdraw: updatedWithdraw,
+                deposit: savedDeposit,
+            };
+        });
     }
 
     async getTransactionsByWorkspace(workspaceId: string, options: {

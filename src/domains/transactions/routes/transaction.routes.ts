@@ -59,6 +59,17 @@ const LinkTransactionSchema = z.object({
     linkedAccountId: z.string().uuid('Invalid linked account ID'),
 });
 
+// Transfer schema
+const TransferSchema = z.object({
+    fromAccountId: z.string().uuid('Invalid source account ID'),
+    toAccountId: z.string().uuid('Invalid destination account ID'),
+    amount: z.number().positive('Amount must be positive'),
+    currency: z.string().length(3, 'Currency must be 3 characters'),
+    exchangeRate: z.number().positive().optional(),
+    date: z.string(),
+    description: z.string().optional(),
+});
+
 // All routes require authentication
 router.use(requireAuth);
 
@@ -154,6 +165,14 @@ router.get('/:workspaceId/transactions/stats',
     validateParams(WorkspaceIdParamSchema), 
     requirePermission('transaction:read'), 
     controller.getWorkspaceStats.bind(controller)
+);
+
+// Transfer funds between accounts
+router.post('/:workspaceId/transactions/transfer', 
+    validateParams(WorkspaceIdParamSchema), 
+    validateBody(TransferSchema),
+    requirePermission('transaction:create'), 
+    controller.transfer.bind(controller)
 );
 
 export default router;
