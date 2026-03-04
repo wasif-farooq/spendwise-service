@@ -15,13 +15,18 @@ export class AnalyticsController {
     async getOverview(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
-            const { period = 'month' } = req.query;
+            const { period = 'month', startDate, endDate } = req.query;
 
             if (!workspaceId) {
                 return res.status(404).json({ message: 'Workspace not found' });
             }
 
-            const overview = await this.analyticsService.getOverview(workspaceId, period as string);
+            const filters = {
+                startDate: startDate as string,
+                endDate: endDate as string,
+            };
+
+            const overview = await this.analyticsService.getOverview(workspaceId, period as string, filters);
             res.json(overview);
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
@@ -31,13 +36,18 @@ export class AnalyticsController {
     async getCategoryTrends(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
-            const { months = 6 } = req.query;
+            const { months = 6, startDate, endDate } = req.query;
 
             if (!workspaceId) {
                 return res.status(404).json({ message: 'Workspace not found' });
             }
 
-            const trends = await this.analyticsService.getCategoryTrends(workspaceId, parseInt(months as string));
+            const filters = {
+                startDate: startDate as string,
+                endDate: endDate as string,
+            };
+
+            const trends = await this.analyticsService.getCategoryTrends(workspaceId, parseInt(months as string), filters);
             res.json(trends);
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
@@ -47,13 +57,18 @@ export class AnalyticsController {
     async getMonthlyComparison(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
-            const { months = 12 } = req.query;
+            const { months = 12, startDate, endDate } = req.query;
 
             if (!workspaceId) {
                 return res.status(404).json({ message: 'Workspace not found' });
             }
 
-            const comparison = await this.analyticsService.getMonthlyComparison(workspaceId, parseInt(months as string));
+            const filters = {
+                startDate: startDate as string,
+                endDate: endDate as string,
+            };
+
+            const comparison = await this.analyticsService.getMonthlyComparison(workspaceId, parseInt(months as string), filters);
             res.json(comparison);
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
@@ -63,13 +78,18 @@ export class AnalyticsController {
     async getSpendingTrend(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
-            const { period = 'month', accountId } = req.query;
+            const { period = 'month', startDate, endDate } = req.query;
 
             if (!workspaceId) {
                 return res.status(404).json({ message: 'Workspace not found' });
             }
 
-            const trend = await this.analyticsService.getSpendingTrend(workspaceId, period as string, accountId as string | undefined);
+            const filters = {
+                startDate: startDate as string,
+                endDate: endDate as string,
+            };
+
+            const trend = await this.analyticsService.getSpendingTrend(workspaceId, period as string, filters);
             res.json(trend);
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
@@ -79,13 +99,18 @@ export class AnalyticsController {
     async getTopMerchants(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
-            const { period = 'month', limit = 10 } = req.query;
+            const { period = 'month', limit = 10, startDate, endDate } = req.query;
 
             if (!workspaceId) {
                 return res.status(404).json({ message: 'Workspace not found' });
             }
 
-            const merchants = await this.analyticsService.getTopMerchants(workspaceId, period as string, parseInt(limit as string));
+            const filters = {
+                startDate: startDate as string,
+                endDate: endDate as string,
+            };
+
+            const merchants = await this.analyticsService.getTopMerchants(workspaceId, period as string, parseInt(limit as string), filters);
             res.json(merchants);
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
