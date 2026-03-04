@@ -39,6 +39,15 @@ export class AccountService {
         return this.accountRepository.save(account);
     }
 
+    async createAccountWithRepo(data: CreateAccountDto, userId: string, organizationId: string, repo: any): Promise<Account> {
+        const account = Account.create({
+            ...data,
+            userId,
+            organizationId,
+        });
+        return repo.save(account);
+    }
+
     async updateAccount(id: string, data: UpdateAccountDto, organizationId: string): Promise<Account> {
         const account = await this.getAccountById(id, organizationId);
         

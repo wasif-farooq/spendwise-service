@@ -108,13 +108,7 @@ export class ServiceBootstrap {
             const accountRepo = new AccountRepository(dbFacade);
             this.container.registerInstance(TOKENS.AccountRepository, accountRepo);
 
-            const accountService = new AccountService(accountRepo);
-            this.container.registerInstance(TOKENS.AccountService, accountService);
-
-            const accountControllerFactory = new AccountControllerFactory(serviceFactory);
-            this.container.registerInstance(TOKENS.AccountController, accountControllerFactory.create());
-
-            // Transaction domain registrations
+            // Transaction domain registrations (must be before AccountController)
             const transactionRepo = new TransactionRepository(dbFacade);
             this.container.registerInstance(TOKENS.TransactionRepository, transactionRepo);
 
@@ -125,6 +119,12 @@ export class ServiceBootstrap {
 
             const transactionService = new TransactionService(transactionRepo, accountRepo, dbFacade, exchangeRateService);
             this.container.registerInstance(TOKENS.TransactionService, transactionService);
+
+            const accountService = new AccountService(accountRepo);
+            this.container.registerInstance(TOKENS.AccountService, accountService);
+
+            const accountControllerFactory = new AccountControllerFactory(serviceFactory);
+            this.container.registerInstance(TOKENS.AccountController, accountControllerFactory.create());
 
             const transactionController = new TransactionController(transactionService);
             this.container.registerInstance(TOKENS.TransactionController, transactionController);
