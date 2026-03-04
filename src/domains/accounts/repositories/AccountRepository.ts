@@ -61,6 +61,8 @@ export class AccountRepository implements IAccountRepository {
             last_activity: data.lastActivity,
             created_at: data.createdAt,
             updated_at: data.updatedAt,
+            total_income: data.totalIncome,
+            total_expense: data.totalExpense,
         };
 
         const keys = Object.keys(mappedData);
@@ -82,7 +84,8 @@ export class AccountRepository implements IAccountRepository {
         const query = `
             UPDATE accounts
             SET name = $1, type = $2, balance = $3, currency = $4, color = $5,
-                last_activity = $6, updated_at = NOW()
+                last_activity = $6, updated_at = NOW(),
+                total_income = $8, total_expense = $9
             WHERE id = $7
             RETURNING *
         `;
@@ -94,7 +97,9 @@ export class AccountRepository implements IAccountRepository {
             data.currency,
             data.color,
             data.lastActivity,
-            account.id
+            account.id,
+            data.totalIncome,
+            data.totalExpense,
         ]);
 
         if (result.rowCount === 0) {
@@ -102,6 +107,14 @@ export class AccountRepository implements IAccountRepository {
         }
 
         return this.mapToEntity(result.rows[0]);
+    }
+
+    async updateIncomeExpense(id: string, totalIncome: number, totalExpense: number): Promise<void> {
+        const balance = totalIncome - totalExpense;
+        await this.dbToUse.query(
+            'UPDATE accounts SET balance = $1, total_income = $2, total_expense = $3, last_activity = NOW(), updated_at = NOW() WHERE id = $4',
+            [balance, totalIncome, totalExpense, id]
+        );
     }
 
     async delete(id: string): Promise<void> {
@@ -135,6 +148,8 @@ export class AccountRepository implements IAccountRepository {
             lastActivity: new Date(row.last_activity),
             createdAt: new Date(row.created_at),
             updatedAt: new Date(row.updated_at),
+            totalIncome: parseFloat(row.total_income) || 0,
+            totalExpense: parseFloat(row.total_expense) || 0,
         };
         return Account.restore(props, row.id);
     }

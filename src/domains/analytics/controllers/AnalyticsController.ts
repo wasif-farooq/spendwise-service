@@ -15,7 +15,7 @@ export class AnalyticsController {
     async getOverview(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
-            const { period = 'month', startDate, endDate } = req.query;
+            const { period = 'month', startDate, endDate, preferredCurrency } = req.query;
 
             if (!workspaceId) {
                 return res.status(404).json({ message: 'Workspace not found' });
@@ -24,6 +24,7 @@ export class AnalyticsController {
             const filters = {
                 startDate: startDate as string,
                 endDate: endDate as string,
+                preferredCurrency: preferredCurrency as string,
             };
 
             const overview = await this.analyticsService.getOverview(workspaceId, period as string, filters);
@@ -36,7 +37,7 @@ export class AnalyticsController {
     async getCategoryTrends(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
-            const { months = 6, startDate, endDate } = req.query;
+            const { months = 6, startDate, endDate, preferredCurrency } = req.query;
 
             if (!workspaceId) {
                 return res.status(404).json({ message: 'Workspace not found' });
@@ -45,6 +46,7 @@ export class AnalyticsController {
             const filters = {
                 startDate: startDate as string,
                 endDate: endDate as string,
+                preferredCurrency: preferredCurrency as string,
             };
 
             const trends = await this.analyticsService.getCategoryTrends(workspaceId, parseInt(months as string), filters);

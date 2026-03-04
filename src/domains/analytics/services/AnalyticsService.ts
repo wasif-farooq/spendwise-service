@@ -53,6 +53,7 @@ export interface AnalyticsFilters {
     categories?: string[];
     startDate?: string;
     endDate?: string;
+    preferredCurrency?: string;
 }
 
 export class AnalyticsService {
@@ -88,7 +89,8 @@ export class AnalyticsService {
 
     async getOverview(workspaceId: string, period: string, filters?: AnalyticsFilters): Promise<AnalyticsOverview> {
         const dateRange = this.getDateRange(period, filters);
-        const preferredCurrency = await this.getUserPreferredCurrency(undefined, workspaceId);
+        // Use preferredCurrency from filters if provided, otherwise get from user settings
+        const preferredCurrency = filters?.preferredCurrency || await this.getUserPreferredCurrency(undefined, workspaceId);
 
         // Current period query
         const currParams: any[] = [workspaceId, dateRange.startDate];
@@ -154,7 +156,10 @@ export class AnalyticsService {
     async getCategoryTrends(workspaceId: string, months: number = 6, filters?: AnalyticsFilters): Promise<CategoryTrend[]> {
         const startDate = new Date();
         startDate.setMonth(startDate.getMonth() - months);
-
+        
+        // Use preferredCurrency from filters if provided
+        const preferredCurrency = filters?.preferredCurrency || 'USD';
+        
         const params: any[] = [workspaceId, startDate.toISOString()];
         let query = `SELECT COALESCE(c.name, 'Uncategorized') as category, c.id as category_id, t.amount, t.currency FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.workspace_id = $1 AND t.type = 'expense' AND t.date >= $2 AND t.date <= NOW()`;
 
@@ -171,7 +176,7 @@ export class AnalyticsService {
         
         const categoryData: Record<string, number> = {};
         for (const tx of result.rows) {
-            const converted = await this.convertAmount(parseFloat(tx.amount || '0'), tx.currency || 'USD', 'USD');
+            const converted = await this.convertAmount(parseFloat(tx.amount || '0'), tx.currency || 'USD', preferredCurrency);
             categoryData[tx.category] = (categoryData[tx.category] || 0) + converted;
         }
 

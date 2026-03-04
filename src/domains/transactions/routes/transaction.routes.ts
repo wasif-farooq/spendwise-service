@@ -175,4 +175,11 @@ router.post('/:workspaceId/transactions/transfer',
     controller.transfer.bind(controller)
 );
 
+// Get all transactions for workspace (for dashboard)
+router.get('/:workspaceId/transactions/all',
+    validateParams(WorkspaceIdParamSchema),
+    requirePermission('transaction:read'),
+    controller.getAllTransactions.bind(controller)
+);
+
 export default router;

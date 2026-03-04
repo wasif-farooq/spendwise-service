@@ -52,6 +52,27 @@ export class TransactionController {
         }
     }
 
+    // Get all transactions for workspace (across all accounts)
+    async getAllTransactions(req: Request, res: Response) {
+        try {
+            const workspaceId = this.getWorkspaceId(req);
+            const { limit = 50, offset = 0 } = req.query;
+
+            if (!workspaceId) {
+                throw new AppError('Workspace not found', 404);
+            }
+
+            const result = await this.transactionService.getTransactionsByWorkspace(workspaceId, {
+                limit: parseInt(limit as string),
+                offset: parseInt(offset as string),
+            });
+
+            res.json(result);
+        } catch (error: any) {
+            res.status(error.statusCode || 500).json({ message: error.message });
+        }
+    }
+
     async getTransactionById(req: Request, res: Response) {
         try {
             const { id } = req.params;

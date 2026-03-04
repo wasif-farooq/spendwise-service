@@ -14,6 +14,8 @@ export interface AccountProps {
     lastActivity: Date;
     createdAt: Date;
     updatedAt: Date;
+    totalIncome: number;
+    totalExpense: number;
 }
 
 export class Account extends Entity<AccountProps> {
@@ -37,6 +39,8 @@ export class Account extends Entity<AccountProps> {
             lastActivity: now,
             createdAt: now,
             updatedAt: now,
+            totalIncome: 0,
+            totalExpense: 0,
         };
         return new Account(accountProps, id);
     }
@@ -47,6 +51,14 @@ export class Account extends Entity<AccountProps> {
 
     public updateBalance(newBalance: number): void {
         this.props.balance = newBalance;
+        this.props.lastActivity = new Date();
+        this.props.updatedAt = new Date();
+    }
+
+    public updateIncomeExpense(totalIncome: number, totalExpense: number): void {
+        this.props.totalIncome = totalIncome;
+        this.props.totalExpense = totalExpense;
+        this.props.balance = totalIncome - totalExpense;
         this.props.lastActivity = new Date();
         this.props.updatedAt = new Date();
     }
@@ -68,4 +80,6 @@ export class Account extends Entity<AccountProps> {
     get lastActivity(): Date { return this.props.lastActivity; }
     get createdAt(): Date { return this.props.createdAt; }
     get updatedAt(): Date { return this.props.updatedAt; }
+    get totalIncome(): number { return this.props.totalIncome; }
+    get totalExpense(): number { return this.props.totalExpense; }
 }

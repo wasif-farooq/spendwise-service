@@ -10,5 +10,6 @@ export interface IAccountRepository {
     delete(id: string): Promise<void>;
     getTotalBalance(organizationId: string): Promise<number>;
     updateBalance(id: string, balance: number): Promise<void>;
+    updateIncomeExpense(id: string, totalIncome: number, totalExpense: number): Promise<void>;
     withDb(db: DatabaseFacade): IAccountRepository;
 }

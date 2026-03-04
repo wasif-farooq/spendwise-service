@@ -61,16 +61,16 @@ export class TransactionService {
         private exchangeRateService?: ExchangeRateService
     ) { }
 
-    // Helper to recalculate and update account balance (uses transaction if provided)
+    // Helper to recalculate and update account balance, totalIncome, totalExpense (uses transaction if provided)
     private async updateAccountBalance(accountId: string, trxDb?: DatabaseFacade): Promise<void> {
         const stats = trxDb 
             ? await this.transactionRepo.withDb(trxDb).getAccountStats(accountId)
             : await this.transactionRepo.getAccountStats(accountId);
         
         if (trxDb) {
-            await this.accountRepo.withDb(trxDb).updateBalance(accountId, stats.balance);
+            await this.accountRepo.withDb(trxDb).updateIncomeExpense(accountId, stats.totalIncome, stats.totalExpense);
         } else {
-            await this.accountRepo.updateBalance(accountId, stats.balance);
+            await this.accountRepo.updateIncomeExpense(accountId, stats.totalIncome, stats.totalExpense);
         }
     }
 
