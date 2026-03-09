@@ -25,6 +25,9 @@ router.get('/:id/members', controller.getMembers.bind(controller));
 router.post('/:id/members/invite', requirePermission('members:create'), controller.inviteMember.bind(controller));
 router.delete('/:id/members/:memberId', requirePermission('members:delete'), controller.removeMember.bind(controller));
 
+// Leave workspace
+router.post('/:id/leave', controller.leave.bind(controller));
+
 router.use('/:id/roles', workspaceRolesRoutes);
 
 export default router;

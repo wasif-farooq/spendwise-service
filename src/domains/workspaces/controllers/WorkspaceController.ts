@@ -119,4 +119,17 @@ export class WorkspaceController {
         }
         res.json({ message: 'Member removed successfully' });
     }
+
+    async leave(req: Request, res: Response) {
+        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+        const workspaceId = req.params.id;
+        
+        const result = await this.workspaceRequestRepository.removeMember(workspaceId, userId, userId);
+
+        if (result.error) {
+            res.status(result.statusCode || 400).json({ message: result.error });
+            return;
+        }
+        res.json({ message: 'You have left the workspace successfully' });
+    }
 }
