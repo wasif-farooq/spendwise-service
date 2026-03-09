@@ -52,7 +52,7 @@ export class CategoryController {
 
     async createCategory(req: Request, res: Response) {
         const workspaceId = req.params.workspaceId;
-        const { name, type, icon, color } = req.body;
+        const { name, type, icon, color, description } = req.body;
 
         try {
             const service = getCategoryService();
@@ -61,6 +61,7 @@ export class CategoryController {
                 type: (type as 'income' | 'expense' | 'all') || 'all',
                 icon,
                 color,
+                description,
                 workspaceId,
             }, workspaceId);
 
@@ -73,7 +74,7 @@ export class CategoryController {
     async updateCategory(req: Request, res: Response) {
         const workspaceId = req.params.workspaceId;
         const { id } = req.params;
-        const { name, type, icon, color } = req.body;
+        const { name, type, icon, color, description } = req.body;
 
         try {
             const service = getCategoryService();
@@ -82,6 +83,7 @@ export class CategoryController {
                 type,
                 icon,
                 color,
+                description,
             }, workspaceId);
 
             res.json(category.getProps());

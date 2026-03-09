@@ -1,0 +1,2 @@
+-- Add description column to categories
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS description TEXT;

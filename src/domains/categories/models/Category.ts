@@ -4,6 +4,7 @@ export interface CategoryProps {
     type: 'income' | 'expense' | 'all';
     icon?: string;
     color?: string;
+    description?: string;
     workspaceId: string;
     createdAt?: Date;
     updatedAt?: Date;
@@ -38,6 +39,10 @@ export class Category {
 
     get color(): string | undefined {
         return this.props.color;
+    }
+
+    get description(): string | undefined {
+        return this.props.description;
     }
 
     get workspaceId(): string {

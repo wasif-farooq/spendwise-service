@@ -16,6 +16,7 @@ export class CategoryRepository {
             type: row.type,
             icon: row.icon,
             color: row.color,
+            description: row.description,
             workspaceId: row.workspace_id,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
@@ -37,6 +38,7 @@ export class CategoryRepository {
             type: row.type,
             icon: row.icon,
             color: row.color,
+            description: row.description,
             workspaceId: row.workspace_id,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
@@ -63,10 +65,10 @@ export class CategoryRepository {
 
     async create(category: CategoryProps): Promise<Category> {
         const result = await this.db.query(
-            `INSERT INTO categories (id, name, type, icon, color, workspace_id, created_at, updated_at)
-             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())
+            `INSERT INTO categories (id, name, type, icon, color, description, workspace_id, created_at, updated_at)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW())
              RETURNING *`,
-            [category.name, category.type, category.icon, category.color, category.workspaceId]
+            [category.name, category.type, category.icon, category.color, category.description || null, category.workspaceId]
         );
         
         const row = result.rows[0];
@@ -76,6 +78,7 @@ export class CategoryRepository {
             type: row.type,
             icon: row.icon,
             color: row.color,
+            description: row.description,
             workspaceId: row.workspace_id,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
@@ -102,6 +105,10 @@ export class CategoryRepository {
         if (data.color !== undefined) {
             fields.push(`color = $${paramIndex++}`);
             values.push(data.color);
+        }
+        if (data.description !== undefined) {
+            fields.push(`description = $${paramIndex++}`);
+            values.push(data.description);
         }
 
         if (fields.length === 0) return null;
