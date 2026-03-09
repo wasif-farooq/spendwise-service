@@ -122,15 +122,12 @@ export class CategoryController {
 
     async getAllCategoryTransactionCounts(req: Request, res: Response) {
         const workspaceId = req.params.workspaceId;
-        console.log('🎯 [getAllCategoryTransactionCounts] Called with workspaceId:', workspaceId);
 
         try {
             const service = getCategoryService();
             const counts = await service.getAllTransactionCounts(workspaceId);
-            console.log('🎯 [getAllCategoryTransactionCounts] Returning counts:', counts);
             res.json(counts);
         } catch (error: any) {
-            console.error('🎯 [getAllCategoryTransactionCounts] Error:', error);
             res.status(error.statusCode || 400).json({ message: error.message });
         }
     }

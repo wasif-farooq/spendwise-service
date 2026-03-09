@@ -50,21 +50,16 @@ export class CategoryService {
 
     async getAllTransactionCounts(workspaceId: string): Promise<Record<string, number>> {
         if (!this.transactionRepo) {
-            console.log('🔍 [getAllTransactionCounts] No transactionRepo');
             return {};
         }
         const categories = await this.categoryRepo.findAll(workspaceId);
-        console.log('🔍 [getAllTransactionCounts] Categories:', categories.map(c => ({ id: c.id, name: c.name })));
         const counts: Record<string, number> = {};
         
         for (const category of categories) {
             if (category.id) {
-                const count = await this.transactionRepo.countByCategoryId(category.id);
-                counts[category.id] = count;
-                console.log(`🔍 [getAllTransactionCounts] ${category.name} (${category.id}): ${count}`);
+                counts[category.id] = await this.transactionRepo.countByCategoryId(category.id);
             }
         }
-        console.log('🔍 [getAllTransactionCounts] Final counts:', counts);
         return counts;
     }
 

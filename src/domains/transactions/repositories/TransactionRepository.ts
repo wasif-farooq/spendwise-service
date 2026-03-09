@@ -182,12 +182,10 @@ export class TransactionRepository {
     }
 
     async countByCategoryId(categoryId: string): Promise<number> {
-        console.log('🔍 [countByCategoryId] Counting for categoryId:', categoryId);
         const result = await this.dbToUse.query(
             'SELECT COUNT(*) as count FROM transactions WHERE category_id = $1',
             [categoryId]
         );
-        console.log('🔍 [countByCategoryId] Result:', result.rows);
         return parseInt(result.rows[0]?.count || '0');
     }
 
