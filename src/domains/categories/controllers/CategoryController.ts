@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { CategoryService } from '../services/CategoryService';
 import { CategoryRepository } from '../repositories/CategoryRepository';
+import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { TOKENS } from '@di/tokens';
 import { Container } from '@di/Container';
@@ -12,7 +13,8 @@ function getCategoryService(): CategoryService {
         const container = Container.getInstance();
         const db = container.resolve<DatabaseFacade>(TOKENS.Database as any);
         const categoryRepo = new CategoryRepository(db);
-        categoryServiceInstance = new CategoryService(categoryRepo);
+        const transactionRepo = new TransactionRepository(db);
+        categoryServiceInstance = new CategoryService(categoryRepo, transactionRepo);
     }
     return categoryServiceInstance;
 }
@@ -98,6 +100,55 @@ export class CategoryController {
 
         try {
             const service = getCategoryService();
+            await service.deleteCategory(id, workspaceId);
+            res.json({ message: 'Category deleted successfully' });
+        } catch (error: any) {
+            res.status(error.statusCode || 400).json({ message: error.message });
+        }
+    }
+
+    async getCategoryTransactionCount(req: Request, res: Response) {
+        const workspaceId = req.params.workspaceId;
+        const { id } = req.params;
+
+        try {
+            const service = getCategoryService();
+            const count = await service.getTransactionCount(id);
+            res.json({ count });
+        } catch (error: any) {
+            res.status(error.statusCode || 400).json({ message: error.message });
+        }
+    }
+
+    async getAllCategoryTransactionCounts(req: Request, res: Response) {
+        const workspaceId = req.params.workspaceId;
+        console.log('🎯 [getAllCategoryTransactionCounts] Called with workspaceId:', workspaceId);
+
+        try {
+            const service = getCategoryService();
+            const counts = await service.getAllTransactionCounts(workspaceId);
+            console.log('🎯 [getAllCategoryTransactionCounts] Returning counts:', counts);
+            res.json(counts);
+        } catch (error: any) {
+            console.error('🎯 [getAllCategoryTransactionCounts] Error:', error);
+            res.status(error.statusCode || 400).json({ message: error.message });
+        }
+    }
+
+    async deleteCategoryWithReassign(req: Request, res: Response) {
+        const workspaceId = req.params.workspaceId;
+        const { id } = req.params;
+        const { replaceWithId } = req.body;
+
+        try {
+            const service = getCategoryService();
+            
+            // If replacement category provided, reassign transactions first
+            if (replaceWithId) {
+                await service.reassignTransactions(id, replaceWithId, workspaceId);
+            }
+            
+            // Then delete the category
             await service.deleteCategory(id, workspaceId);
             res.json({ message: 'Category deleted successfully' });
         } catch (error: any) {

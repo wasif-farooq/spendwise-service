@@ -181,6 +181,23 @@ export class TransactionRepository {
         return parseInt(result.rows[0]?.count || '0');
     }
 
+    async countByCategoryId(categoryId: string): Promise<number> {
+        console.log('🔍 [countByCategoryId] Counting for categoryId:', categoryId);
+        const result = await this.dbToUse.query(
+            'SELECT COUNT(*) as count FROM transactions WHERE category_id = $1',
+            [categoryId]
+        );
+        console.log('🔍 [countByCategoryId] Result:', result.rows);
+        return parseInt(result.rows[0]?.count || '0');
+    }
+
+    async reassignCategory(fromCategoryId: string, toCategoryId: string, workspaceId: string): Promise<void> {
+        await this.dbToUse.query(
+            'UPDATE transactions SET category_id = $1, updated_at = NOW() WHERE category_id = $2 AND workspace_id = $3',
+            [toCategoryId, fromCategoryId, workspaceId]
+        );
+    }
+
     // Get account stats: total income, expense, and balance (cached)
     async getAccountStats(accountId: string, startDate?: string, endDate?: string): Promise<{
         totalIncome: number;

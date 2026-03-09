@@ -1,9 +1,13 @@
 import { CategoryRepository } from '../repositories/CategoryRepository';
 import { Category, CategoryProps } from '../models/Category';
 import { AppError } from '@shared/errors/AppError';
+import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 
 export class CategoryService {
-    constructor(private categoryRepo: CategoryRepository) { }
+    constructor(
+        private categoryRepo: CategoryRepository,
+        private transactionRepo?: TransactionRepository
+    ) { }
 
     async getAllCategories(workspaceId: string): Promise<Category[]> {
         return this.categoryRepo.findAll(workspaceId);
@@ -35,6 +39,40 @@ export class CategoryService {
             throw new AppError('Category not found', 404);
         }
         return category;
+    }
+
+    async getTransactionCount(categoryId: string): Promise<number> {
+        if (!this.transactionRepo) {
+            return 0;
+        }
+        return this.transactionRepo.countByCategoryId(categoryId);
+    }
+
+    async getAllTransactionCounts(workspaceId: string): Promise<Record<string, number>> {
+        if (!this.transactionRepo) {
+            console.log('🔍 [getAllTransactionCounts] No transactionRepo');
+            return {};
+        }
+        const categories = await this.categoryRepo.findAll(workspaceId);
+        console.log('🔍 [getAllTransactionCounts] Categories:', categories.map(c => ({ id: c.id, name: c.name })));
+        const counts: Record<string, number> = {};
+        
+        for (const category of categories) {
+            if (category.id) {
+                const count = await this.transactionRepo.countByCategoryId(category.id);
+                counts[category.id] = count;
+                console.log(`🔍 [getAllTransactionCounts] ${category.name} (${category.id}): ${count}`);
+            }
+        }
+        console.log('🔍 [getAllTransactionCounts] Final counts:', counts);
+        return counts;
+    }
+
+    async reassignTransactions(fromCategoryId: string, toCategoryId: string, workspaceId: string): Promise<void> {
+        if (!this.transactionRepo) {
+            throw new AppError('Transaction repository not available', 500);
+        }
+        await this.transactionRepo.reassignCategory(fromCategoryId, toCategoryId, workspaceId);
     }
 
     async deleteCategory(id: string, workspaceId: string): Promise<void> {
