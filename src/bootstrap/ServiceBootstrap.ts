@@ -23,6 +23,8 @@ import { ExchangeRateRepository } from '@domains/exchange-rates/repositories/Exc
 import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
 import { AnalyticsService } from '@domains/analytics/services/AnalyticsService';
 import analyticsRoutes from '@domains/analytics/routes/analytics.routes';
+import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
+import { CategoryService } from '@domains/categories/services/CategoryService';
 
 export class ServiceBootstrap {
     private static instance: ServiceBootstrap;
@@ -134,6 +136,13 @@ export class ServiceBootstrap {
             // Analytics domain
             const analyticsService = new AnalyticsService();
             this.container.registerInstance(TOKENS.AnalyticsService, analyticsService);
+
+            // Category domain registrations (required by WorkspaceService for default categories)
+            const categoryRepo = new CategoryRepository(dbFacade);
+            this.container.registerInstance(TOKENS.CategoryRepository, categoryRepo);
+
+            const categoryService = new CategoryService(categoryRepo, transactionRepo);
+            this.container.registerInstance(TOKENS.CategoryService, categoryService);
 
 
             // Connect Infrastructure

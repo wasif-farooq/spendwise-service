@@ -8,6 +8,7 @@ export interface IAccountRepository {
     save(account: Account): Promise<Account>;
     update(account: Account): Promise<Account>;
     delete(id: string): Promise<void>;
+    deleteByWorkspaceId(workspaceId: string): Promise<void>;
     getTotalBalance(organizationId: string): Promise<number>;
     updateBalance(id: string, balance: number): Promise<void>;
     updateIncomeExpense(id: string, totalIncome: number, totalExpense: number): Promise<void>;

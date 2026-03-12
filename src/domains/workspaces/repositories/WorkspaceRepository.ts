@@ -5,9 +5,19 @@ import { Inject } from '@di/decorators/inject.decorator';
 import { TOKENS } from '@di/tokens';
 
 export class WorkspaceRepository extends BaseRepository<Workspace> {
+    private dbToUse: DatabaseFacade;
+
     constructor(@Inject(TOKENS.Database) db: DatabaseFacade) {
         super(db, 'workspaces');
+        this.dbToUse = db;
     }
+
+    // For using a different DB client (e.g., in transactions)
+    withDb(db: DatabaseFacade): WorkspaceRepository {
+        this.dbToUse = db;
+        return this;
+    }
+
     async findByIds(ids: string[]): Promise<Workspace[]> {
         const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
         const query = `SELECT * FROM ${this.tableName} WHERE id IN (${placeholders})`;

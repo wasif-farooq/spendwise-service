@@ -5,7 +5,7 @@ export interface CategoryProps {
     icon?: string;
     color?: string;
     description?: string;
-    workspaceId: string;
+    workspaceId?: string;
     createdAt?: Date;
     updatedAt?: Date;
 }
@@ -45,7 +45,7 @@ export class Category {
         return this.props.description;
     }
 
-    get workspaceId(): string {
+    get workspaceId(): string | undefined {
         return this.props.workspaceId;
     }
 

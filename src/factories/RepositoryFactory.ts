@@ -9,6 +9,9 @@ import { WorkspaceMembersRepository } from '@domains/workspaces/repositories/Wor
 import { UserPreferencesRepository } from '@domains/users/repositories/UserPreferencesRepository';
 import { FeatureFlagRepository } from '@domains/feature-flags/repositories/FeatureFlagRepository';
 import { SubscriptionPlanRepository, UserSubscriptionRepository } from '@domains/subscription/repositories/SubscriptionRepository';
+import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
+import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
+import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
 
 
 export class RepositoryFactory {
@@ -48,5 +51,17 @@ export class RepositoryFactory {
 
     createUserSubscriptionRepository(): UserSubscriptionRepository {
         return new UserSubscriptionRepository(this.db);
+    }
+
+    createAccountRepository(): AccountRepository {
+        return new AccountRepository(this.db);
+    }
+
+    createTransactionRepository(): TransactionRepository {
+        return new TransactionRepository(this.db);
+    }
+
+    createCategoryRepository(): CategoryRepository {
+        return new CategoryRepository(this.db);
     }
 }

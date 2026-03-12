@@ -121,6 +121,10 @@ export class AccountRepository implements IAccountRepository {
         await this.dbToUse.query('DELETE FROM accounts WHERE id = $1', [id]);
     }
 
+    async deleteByWorkspaceId(workspaceId: string): Promise<void> {
+        await this.dbToUse.query('DELETE FROM accounts WHERE workspace_id = $1', [workspaceId]);
+    }
+
     async getTotalBalance(organizationId: string): Promise<number> {
         const result = await this.dbToUse.query(
             'SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE organization_id = $1',

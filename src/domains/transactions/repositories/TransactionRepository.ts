@@ -430,6 +430,10 @@ export class TransactionRepository {
         await this.dbToUse.query('DELETE FROM transactions WHERE id = $1', [id]);
     }
 
+    async deleteByWorkspaceId(workspaceId: string): Promise<void> {
+        await this.dbToUse.query('DELETE FROM transactions WHERE workspace_id = $1', [workspaceId]);
+    }
+
     private mapToEntity(row: any): Transaction {
         const props: TransactionProps = {
             accountId: row.account_id,

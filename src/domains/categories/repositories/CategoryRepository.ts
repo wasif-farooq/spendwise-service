@@ -2,10 +2,20 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { Category, CategoryProps } from '../models/Category';
 
 export class CategoryRepository {
-    constructor(private db: DatabaseFacade) { }
+    private dbToUse: DatabaseFacade;
+
+    constructor(db: DatabaseFacade) { 
+        this.dbToUse = db;
+    }
+
+    // For using a different DB client (e.g., in transactions)
+    withDb(db: DatabaseFacade): CategoryRepository {
+        this.dbToUse = db;
+        return this;
+    }
 
     async findAll(workspaceId: string): Promise<Category[]> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             'SELECT * FROM categories WHERE workspace_id = $1 ORDER BY name',
             [workspaceId]
         );
@@ -24,7 +34,7 @@ export class CategoryRepository {
     }
 
     async findById(id: string, workspaceId: string): Promise<Category | null> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             'SELECT * FROM categories WHERE id = $1 AND workspace_id = $2',
             [id, workspaceId]
         );
@@ -46,7 +56,7 @@ export class CategoryRepository {
     }
 
     async findByType(type: 'income' | 'expense', workspaceId: string): Promise<Category[]> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             'SELECT * FROM categories WHERE (type = $1 OR type = $all) AND workspace_id = $2 ORDER BY name',
             [type, workspaceId]
         );
@@ -64,7 +74,7 @@ export class CategoryRepository {
     }
 
     async create(category: CategoryProps): Promise<Category> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             `INSERT INTO categories (id, name, type, icon, color, description, workspace_id, created_at, updated_at)
              VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW())
              RETURNING *`,
@@ -116,7 +126,7 @@ export class CategoryRepository {
         fields.push('updated_at = NOW()');
         values.push(id, workspaceId);
 
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             `UPDATE categories SET ${fields.join(', ')} WHERE id = $${paramIndex++} AND workspace_id = $${paramIndex} RETURNING *`,
             values
         );
@@ -137,10 +147,14 @@ export class CategoryRepository {
     }
 
     async delete(id: string, workspaceId: string): Promise<boolean> {
-        const result = await this.db.query(
+        const result = await this.dbToUse.query(
             'DELETE FROM categories WHERE id = $1 AND workspace_id = $2',
             [id, workspaceId]
         );
         return (result.rowCount || 0) > 0;
+    }
+
+    async deleteByWorkspaceId(workspaceId: string): Promise<void> {
+        await this.dbToUse.query('DELETE FROM categories WHERE workspace_id = $1', [workspaceId]);
     }
 }

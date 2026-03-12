@@ -5,9 +5,19 @@ import { Inject } from '@di/decorators/inject.decorator';
 import { TOKENS } from '@di/tokens';
 
 export class WorkspaceRoleRepository extends BaseRepository<WorkspaceRole> {
+    private dbToUse: DatabaseFacade;
+
     constructor(@Inject(TOKENS.Database) db: DatabaseFacade) {
         super(db, 'workspace_roles');
+        this.dbToUse = db;
     }
+
+    // For using a different DB client (e.g., in transactions)
+    withDb(db: DatabaseFacade): WorkspaceRoleRepository {
+        this.dbToUse = db;
+        return this;
+    }
+
     async findByNameAndWorkspace(name: string, workspaceId: string): Promise<WorkspaceRole | null> {
         const result = await this.db.query(
             `SELECT * FROM ${this.tableName} WHERE name = $1 AND workspace_id = $2 LIMIT 1`,
@@ -94,5 +104,9 @@ export class WorkspaceRoleRepository extends BaseRepository<WorkspaceRole> {
             },
             row.id
         );
+    }
+
+    async deleteByWorkspaceId(workspaceId: string): Promise<void> {
+        await this.dbToUse.query('DELETE FROM workspace_roles WHERE workspace_id = $1', [workspaceId]);
     }
 }

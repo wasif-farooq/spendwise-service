@@ -38,11 +38,23 @@ export class ServiceFactory {
     }
 
     createWorkspaceService(): import('@domains/workspaces/services/WorkspaceService').WorkspaceService {
-        return new (require('@domains/workspaces/services/WorkspaceService').WorkspaceService)(
+        const { WorkspaceService } = require('@domains/workspaces/services/WorkspaceService');
+        const { CategoryRepository } = require('@domains/categories/repositories/CategoryRepository');
+        const { CategoryService } = require('@domains/categories/services/CategoryService');
+        
+        const categoryRepo = new CategoryRepository(this.db);
+        const categoryService = new CategoryService(categoryRepo, this.repositoryFactory.createTransactionRepository());
+        
+        return new WorkspaceService(
             this.repositoryFactory.createWorkspaceRepository(),
             this.repositoryFactory.createWorkspaceMembersRepository(),
             this.repositoryFactory.createWorkspaceRoleRepository(),
-            this.repositoryFactory.createUserRepository()
+            this.repositoryFactory.createUserRepository(),
+            this.db,
+            this.repositoryFactory.createAccountRepository(),
+            this.repositoryFactory.createTransactionRepository(),
+            categoryRepo,
+            categoryService
         );
     }
 

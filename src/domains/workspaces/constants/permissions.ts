@@ -8,6 +8,12 @@ export const PERMISSIONS = {
         EDIT: 'transactions:edit',
         DELETE: 'transactions:delete'
     },
+    CATEGORIES: {
+        VIEW: 'category:read',
+        CREATE: 'category:create',
+        EDIT: 'category:edit',
+        DELETE: 'category:delete'
+    },
     MEMBERS: {
         VIEW: 'members:view',
         CREATE: 'members:create', // invite

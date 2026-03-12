@@ -34,6 +34,9 @@ export const TOKENS = {
     TransactionController: 'TransactionController',
     // Exchange rate domain
     ExchangeRateRepository: 'ExchangeRateRepository',
+    // Category domain
+    CategoryRepository: 'CategoryRepository',
+    CategoryService: 'CategoryService',
     // Analytics domain
     AnalyticsService: 'AnalyticsService',
     AnalyticsController: 'AnalyticsController',

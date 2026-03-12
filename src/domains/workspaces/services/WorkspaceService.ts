@@ -11,13 +11,23 @@ import { CreateWorkspaceDto, UpdateWorkspaceDto, InviteMemberDto } from  '@domai
 import { CreateRoleDto, UpdateRoleDto } from  '@domains/workspaces/dto/role.dto';
 import { WorkspaceRole } from  '@domains/workspaces/models/WorkspaceRole';
 import { PermissionCache } from '@shared/permissionCache';
+import { DatabaseFacade } from '@facades/DatabaseFacade';
+import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
+import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
+import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
+import { CategoryService } from '@domains/categories/services/CategoryService';
 
 export class WorkspaceService {
     constructor(
         @Inject(TOKENS.WorkspaceRepository) private workspaceRepository: WorkspaceRepository,
         @Inject(TOKENS.WorkspaceMembersRepository) private workspaceMembersRepository: WorkspaceMembersRepository,
         @Inject(TOKENS.WorkspaceRoleRepository) private workspaceRoleRepository: WorkspaceRoleRepository,
-        @Inject('UserRepository') private userRepository: IUserRepository
+        @Inject('UserRepository') private userRepository: IUserRepository,
+        @Inject(TOKENS.Database) private db: DatabaseFacade,
+        @Inject(TOKENS.AccountRepository) private accountRepository: AccountRepository,
+        @Inject(TOKENS.TransactionRepository) private transactionRepository: TransactionRepository,
+        @Inject(TOKENS.CategoryRepository) private categoryRepository: CategoryRepository,
+        @Inject(TOKENS.CategoryService) private categoryService: CategoryService
     ) { }
 
     async create(userId: string, dto: CreateWorkspaceDto): Promise<Workspace> {
@@ -58,7 +68,56 @@ export class WorkspaceService {
         });
         await this.workspaceMembersRepository.create(ownerMember);
 
+        // Create default categories for the workspace
+        await this.createDefaultCategories(workspace.id);
+
         return workspace;
+    }
+
+    private async createDefaultCategories(workspaceId: string): Promise<void> {
+        // Default expense categories
+        const expenseCategories = [
+            { name: 'Food & Dining', icon: '🍽️', color: '#FF6B6B' },
+            { name: 'Transportation', icon: '🚗', color: '#4ECDC4' },
+            { name: 'Shopping', icon: '🛍️', color: '#45B7D1' },
+            { name: 'Entertainment', icon: '🎬', color: '#96CEB4' },
+            { name: 'Bills & Utilities', icon: '💡', color: '#FFEAA7' },
+            { name: 'Health & Fitness', icon: '💪', color: '#DDA0DD' },
+            { name: 'Travel', icon: '✈️', color: '#98D8C8' },
+            { name: 'Education', icon: '📚', color: '#F7DC6F' },
+            { name: 'Personal Care', icon: '💅', color: '#BB8FCE' },
+            { name: 'Home & Garden', icon: '🏠', color: '#85C1E9' },
+        ];
+
+        // Default income categories
+        const incomeCategories = [
+            { name: 'Salary', icon: '💰', color: '#27AE60' },
+            { name: 'Freelance', icon: '💻', color: '#2980B9' },
+            { name: 'Investments', icon: '📈', color: '#8E44AD' },
+            { name: 'Business', icon: '🏢', color: '#16A085' },
+            { name: 'Gifts', icon: '🎁', color: '#E74C3C' },
+            { name: 'Other Income', icon: '💵', color: '#F39C12' },
+        ];
+
+        // Create expense categories
+        for (const cat of expenseCategories) {
+            await this.categoryService.createCategory({
+                name: cat.name,
+                type: 'expense',
+                icon: cat.icon,
+                color: cat.color,
+            }, workspaceId);
+        }
+
+        // Create income categories
+        for (const cat of incomeCategories) {
+            await this.categoryService.createCategory({
+                name: cat.name,
+                type: 'income',
+                icon: cat.icon,
+                color: cat.color,
+            }, workspaceId);
+        }
     }
 
     async update(workspaceId: string, userId: string, dto: UpdateWorkspaceDto): Promise<Workspace> {
@@ -93,6 +152,7 @@ export class WorkspaceService {
             throw new AppError('Only owner can delete workspace', 403);
         }
 
+        // Delete workspace - let CASCADE handle related records
         await this.workspaceRepository.delete(workspaceId);
     }
 

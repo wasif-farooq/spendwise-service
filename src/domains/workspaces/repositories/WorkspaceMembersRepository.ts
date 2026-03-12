@@ -5,8 +5,17 @@ import { Inject } from '@di/decorators/inject.decorator';
 import { TOKENS } from '@di/tokens';
 
 export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> {
+    private dbToUse: DatabaseFacade;
+
     constructor(@Inject(TOKENS.Database) db: DatabaseFacade) {
         super(db, 'workspace_members');
+        this.dbToUse = db;
+    }
+
+    // For using a different DB client (e.g., in transactions)
+    withDb(db: DatabaseFacade): WorkspaceMembersRepository {
+        this.dbToUse = db;
+        return this;
     }
 
     protected mapToEntity(row: any): WorkspaceMember {
@@ -150,5 +159,9 @@ export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> 
         }
 
         return { members, total };
+    }
+
+    async deleteByWorkspaceId(workspaceId: string): Promise<void> {
+        await this.dbToUse.query('DELETE FROM workspace_members WHERE workspace_id = $1', [workspaceId]);
     }
 }
