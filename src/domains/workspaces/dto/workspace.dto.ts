@@ -11,6 +11,10 @@ export interface UpdateWorkspaceDto {
 export interface InviteMemberDto {
     email: string;
     roleName: string; // e.g. 'Admin', 'Member'
+    accountPermissions?: Record<string, {
+        permissions: string[];
+        denied: string[];
+    }>;
 }
 
 export interface WorkspaceDto {

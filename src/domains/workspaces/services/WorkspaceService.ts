@@ -218,7 +218,16 @@ export class WorkspaceService {
             roleIds: [role.id]
         });
 
-        await this.workspaceMembersRepository.create(newMember);
+        // Save member first to get the ID
+        const createdMember = await this.workspaceMembersRepository.create(newMember);
+        
+        // Save account permissions if provided
+        if (dto.accountPermissions && Object.keys(dto.accountPermissions).length > 0) {
+            await this.workspaceMembersRepository.saveAccountPermissions(
+                createdMember.id, 
+                dto.accountPermissions
+            );
+        }
     }
 
     async removeMember(workspaceId: string, userId: string, memberIdToRemove: string): Promise<void> {

@@ -164,4 +164,45 @@ export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> 
     async deleteByWorkspaceId(workspaceId: string): Promise<void> {
         await this.dbToUse.query('DELETE FROM workspace_members WHERE workspace_id = $1', [workspaceId]);
     }
+
+    // Account permissions methods
+    async saveAccountPermissions(
+        memberId: string, 
+        accountPermissions: Record<string, { permissions: string[]; denied: string[] }>
+    ): Promise<void> {
+        for (const [accountId, perms] of Object.entries(accountPermissions)) {
+            await this.db.query(
+                `INSERT INTO workspace_member_account_permissions (member_id, account_id, permissions, denied_permissions, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, NOW(), NOW())
+                 ON CONFLICT (member_id, account_id) 
+                 DO UPDATE SET permissions = $3, denied_permissions = $4, updated_at = NOW()`,
+                [memberId, accountId, perms.permissions, perms.denied]
+            );
+        }
+    }
+
+    async getAccountPermissions(memberId: string): Promise<Record<string, { permissions: string[]; denied: string[] }>> {
+        const result = await this.db.query(
+            `SELECT account_id, permissions, denied_permissions 
+             FROM workspace_member_account_permissions 
+             WHERE member_id = $1`,
+            [memberId]
+        );
+        
+        const permissions: Record<string, { permissions: string[]; denied: string[] }> = {};
+        for (const row of result.rows) {
+            permissions[row.account_id] = {
+                permissions: row.permissions || [],
+                denied: row.denied_permissions || []
+            };
+        }
+        return permissions;
+    }
+
+    async deleteAccountPermissions(memberId: string): Promise<void> {
+        await this.db.query(
+            'DELETE FROM workspace_member_account_permissions WHERE member_id = $1',
+            [memberId]
+        );
+    }
 }
