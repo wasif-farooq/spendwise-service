@@ -88,7 +88,7 @@ export class TransactionService {
         }
 
         // Validate both accounts belong to same organization
-        if (fromAccount.organizationId !== toAccount.organizationId) {
+        if (fromAccount.workspaceId !== toAccount.workspaceId) {
             throw new AppError('Accounts must belong to the same organization', 400);
         }
 

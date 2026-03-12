@@ -10,46 +10,46 @@ export class AccountService {
         @Inject('AccountRepository') private accountRepository: IAccountRepository
     ) { }
 
-    async getAccountsByOrganization(organizationId: string): Promise<Account[]> {
-        return this.accountRepository.findByOrganizationId(organizationId);
+    async getAccountsByOrganization(workspaceId: string): Promise<Account[]> {
+        return this.accountRepository.findByOrganizationId(workspaceId);
     }
 
     async getAccountsByUser(userId: string): Promise<Account[]> {
         return this.accountRepository.findByUserId(userId);
     }
 
-    async getAccountById(id: string, organizationId: string): Promise<Account> {
+    async getAccountById(id: string, workspaceId: string): Promise<Account> {
         const account = await this.accountRepository.findById(id);
         if (!account) {
             throw new AppError('Account not found', 404);
         }
         // Verify the account belongs to the organization
-        if (account.organizationId !== organizationId) {
+        if (account.workspaceId !== workspaceId) {
             throw new AppError('Account not found', 404);
         }
         return account;
     }
 
-    async createAccount(data: CreateAccountDto, userId: string, organizationId: string): Promise<Account> {
+    async createAccount(data: CreateAccountDto, userId: string, workspaceId: string): Promise<Account> {
         const account = Account.create({
             ...data,
             userId,
-            organizationId,
+            workspaceId,
         });
         return this.accountRepository.save(account);
     }
 
-    async createAccountWithRepo(data: CreateAccountDto, userId: string, organizationId: string, repo: any): Promise<Account> {
+    async createAccountWithRepo(data: CreateAccountDto, userId: string, workspaceId: string, repo: any): Promise<Account> {
         const account = Account.create({
             ...data,
             userId,
-            organizationId,
+            workspaceId,
         });
         return repo.save(account);
     }
 
-    async updateAccount(id: string, data: UpdateAccountDto, organizationId: string): Promise<Account> {
-        const account = await this.getAccountById(id, organizationId);
+    async updateAccount(id: string, data: UpdateAccountDto, workspaceId: string): Promise<Account> {
+        const account = await this.getAccountById(id, workspaceId);
         
         if (data.name !== undefined) {
             account.updateDetails(data.name, account.color);
@@ -64,13 +64,13 @@ export class AccountService {
         return this.accountRepository.update(account);
     }
 
-    async deleteAccount(id: string, organizationId: string): Promise<void> {
-        await this.getAccountById(id, organizationId); // Verify ownership
+    async deleteAccount(id: string, workspaceId: string): Promise<void> {
+        await this.getAccountById(id, workspaceId); // Verify ownership
         await this.accountRepository.delete(id);
     }
 
-    async getTotalBalance(organizationId: string): Promise<{ total: number }> {
-        const total = await this.accountRepository.getTotalBalance(organizationId);
+    async getTotalBalance(workspaceId: string): Promise<{ total: number }> {
+        const total = await this.accountRepository.getTotalBalance(workspaceId);
         return { total };
     }
 }

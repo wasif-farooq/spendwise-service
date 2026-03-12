@@ -23,18 +23,18 @@ export class AccountRepository implements IAccountRepository {
         return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
     }
 
-    async findByOrganizationId(organizationId: string): Promise<Account[]> {
+    async findByOrganizationId(workspaceId: string): Promise<Account[]> {
         const result = await this.dbToUse.query(
-            'SELECT * FROM accounts WHERE organization_id = $1 ORDER BY created_at DESC',
-            [organizationId]
+            'SELECT * FROM accounts WHERE workspace_id = $1 ORDER BY created_at DESC',
+            [workspaceId]
         );
         return result.rows.map((row: any) => this.mapToEntity(row));
     }
 
-    async countByOrganizationId(organizationId: string): Promise<number> {
+    async countByOrganizationId(workspaceId: string): Promise<number> {
         const result = await this.dbToUse.query(
-            'SELECT COUNT(*) as count FROM accounts WHERE organization_id = $1',
-            [organizationId]
+            'SELECT COUNT(*) as count FROM accounts WHERE workspace_id = $1',
+            [workspaceId]
         );
         return parseInt(result.rows[0]?.count || '0');
     }
@@ -56,7 +56,7 @@ export class AccountRepository implements IAccountRepository {
             balance: data.balance,
             currency: data.currency,
             color: data.color,
-            organization_id: data.organizationId,
+            workspace_id: data.workspaceId,
             user_id: data.userId,
             last_activity: data.lastActivity,
             created_at: data.createdAt,
@@ -125,10 +125,10 @@ export class AccountRepository implements IAccountRepository {
         await this.dbToUse.query('DELETE FROM accounts WHERE workspace_id = $1', [workspaceId]);
     }
 
-    async getTotalBalance(organizationId: string): Promise<number> {
+    async getTotalBalance(workspaceId: string): Promise<number> {
         const result = await this.dbToUse.query(
-            'SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE organization_id = $1',
-            [organizationId]
+            'SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE workspace_id = $1',
+            [workspaceId]
         );
         return parseFloat(result.rows[0]?.total || '0');
     }
@@ -147,7 +147,7 @@ export class AccountRepository implements IAccountRepository {
             balance: parseFloat(row.balance),
             currency: row.currency,
             color: row.color,
-            organizationId: row.organization_id,
+            workspaceId: row.workspace_id,
             userId: row.user_id,
             lastActivity: new Date(row.last_activity),
             createdAt: new Date(row.created_at),

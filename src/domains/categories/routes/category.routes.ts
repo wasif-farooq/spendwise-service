@@ -44,14 +44,14 @@ router.use(requireAuth);
 // List categories
 router.get('/:workspaceId/categories',
     validateParams(WorkspaceIdParamSchema),
-    requirePermission('category:read'),
+    requirePermission('categories:view'),
     controller.getCategories.bind(controller)
 );
 
 // Get all category transaction counts - must be before /:id route
 router.get('/:workspaceId/categories/transaction-counts',
     validateParams(WorkspaceIdParamSchema),
-    requirePermission('category:read'),
+    requirePermission('categories:view'),
     controller.getAllCategoryTransactionCounts.bind(controller)
 );
 
@@ -59,7 +59,7 @@ router.get('/:workspaceId/categories/transaction-counts',
 router.get('/:workspaceId/categories/:id',
     validateParams(WorkspaceIdParamSchema),
     validateParams(CategoryIdParamSchema),
-    requirePermission('category:read'),
+    requirePermission('categories:view'),
     controller.getCategoryById.bind(controller)
 );
 
@@ -67,7 +67,7 @@ router.get('/:workspaceId/categories/:id',
 router.post('/:workspaceId/categories',
     validateParams(WorkspaceIdParamSchema),
     validateBody(CreateCategorySchema),
-    requirePermission('category:create'),
+    requirePermission('categories:create'),
     controller.createCategory.bind(controller)
 );
 
@@ -76,7 +76,7 @@ router.put('/:workspaceId/categories/:id',
     validateParams(WorkspaceIdParamSchema),
     validateParams(CategoryIdParamSchema),
     validateBody(UpdateCategorySchema),
-    requirePermission('category:edit'),
+    requirePermission('categories:edit'),
     controller.updateCategory.bind(controller)
 );
 
@@ -84,7 +84,7 @@ router.put('/:workspaceId/categories/:id',
 router.delete('/:workspaceId/categories/:id',
     validateParams(WorkspaceIdParamSchema),
     validateParams(CategoryIdParamSchema),
-    requirePermission('category:delete'),
+    requirePermission('categories:delete'),
     controller.deleteCategory.bind(controller)
 );
 
@@ -92,7 +92,7 @@ router.delete('/:workspaceId/categories/:id',
 router.get('/:workspaceId/categories/:id/transaction-count',
     validateParams(WorkspaceIdParamSchema),
     validateParams(CategoryIdParamSchema),
-    requirePermission('category:read'),
+    requirePermission('categories:view'),
     controller.getCategoryTransactionCount.bind(controller)
 );
 
@@ -101,7 +101,7 @@ router.post('/:workspaceId/categories/:id/delete-with-reassign',
     validateParams(WorkspaceIdParamSchema),
     validateParams(CategoryIdParamSchema),
     validateBody(DeleteCategorySchema),
-    requirePermission('category:delete'),
+    requirePermission('categories:delete'),
     controller.deleteCategoryWithReassign.bind(controller)
 );
 

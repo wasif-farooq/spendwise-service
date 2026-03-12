@@ -9,10 +9,10 @@ export const PERMISSIONS = {
         DELETE: 'transactions:delete'
     },
     CATEGORIES: {
-        VIEW: 'category:read',
-        CREATE: 'category:create',
-        EDIT: 'category:edit',
-        DELETE: 'category:delete'
+        VIEW: 'categories:view',
+        CREATE: 'categories:create',
+        EDIT: 'categories:edit',
+        DELETE: 'categories:delete'
     },
     MEMBERS: {
         VIEW: 'members:view',

@@ -9,7 +9,7 @@ export interface AccountProps {
     balance: number;
     currency: string;
     color: string;
-    organizationId: string;
+    workspaceId: string;
     userId: string;
     lastActivity: Date;
     createdAt: Date;
@@ -29,7 +29,7 @@ export class Account extends Entity<AccountProps> {
         balance: number;
         currency: string;
         color?: string;
-        organizationId: string;
+        workspaceId: string;
         userId: string;
     }, id?: string): Account {
         const now = new Date();
@@ -75,7 +75,7 @@ export class Account extends Entity<AccountProps> {
     get balance(): number { return this.props.balance; }
     get currency(): string { return this.props.currency; }
     get color(): string { return this.props.color; }
-    get organizationId(): string { return this.props.organizationId; }
+    get workspaceId(): string { return this.props.workspaceId; }
     get userId(): string { return this.props.userId; }
     get lastActivity(): Date { return this.props.lastActivity; }
     get createdAt(): Date { return this.props.createdAt; }
