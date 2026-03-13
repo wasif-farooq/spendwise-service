@@ -40,7 +40,11 @@
         "docs:generate:v1": "ts-node -r tsconfig-paths/register scripts/docs/generate-openapi.ts --version=v1",
         "docs:generate:v2": "ts-node -r tsconfig-paths/register scripts/docs/generate-openapi.ts --version=v2",
         "version:check": "ts-node -r tsconfig-paths/register scripts/version/check-compatibility.ts",
-        "version:migrate": "ts-node -r tsconfig-paths/register scripts/version/migrate-data.ts"
+        "version:migrate": "ts-node -r tsconfig-paths/register scripts/version/migrate-data.ts",
+        "archive:run": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts run",
+        "archive:run-older": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts run-older",
+        "archive:dry-run": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts dry-run",
+        "archive:stats": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts stats"
     },
     "keywords": [
         "nodejs",

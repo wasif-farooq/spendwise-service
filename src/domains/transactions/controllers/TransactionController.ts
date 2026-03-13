@@ -27,21 +27,82 @@ export class TransactionController {
         try {
             const workspaceId = this.getWorkspaceId(req);
             const accountIdFromParams = req.params.accountId; // accountId from URL path
-            const { page, limit, search, categoryId, startDate, endDate } = req.query;
+            
+            // Support both cursor-based and offset-based pagination
+            const { 
+                cursor,           // Cursor-based (new)
+                page,            // Offset-based (deprecated but supported)
+                limit: limitStr, 
+                search, 
+                categoryId, 
+                category,
+                type,
+                startDate, 
+                endDate 
+            } = req.query;
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
+            // Determine which pagination method to use
+            const useCursorPagination = cursor !== undefined || page === undefined;
+            
             // Use accountId from URL path, fallback to query (for backward compatibility)
             const accountId = accountIdFromParams || (req.query.accountId as string);
+            const limit = Math.min(parseInt(limitStr as string) || 50, 100);
 
+            if (useCursorPagination && accountId) {
+                // Use cursor-based pagination for single account
+                const result = await this.transactionService.getTransactionsByAccountCursor(
+                    accountId,
+                    { limit, cursor: cursor as string },
+                    {
+                        type: type as any,
+                        categoryId: categoryId as string,
+                        startDate: startDate as string,
+                        endDate: endDate as string,
+                        search: search as string,
+                    }
+                );
+                
+                // Transform to expected format
+                return res.json({
+                    transactions: result.data,
+                    pagination: result.pagination,
+                });
+            }
+
+            if (useCursorPagination) {
+                // Use cursor-based pagination for workspace
+                const result = await this.transactionService.getTransactionsByWorkspaceCursor(
+                    workspaceId,
+                    { limit, cursor: cursor as string },
+                    {
+                        accountId: accountId,
+                        categoryId: categoryId as string,
+                        category: category as string,
+                        type: type as string,
+                        startDate: startDate as string,
+                        endDate: endDate as string,
+                        search: search as string,
+                    }
+                );
+                
+                return res.json({
+                    transactions: result.data,
+                    pagination: result.pagination,
+                });
+            }
+
+            // Fallback to offset-based pagination (deprecated but supported)
             const result = await this.transactionService.getTransactionsByWorkspace(workspaceId, {
-                limit: limit ? parseInt(limit as string) : undefined,
-                offset: page ? (parseInt(page as string) - 1) * (parseInt(limit as string) || 50) : undefined,
+                limit,
+                offset: page ? (parseInt(page as string) - 1) * limit : 0,
                 search: search as string,
                 accountId: accountId,
                 categoryId: categoryId as string,
+                type: type as string,
                 startDate: startDate as string,
                 endDate: endDate as string,
             });
@@ -56,16 +117,41 @@ export class TransactionController {
     async getAllTransactions(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
-            const { limit = 50, offset = 0, search } = req.query;
+            const { cursor, limit = 50, offset = 0, search, type, categoryId, startDate, endDate } = req.query;
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
+            // Use cursor pagination if cursor provided, otherwise use offset
+            if (cursor || (offset === 0 && search === undefined)) {
+                const result = await this.transactionService.getTransactionsByWorkspaceCursor(
+                    workspaceId,
+                    { limit: parseInt(limit as string), cursor: cursor as string },
+                    {
+                        search: search as string,
+                        type: type as string,
+                        categoryId: categoryId as string,
+                        startDate: startDate as string,
+                        endDate: endDate as string,
+                    }
+                );
+                
+                return res.json({
+                    transactions: result.data,
+                    pagination: result.pagination,
+                });
+            }
+
+            // Fallback to offset-based (deprecated)
             const result = await this.transactionService.getTransactionsByWorkspace(workspaceId, {
                 limit: parseInt(limit as string),
                 offset: parseInt(offset as string),
                 search: search as string,
+                type: type as string,
+                categoryId: categoryId as string,
+                startDate: startDate as string,
+                endDate: endDate as string,
             });
 
             res.json(result);

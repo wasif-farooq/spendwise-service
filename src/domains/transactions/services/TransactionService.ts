@@ -4,6 +4,7 @@ import { AppError } from '@shared/errors/AppError';
 import { IAccountRepository } from '@domains/accounts/repositories/IAccountRepository';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
+import { CursorPaginationOptions, CursorFilters, PaginatedResult } from '../repositories/types';
 
 export interface CreateTransactionDTO {
     accountId: string;
@@ -196,14 +197,49 @@ export class TransactionService {
         search?: string;
         accountId?: string;
         categoryId?: string;
+        category?: string;
+        type?: string;
         startDate?: string;
         endDate?: string;
+        linkedStatus?: 'all' | 'linked' | 'unlinked';
     } = {}) {
         return this.transactionRepo.findByWorkspaceId(workspaceId, options);
     }
 
     async getTransactionsByAccount(accountId: string, limit = 100, offset = 0): Promise<Transaction[]> {
         return this.transactionRepo.findByAccountId(accountId, limit, offset);
+    }
+
+    // ==================== CURSOR-BASED PAGINATION ====================
+
+    /**
+     * Get transactions by account with cursor-based pagination
+     */
+    async getTransactionsByAccountCursor(
+        accountId: string,
+        options: CursorPaginationOptions,
+        filters?: CursorFilters
+    ): Promise<PaginatedResult<Transaction>> {
+        return this.transactionRepo.findByAccountIdCursor(accountId, options, filters);
+    }
+
+    /**
+     * Get all transactions for a workspace with cursor-based pagination
+     */
+    async getTransactionsByWorkspaceCursor(
+        workspaceId: string,
+        options: CursorPaginationOptions,
+        filters?: {
+            accountId?: string;
+            categoryId?: string;
+            category?: string;
+            type?: string;
+            startDate?: string;
+            endDate?: string;
+            search?: string;
+        }
+    ): Promise<PaginatedResult<Transaction>> {
+        return this.transactionRepo.findByWorkspaceIdCursor(workspaceId, options, filters);
     }
 
     async getTransactionById(id: string): Promise<Transaction | null> {

@@ -1,5 +1,6 @@
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { Transaction, TransactionProps } from '../models/Transaction';
+import { CursorPaginationOptions, CursorFilters, PaginatedResult } from './types';
 
 // In-memory cache for stats (fallback when Redis unavailable)
 interface CacheEntry<T> {
@@ -66,6 +67,201 @@ export class TransactionRepository {
             [accountId, limit, offset]
         );
         return result.rows.map((row: any) => this.mapToEntity(row));
+    }
+
+    // ==================== CURSOR-BASED PAGINATION ====================
+
+    /**
+     * Decode cursor string to get id and date for pagination
+     * Cursor format: base64("id-date")
+     */
+    private decodeCursor(cursor?: string): { id: string; date: string } | null {
+        if (!cursor) return null;
+        try {
+            const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
+            const [id, date] = decoded.split('|');
+            if (!id || !date) return null;
+            return { id, date };
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Encode transaction to cursor string
+     * Cursor format: base64("id-date")
+     */
+    private encodeCursor(transaction: Transaction): string {
+        const dateStr = transaction.date instanceof Date 
+            ? transaction.date.toISOString().split('T')[0]
+            : String(transaction.date);
+        return Buffer.from(`${transaction.id}|${dateStr}`).toString('base64');
+    }
+
+    /**
+     * Find transactions by account ID with cursor-based pagination
+     */
+    async findByAccountIdCursor(
+        accountId: string,
+        options: CursorPaginationOptions,
+        filters?: CursorFilters
+    ): Promise<PaginatedResult<Transaction>> {
+        const { limit = 50, cursor } = options;
+        const cursorData = this.decodeCursor(cursor);
+
+        // Build query with cursor filtering
+        let whereClause = 'WHERE account_id = $1';
+        const params: any[] = [accountId];
+        let paramIndex = 2;
+
+        // Apply cursor-based filtering (use date + id for stable ordering)
+        if (cursorData) {
+            whereClause += ` AND (date < $${paramIndex} OR (date = $${paramIndex} AND id < $${paramIndex + 1}))`;
+            params.push(cursorData.date, cursorData.id);
+            paramIndex += 2;
+        }
+
+        // Apply filters
+        if (filters?.type) {
+            whereClause += ` AND type = $${paramIndex}`;
+            params.push(filters.type);
+            paramIndex++;
+        }
+
+        if (filters?.categoryId) {
+            whereClause += ` AND category_id = $${paramIndex}`;
+            params.push(filters.categoryId);
+            paramIndex++;
+        }
+
+        if (filters?.startDate) {
+            whereClause += ` AND date >= $${paramIndex}`;
+            params.push(filters.startDate);
+            paramIndex++;
+        }
+
+        if (filters?.endDate) {
+            whereClause += ` AND date <= $${paramIndex}`;
+            params.push(filters.endDate);
+            paramIndex++;
+        }
+
+        if (filters?.search) {
+            whereClause += ` AND (description ILIKE $${paramIndex} OR amount::text ILIKE $${paramIndex})`;
+            params.push(`%${filters.search}%`);
+            paramIndex++;
+        }
+
+        // Fetch one extra to determine hasMore
+        const query = `
+            SELECT * FROM transactions 
+            ${whereClause} 
+            ORDER BY date DESC, id DESC 
+            LIMIT $${paramIndex}
+        `;
+        params.push(limit + 1);
+
+        const result = await this.dbToUse.query(query, params);
+        const hasMore = result.rows.length > limit;
+        const data = hasMore ? result.rows.slice(0, -1) : result.rows;
+
+        return {
+            data: data.map((row: any) => this.mapToEntity(row)),
+            pagination: {
+                nextCursor: hasMore && data.length > 0 ? this.encodeCursor(data[data.length - 1]) : null,
+                hasMore,
+            },
+        };
+    }
+
+    /**
+     * Find all transactions for a workspace with cursor-based pagination
+     */
+    async findByWorkspaceIdCursor(
+        workspaceId: string,
+        options: CursorPaginationOptions,
+        filters?: {
+            accountId?: string;
+            categoryId?: string;
+            category?: string;
+            type?: string;
+            startDate?: string;
+            endDate?: string;
+            search?: string;
+        }
+    ): Promise<PaginatedResult<Transaction>> {
+        const { limit = 50, cursor } = options;
+        const cursorData = this.decodeCursor(cursor);
+
+        let whereClause = 'WHERE t.workspace_id = $1';
+        const params: any[] = [workspaceId];
+        let paramIndex = 2;
+
+        // Apply cursor filtering
+        if (cursorData) {
+            whereClause += ` AND (t.date < $${paramIndex} OR (t.date = $${paramIndex} AND t.id < $${paramIndex + 1}))`;
+            params.push(cursorData.date, cursorData.id);
+            paramIndex += 2;
+        }
+
+        // Apply filters
+        if (filters?.accountId) {
+            whereClause += ` AND t.account_id = $${paramIndex}`;
+            params.push(filters.accountId);
+            paramIndex++;
+        }
+
+        if (filters?.categoryId) {
+            whereClause += ` AND t.category_id = $${paramIndex}`;
+            params.push(filters.categoryId);
+            paramIndex++;
+        }
+
+        if (filters?.type) {
+            whereClause += ` AND t.type = $${paramIndex}`;
+            params.push(filters.type);
+            paramIndex++;
+        }
+
+        if (filters?.startDate) {
+            whereClause += ` AND t.date >= $${paramIndex}`;
+            params.push(filters.startDate);
+            paramIndex++;
+        }
+
+        if (filters?.endDate) {
+            whereClause += ` AND t.date <= $${paramIndex}`;
+            params.push(filters.endDate);
+            paramIndex++;
+        }
+
+        if (filters?.search) {
+            whereClause += ` AND (t.description ILIKE $${paramIndex} OR t.amount::text ILIKE $${paramIndex})`;
+            params.push(`%${filters.search}%`);
+            paramIndex++;
+        }
+
+        const query = `
+            SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color
+            FROM transactions t
+            LEFT JOIN categories c ON t.category_id = c.id
+            ${whereClause}
+            ORDER BY t.date DESC, t.id DESC
+            LIMIT $${paramIndex}
+        `;
+        params.push(limit + 1);
+
+        const result = await this.dbToUse.query(query, params);
+        const hasMore = result.rows.length > limit;
+        const data = hasMore ? result.rows.slice(0, -1) : result.rows;
+
+        return {
+            data: data.map((row: any) => this.mapToEntityWithCategory(row)),
+            pagination: {
+                nextCursor: hasMore && data.length > 0 ? this.encodeCursor(data[data.length - 1]) : null,
+                hasMore,
+            },
+        };
     }
 
     async findByWorkspaceId(workspaceId: string, options: {
