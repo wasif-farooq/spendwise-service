@@ -55,7 +55,7 @@ export class TransactionRepository {
 
     async findById(id: string): Promise<Transaction | null> {
         const result = await this.dbToUse.query(
-            'SELECT * FROM transactions WHERE id = $1',
+            'SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.id = $1',
             [id]
         );
         return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
@@ -63,7 +63,7 @@ export class TransactionRepository {
 
     async findByAccountId(accountId: string, limit = 100, offset = 0): Promise<Transaction[]> {
         const result = await this.dbToUse.query(
-            'SELECT * FROM transactions WHERE account_id = $1 ORDER BY date DESC, created_at DESC LIMIT $2 OFFSET $3',
+            'SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.account_id = $1 ORDER BY t.date DESC, t.created_at DESC LIMIT $2 OFFSET $3',
             [accountId, limit, offset]
         );
         return result.rows.map((row: any) => this.mapToEntity(row));
@@ -154,7 +154,9 @@ export class TransactionRepository {
 
         // Fetch one extra to determine hasMore
         const query = `
-            SELECT * FROM transactions 
+            SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color
+            FROM transactions t
+            LEFT JOIN categories c ON t.category_id = c.id 
             ${whereClause} 
             ORDER BY date DESC, id DESC 
             LIMIT $${paramIndex}
@@ -166,7 +168,7 @@ export class TransactionRepository {
         const data = hasMore ? result.rows.slice(0, -1) : result.rows;
 
         return {
-            data: data.map((row: any) => this.mapToEntity(row)),
+            data: data.map((row: any) => this.mapToEntityWithCategory(row)),
             pagination: {
                 nextCursor: hasMore && data.length > 0 ? this.encodeCursor(data[data.length - 1]) : null,
                 hasMore,
