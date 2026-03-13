@@ -119,6 +119,26 @@ services:
     networks:
       - antigravity-network
 
+  # Object Storage (MinIO - S3 Compatible)
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"    # S3 API
+      - "9001:9001"   # Console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - antigravity-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 networks:
   antigravity-network:
     driver: bridge
@@ -128,3 +148,4 @@ volumes:
   redis_data:
   prometheus_data:
   grafana_data:
+  minio_data:

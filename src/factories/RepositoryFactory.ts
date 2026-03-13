@@ -12,6 +12,7 @@ import { SubscriptionPlanRepository, UserSubscriptionRepository } from '@domains
 import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
+import { StorageRepository } from '@domains/storage/repositories/StorageRepository';
 
 
 export class RepositoryFactory {
@@ -63,5 +64,9 @@ export class RepositoryFactory {
 
     createCategoryRepository(): CategoryRepository {
         return new CategoryRepository(this.db);
+    }
+
+    createStorageRepository(): StorageRepository {
+        return new StorageRepository(this.db);
     }
 }

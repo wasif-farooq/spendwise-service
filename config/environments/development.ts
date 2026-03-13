@@ -147,5 +147,23 @@ export default {
             exporter: 'jaeger',
             endpoint: process.env.JAEGER_ENDPOINT || 'http://localhost:14268/api/traces'
         }
+    },
+
+    // Object Storage Configuration (MinIO/S3)
+    storage: {
+        provider: process.env.STORAGE_PROVIDER || 'minio',
+        endpoint: process.env.STORAGE_ENDPOINT || 'http://localhost:9000',
+        region: process.env.STORAGE_REGION || 'us-east-1',
+        accessKeyId: process.env.STORAGE_ACCESS_KEY_ID || 'minioadmin',
+        secretAccessKey: process.env.STORAGE_SECRET_ACCESS_KEY || 'minioadmin',
+        buckets: {
+            receipts: process.env.STORAGE_BUCKET_RECEIPTS || 'spendwise-receipts',
+            avatars: process.env.STORAGE_BUCKET_AVATARS || 'spendwise-avatars',
+            attachments: process.env.STORAGE_BUCKET_ATTACHMENTS || 'spendwise-attachments'
+        },
+        publicUrl: process.env.STORAGE_PUBLIC_URL || 'http://localhost:9000',
+        presignedUrlExpiry: parseInt(process.env.STORAGE_PRESIGNED_URL_EXPIRY || '3600'), // 1 hour default
+        maxFileSize: parseInt(process.env.STORAGE_MAX_FILE_SIZE || '10485760'), // 10MB
+        allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
     }
 };

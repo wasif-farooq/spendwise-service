@@ -14,6 +14,7 @@ import { UserControllerFactory } from '@factories/UserControllerFactory';
 import { TOKENS } from '@di/tokens';
 import { FeatureFlagControllerFactory } from '@factories/FeatureFlagControllerFactory';
 import { AccountControllerFactory } from '@factories/AccountControllerFactory';
+import { StorageControllerFactory } from '@factories/StorageControllerFactory';
 import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
 import { AccountService } from '@domains/accounts/services/AccountService';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
@@ -25,6 +26,9 @@ import { AnalyticsService } from '@domains/analytics/services/AnalyticsService';
 import analyticsRoutes from '@domains/analytics/routes/analytics.routes';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
 import { CategoryService } from '@domains/categories/services/CategoryService';
+import { StorageRepository } from '@domains/storage/repositories/StorageRepository';
+import { StorageService } from '@domains/storage/services/StorageService';
+import { StorageController } from '@domains/storage/controllers/StorageController';
 
 export class ServiceBootstrap {
     private static instance: ServiceBootstrap;
@@ -143,6 +147,17 @@ export class ServiceBootstrap {
 
             const categoryService = new CategoryService(categoryRepo, transactionRepo);
             this.container.registerInstance(TOKENS.CategoryService, categoryService);
+
+            // Storage domain registrations
+            const storageRepo = new StorageRepository(dbFacade);
+            this.container.registerInstance(TOKENS.StorageRepository, storageRepo);
+
+            const storageService = new StorageService(storageRepo, ConfigLoader.getInstance());
+            this.container.registerInstance(TOKENS.StorageService, storageService);
+
+            const storageControllerFactory = new StorageControllerFactory();
+            const storageController = storageControllerFactory.create();
+            this.container.registerInstance(TOKENS.StorageController, storageController);
 
 
             // Connect Infrastructure

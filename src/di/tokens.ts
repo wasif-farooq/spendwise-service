@@ -40,4 +40,10 @@ export const TOKENS = {
     // Analytics domain
     AnalyticsService: 'AnalyticsService',
     AnalyticsController: 'AnalyticsController',
+    // Storage domain
+    StorageRepository: 'StorageRepository',
+    StorageService: 'StorageService',
+    StorageController: 'StorageController',
+    StorageServiceFactory: 'StorageServiceFactory',
+    StorageControllerFactory: 'StorageControllerFactory',
 };

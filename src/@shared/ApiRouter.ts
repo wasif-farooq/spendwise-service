@@ -11,6 +11,7 @@ import exchangeRatesRoutesV1 from '@domains/exchange-rates/routes/exchange-rates
 import categoriesRoutesV1 from '@domains/categories/routes/category.routes';
 import analyticsRoutesV1 from '@domains/analytics/routes/analytics.routes';
 import aiRoutesV1 from '@domains/ai/routes/ai.routes';
+import storageRoutesV1 from '@domains/storage/routes/storage.routes';
 
 export class ApiRouter {
   private router: Router;
@@ -28,6 +29,8 @@ export class ApiRouter {
     this.router.use('/v1/settings', settingsRoutesV1);
     this.router.use('/v1/feature-flags', featureFlagsRoutesV1);
     this.router.use('/v1/subscription', subscriptionRoutesV1);
+    // Storage routes (global, at /v1/storage)
+    this.router.use('/v1/storage', storageRoutesV1);
     // Account and Transaction routes at /v1/:workspaceId/
     this.router.use('/v1', accountsRoutesV1);
     this.router.use('/v1', transactionsRoutesV1);
