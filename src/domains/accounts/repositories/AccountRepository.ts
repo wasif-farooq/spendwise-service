@@ -23,7 +23,7 @@ export class AccountRepository implements IAccountRepository {
         return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
     }
 
-    async findByOrganizationId(workspaceId: string): Promise<Account[]> {
+    async findByWorkspaceId(workspaceId: string): Promise<Account[]> {
         const result = await this.dbToUse.query(
             'SELECT * FROM accounts WHERE workspace_id = $1 ORDER BY created_at DESC',
             [workspaceId]
@@ -31,7 +31,7 @@ export class AccountRepository implements IAccountRepository {
         return result.rows.map((row: any) => this.mapToEntity(row));
     }
 
-    async countByOrganizationId(workspaceId: string): Promise<number> {
+    async countByWorkspaceId(workspaceId: string): Promise<number> {
         const result = await this.dbToUse.query(
             'SELECT COUNT(*) as count FROM accounts WHERE workspace_id = $1',
             [workspaceId]

@@ -37,7 +37,7 @@ async function seed() {
             { key: 'accounts_view', description: 'Accounts Management: View and manage bank accounts', is_enabled: true },
             { key: 'transactions_view', description: 'Transactions: View and categorize transactions', is_enabled: true },
             { key: 'exchange_rates', description: 'Exchange Rates: View operational exchange rates', is_enabled: true },
-            { key: 'manage_organization', description: 'Organization Management: Manage members and roles', is_enabled: true },
+            { key: 'manage_workspace', description: 'Workspace Management: Manage members and roles', is_enabled: true },
             { key: 'billing_management', description: 'Billing Management: View invoices and subscription details', is_enabled: true },
             { key: 'two_factor_auth', description: '2FA: Enable Two-Factor Authentication security', is_enabled: true }
         ];
@@ -76,7 +76,7 @@ async function seed() {
                 currency: 'USD',
                 billing_period: 'monthly',
                 description: 'For individuals who want more',
-                features: ['accounts_view', 'transactions_view', 'exchange_rates', 'manage_organization'],
+                features: ['accounts_view', 'transactions_view', 'exchange_rates', 'manage_workspace'],
                 limits: { accounts: 5, transactions_per_account: 500 },
                 is_active: true
             },
@@ -86,7 +86,7 @@ async function seed() {
                 currency: 'USD',
                 billing_period: 'monthly',
                 description: 'For power users and small teams',
-                features: ['accounts_view', 'transactions_view', 'exchange_rates', 'manage_organization', 'billing_management'],
+                features: ['accounts_view', 'transactions_view', 'exchange_rates', 'manage_workspace', 'billing_management'],
                 limits: { accounts: 10, transactions_per_account: 2000 },
                 is_active: true
             },
@@ -96,7 +96,7 @@ async function seed() {
                 currency: 'USD',
                 billing_period: 'monthly',
                 description: 'For growing businesses',
-                features: ['accounts_view', 'transactions_view', 'exchange_rates', 'manage_organization', 'billing_management', 'audit_logs', 'two_factor_auth'],
+                features: ['accounts_view', 'transactions_view', 'exchange_rates', 'manage_workspace', 'billing_management', 'audit_logs', 'two_factor_auth'],
                 limits: { accounts: 25, transactions_per_account: -1 }, // -1 = unlimited
                 is_active: true
             }

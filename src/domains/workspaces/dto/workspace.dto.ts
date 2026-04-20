@@ -10,7 +10,7 @@ export interface UpdateWorkspaceDto {
 
 export interface InviteMemberDto {
     email: string;
-    roleName: string; // e.g. 'Admin', 'Member'
+    roleName: string; // e.g. 'Owner', 'Member'
     accountPermissions?: Record<string, {
         permissions: string[];
         denied: string[];

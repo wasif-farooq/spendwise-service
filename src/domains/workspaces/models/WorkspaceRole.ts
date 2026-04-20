@@ -5,7 +5,7 @@ export interface WorkspaceRoleProps {
     description?: string;
     workspaceId: string;
     permissions: string[]; // Simplification for now, maybe JSON or array of strings
-    isSystem?: boolean; // To identify 'Admin' role that shouldn't be deleted?
+    isSystem?: boolean; // To identify 'Owner' role that shouldn't be deleted?
     createdAt: Date;
     updatedAt: Date;
 }

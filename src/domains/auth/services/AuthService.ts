@@ -81,9 +81,9 @@ export class AuthService {
             });
             const trxWorkspace = await this.workspaceRepository.create(workspace, { db: trx });
 
-            // 3. Create Role "Admin"
+            // 3. Create Role "Owner"
             const adminRole = WorkspaceRole.create({
-                name: "Admin",
+                name: "Owner",
                 workspaceId: trxWorkspace.id,
                 permissions: ['*'],
                 isSystem: true

@@ -3,7 +3,7 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 
 export interface IAccountRepository {
     findById(id: string): Promise<Account | null>;
-    findByOrganizationId(workspaceId: string): Promise<Account[]>;
+    findByWorkspaceId(workspaceId: string): Promise<Account[]>;
     findByUserId(userId: string): Promise<Account[]>;
     save(account: Account): Promise<Account>;
     update(account: Account): Promise<Account>;

@@ -10,8 +10,8 @@ export class AccountService {
         @Inject('AccountRepository') private accountRepository: IAccountRepository
     ) { }
 
-    async getAccountsByOrganization(workspaceId: string): Promise<Account[]> {
-        return this.accountRepository.findByOrganizationId(workspaceId);
+    async getAccountsByWorkspace(workspaceId: string): Promise<Account[]> {
+        return this.accountRepository.findByWorkspaceId(workspaceId);
     }
 
     async getAccountsByUser(userId: string): Promise<Account[]> {
@@ -23,7 +23,7 @@ export class AccountService {
         if (!account) {
             throw new AppError('Account not found', 404);
         }
-        // Verify the account belongs to the organization
+        // Verify the account belongs to the workspace
         if (account.workspaceId !== workspaceId) {
             throw new AppError('Account not found', 404);
         }

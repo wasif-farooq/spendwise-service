@@ -34,7 +34,7 @@ class AIController {
                 return res.status(404).json({ message: 'Workspace not found' });
             }
 
-            const accounts = await this.accountRepo.findByOrganizationId(workspaceId);
+            const accounts = await this.accountRepo.findByWorkspaceId(workspaceId);
             const overview = await this.analyticsService.getOverview(workspaceId, 'month');
             const categoryTrends = await this.analyticsService.getCategoryTrends(workspaceId, 1);
 

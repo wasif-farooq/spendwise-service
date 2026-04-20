@@ -88,9 +88,9 @@ export class TransactionService {
             throw new AppError('Destination account not found', 404);
         }
 
-        // Validate both accounts belong to same organization
+        // Validate both accounts belong to same workspace
         if (fromAccount.workspaceId !== toAccount.workspaceId) {
-            throw new AppError('Accounts must belong to the same organization', 400);
+            throw new AppError('Accounts must belong to the same workspace', 400);
         }
 
         // Validate not transferring to same account

@@ -66,7 +66,7 @@ const startWorker = async () => {
     await consumer.subscribe({ topic: 'user.service.getPreferences', fromBeginning: false });
     await consumer.subscribe({ topic: 'user.service.updatePreferences', fromBeginning: false });
 
-    // Subscribe to Organization Topics
+    // Subscribe to Workspace Topics
     await consumer.subscribe({ topic: 'workspace.service.create', fromBeginning: false });
     await consumer.subscribe({ topic: 'workspace.service.update', fromBeginning: false });
     await consumer.subscribe({ topic: 'workspace.service.delete', fromBeginning: false });

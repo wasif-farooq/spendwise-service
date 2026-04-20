@@ -35,7 +35,7 @@ export class AccountController {
             }
 
             // Membership & permission checked by middleware
-            const accounts = await this.accountService.getAccountsByOrganization(workspaceId);
+            const accounts = await this.accountService.getAccountsByWorkspace(workspaceId);
             res.json(accounts.map(a => a.toJSON()));
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
@@ -70,7 +70,7 @@ export class AccountController {
             }
 
             // Check subscription limits before creating
-            const currentCount = await this.accountRepo.countByOrganizationId(workspaceId);
+            const currentCount = await this.accountRepo.countByWorkspaceId(workspaceId);
             await this.subscriptionService.checkFeatureLimit(userId, 'accounts', currentCount);
 
             // Store initial balance
