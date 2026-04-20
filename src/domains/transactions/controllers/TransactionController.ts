@@ -169,12 +169,8 @@ export class TransactionController {
                 throw new AppError('Workspace not found', 404);
             }
 
-            const transaction = await this.transactionService.getTransactionById(id);
-            if (!transaction || transaction.workspaceId !== workspaceId) {
-                throw new AppError('Transaction not found', 404);
-            }
-
-            res.json(transaction.toJSON());
+            const transaction = await this.transactionService.getTransactionWithDetails(id, workspaceId);
+            res.json(transaction);
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
         }

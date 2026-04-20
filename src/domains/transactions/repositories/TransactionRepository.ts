@@ -58,7 +58,87 @@ export class TransactionRepository {
             'SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.id = $1',
             [id]
         );
-        return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
+        return result.rows[0] ? this.mapToEntityWithCategory(result.rows[0]) : null;
+    }
+
+    async findByIdWithDetails(id: string): Promise<any | null> {
+        const result = await this.dbToUse.query(
+            `SELECT 
+                t.*, 
+                c.name as category_name,
+                c.icon as category_icon,
+                c.color as category_color,
+                a.name as account_name,
+                a.currency as account_currency,
+                u.first_name as user_first_name,
+                u.last_name as user_last_name
+            FROM transactions t 
+            LEFT JOIN categories c ON t.category_id = c.id
+            LEFT JOIN accounts a ON t.account_id = a.id
+            LEFT JOIN users u ON t.user_id = u.id
+            WHERE t.id = $1`,
+            [id]
+        );
+        if (!result.rows[0]) return null;
+
+        const row = result.rows[0];
+        const linkedTransaction = row.linked_transaction_id 
+            ? await this.findByIdBasic(row.linked_transaction_id)
+            : null;
+
+        return {
+            id: row.id,
+            accountId: row.account_id,
+            accountName: row.account_name,
+            accountCurrency: row.account_currency,
+            userId: row.user_id,
+            userName: row.user_first_name && row.user_last_name 
+                ? `${row.user_first_name} ${row.user_last_name}` 
+                : row.user_first_name || row.user_last_name || null,
+            workspaceId: row.workspace_id,
+            type: row.type,
+            amount: parseFloat(row.amount),
+            currency: row.currency,
+            description: row.description,
+            date: row.date,
+            categoryId: row.category_id,
+            categoryName: row.category_name,
+            categoryIcon: row.category_icon,
+            categoryColor: row.category_color,
+            linkedTransactionId: row.linked_transaction_id,
+            linkedTransaction: linkedTransaction ? {
+                id: linkedTransaction.id,
+                accountId: linkedTransaction.account_id,
+                accountName: linkedTransaction.account_name,
+                amount: parseFloat(linkedTransaction.amount),
+                currency: linkedTransaction.currency,
+                type: linkedTransaction.type,
+                description: linkedTransaction.description,
+                date: linkedTransaction.date,
+                categoryName: linkedTransaction.category_name
+            } : null,
+            linkedAccountId: row.linked_account_id,
+            exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
+            convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
+            baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+        };
+    }
+
+    private async findByIdBasic(id: string): Promise<any | null> {
+        const result = await this.dbToUse.query(
+            `SELECT 
+                t.*,
+                a.name as account_name,
+                c.name as category_name
+            FROM transactions t
+            LEFT JOIN accounts a ON t.account_id = a.id
+            LEFT JOIN categories c ON t.category_id = c.id
+            WHERE t.id = $1`,
+            [id]
+        );
+        return result.rows[0] || null;
     }
 
     async findByAccountId(accountId: string, limit = 100, offset = 0): Promise<Transaction[]> {

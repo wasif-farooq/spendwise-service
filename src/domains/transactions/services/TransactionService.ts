@@ -246,6 +246,14 @@ export class TransactionService {
         return this.transactionRepo.findById(id);
     }
 
+    async getTransactionWithDetails(id: string, workspaceId: string): Promise<any> {
+        const transaction = await this.transactionRepo.findByIdWithDetails(id);
+        if (!transaction || transaction.workspaceId !== workspaceId) {
+            throw new AppError('Transaction not found', 404);
+        }
+        return transaction;
+    }
+
     async createTransaction(data: CreateTransactionDTO, userId: string, workspaceId: string): Promise<Transaction> {
         return this.db.transaction(async (trxDb) => {
             const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
