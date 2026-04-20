@@ -1,11 +1,21 @@
 export interface CreateWorkspaceDto {
     name: string;
     slug?: string;
+    description?: string;
+    logo?: string;
+    website?: string;
+    industry?: string;
+    size?: string;
 }
 
 export interface UpdateWorkspaceDto {
     name?: string;
-    slug?: string; // Optional, might be immutable usually but good to have DTO support
+    slug?: string;
+    description?: string;
+    logo?: string;
+    website?: string;
+    industry?: string;
+    size?: string;
 }
 
 export interface InviteMemberDto {
@@ -32,4 +42,22 @@ export interface UpdateRoleDto {
 
 export interface AssignRoleDto {
     roleId: string;
+}
+
+export interface UpdateMemberDto {
+    role?: string;
+    roleName?: string;
+    status?: 'active' | 'inactive' | 'suspended';
+    accountPermissions?: Record<string, {
+        permissions: string[];
+        denied: string[];
+    }>;
+}
+
+export interface WorkspaceSettingsDto {
+    allowMemberInvites?: boolean;
+    requireEmailVerification?: boolean;
+    defaultRole?: string;
+    billingEmail?: string;
+    notificationEmail?: string;
 }

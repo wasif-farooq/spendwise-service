@@ -73,8 +73,9 @@ export class CategoryRepository {
         }));
     }
 
-    async create(category: CategoryProps): Promise<Category> {
-        const result = await this.dbToUse.query(
+    async create(category: CategoryProps, options?: { db?: DatabaseFacade }): Promise<Category> {
+        const db = options?.db || this.dbToUse;
+        const result = await db.query(
             `INSERT INTO categories (id, name, type, icon, color, description, workspace_id, created_at, updated_at)
              VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW())
              RETURNING *`,
@@ -93,6 +94,39 @@ export class CategoryRepository {
             createdAt: row.created_at,
             updatedAt: row.updated_at,
         });
+    }
+
+    async bulkCreate(categories: CategoryProps[], options?: { db?: DatabaseFacade }): Promise<Category[]> {
+        if (categories.length === 0) return [];
+        
+        const db = options?.db || this.dbToUse;
+        const values: any[] = [];
+        const placeholders: string[] = [];
+        
+        categories.forEach((cat, index) => {
+            const offset = index * 6;
+            placeholders.push(`(gen_random_uuid(), $${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, NOW(), NOW())`);
+            values.push(cat.name, cat.type, cat.icon, cat.color, cat.description || null, cat.workspaceId);
+        });
+        
+        const result = await db.query(
+            `INSERT INTO categories (id, name, type, icon, color, description, workspace_id, created_at, updated_at)
+             VALUES ${placeholders.join(', ')}
+             RETURNING *`,
+            values
+        );
+        
+        return result.rows.map((row: any) => new Category({
+            id: row.id,
+            name: row.name,
+            type: row.type,
+            icon: row.icon,
+            color: row.color,
+            description: row.description,
+            workspaceId: row.workspace_id,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+        }));
     }
 
     async update(id: string, workspaceId: string, data: Partial<CategoryProps>): Promise<Category | null> {

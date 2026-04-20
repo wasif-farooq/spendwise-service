@@ -6,6 +6,7 @@ import { AuthRepository } from '@domains/auth/repositories/AuthRepository';
 import { WorkspaceRepository } from '@domains/workspaces/repositories/WorkspaceRepository';
 import { WorkspaceRoleRepository } from '@domains/workspaces/repositories/WorkspaceRoleRepository';
 import { WorkspaceMembersRepository } from '@domains/workspaces/repositories/WorkspaceMembersRepository';
+import { WorkspaceInvitationsRepository } from '@domains/workspaces/repositories/WorkspaceInvitationsRepository';
 import { UserPreferencesRepository } from '@domains/users/repositories/UserPreferencesRepository';
 import { FeatureFlagRepository } from '@domains/feature-flags/repositories/FeatureFlagRepository';
 import { SubscriptionPlanRepository, UserSubscriptionRepository } from '@domains/subscription/repositories/SubscriptionRepository';
@@ -36,6 +37,10 @@ export class RepositoryFactory {
 
     createWorkspaceMembersRepository(): WorkspaceMembersRepository {
         return new WorkspaceMembersRepository(this.db);
+    }
+
+    createWorkspaceInvitationsRepository(): WorkspaceInvitationsRepository {
+        return new WorkspaceInvitationsRepository(this.db);
     }
 
     createUserPreferencesRepository(): UserPreferencesRepository {

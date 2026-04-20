@@ -42,6 +42,7 @@ export class WorkspaceRole extends Entity<WorkspaceRoleProps> {
 
 
     get name(): string { return this.props.name; }
+    get description(): string | undefined { return this.props.description; }
     get workspaceId(): string { return this.props.workspaceId; }
     get permissions(): string[] { return this.props.permissions; }
     get isSystem(): boolean { return this.props.isSystem ?? false; }

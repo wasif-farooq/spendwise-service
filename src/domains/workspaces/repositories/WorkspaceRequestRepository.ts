@@ -131,4 +131,74 @@ export class WorkspaceRequestRepository {
         }
         throw new Error('RPC mode not implemented in this wrapper');
     }
+
+    async getById(workspaceId: string, userId: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getById(workspaceId, userId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async getMember(workspaceId: string, userId: string, memberId: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getMember(workspaceId, userId, memberId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async updateMember(workspaceId: string, userId: string, memberId: string, dto: any) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.updateMember(workspaceId, userId, memberId, dto));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async duplicateRole(workspaceId: string, userId: string, roleId: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.duplicateRole(workspaceId, userId, roleId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async uploadLogo(workspaceId: string, userId: string, file: Buffer, filename: string, contentType: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.uploadLogo(workspaceId, userId, file, filename, contentType));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async resendInvitation(workspaceId: string, userId: string, invitationId: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.resendInvitation(workspaceId, userId, invitationId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async cancelInvitation(workspaceId: string, userId: string, invitationId: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.cancelInvitation(workspaceId, userId, invitationId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async getInvitations(workspaceId: string, userId: string, params: any = {}) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getInvitations(workspaceId, userId, params));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async acceptInvitation(token: string, registrationData?: { firstName: string; lastName: string; password: string }) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.acceptInvitation(token, registrationData));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async getMyInvitations(userId: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getMyInvitations(userId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
 }

@@ -5,6 +5,7 @@ export interface WorkspaceMemberProps {
     workspaceId: string;
     roleIds: string[];
     joinedAt: Date;
+    status?: 'active' | 'inactive' | 'suspended' | 'pending';
 }
 
 export class WorkspaceMember extends Entity<WorkspaceMemberProps> {
@@ -16,9 +17,11 @@ export class WorkspaceMember extends Entity<WorkspaceMemberProps> {
         userId: string;
         workspaceId: string;
         roleIds: string[];
+status?: 'active' | 'inactive' | 'suspended' | 'pending';
     }, id?: string): WorkspaceMember {
         const memberProps: WorkspaceMemberProps = {
             ...props,
+            status: props.status || 'active',
             joinedAt: new Date(),
         };
         return new WorkspaceMember(memberProps, id);
@@ -31,6 +34,7 @@ export class WorkspaceMember extends Entity<WorkspaceMemberProps> {
     get userId(): string { return this.props.userId; }
     get workspaceId(): string { return this.props.workspaceId; }
     get roleIds(): string[] { return this.props.roleIds; }
+    get status(): 'active' | 'inactive' | 'suspended' | 'pending' { return this.props.status || 'active'; }
 
     public addRole(roleId: string): void {
         if (!this.props.roleIds.includes(roleId)) {
@@ -40,5 +44,13 @@ export class WorkspaceMember extends Entity<WorkspaceMemberProps> {
 
     public removeRole(roleId: string): void {
         this.props.roleIds = this.props.roleIds.filter(id => id !== roleId);
+    }
+
+    public setRoles(roleIds: string[]): void {
+        this.props.roleIds = roleIds;
+    }
+
+    public updateStatus(status: 'active' | 'inactive' | 'suspended' | 'pending'): void {
+        this.props.status = status;
     }
 }

@@ -23,7 +23,8 @@ export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> 
             userId: row.user_id,
             workspaceId: row.workspace_id,
             roleIds: row.role_ids || [],
-            joinedAt: row.joined_at
+            joinedAt: row.joined_at,
+            status: row.status || 'active'
         }, row.id);
     }
 
@@ -31,6 +32,14 @@ export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> 
         const result = await this.db.query(
             `SELECT * FROM ${this.tableName} WHERE user_id = $1 AND workspace_id = $2 LIMIT 1`,
             [userId, workspaceId]
+        );
+        return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
+    }
+
+    async findById(id: string): Promise<WorkspaceMember | null> {
+        const result = await this.db.query(
+            `SELECT * FROM ${this.tableName} WHERE id = $1 LIMIT 1`,
+            [id]
         );
         return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
     }
@@ -67,13 +76,21 @@ export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> 
         statuses?: string[];
         startDate?: string;
         endDate?: string;
+        memberId?: string;
     } = {}): Promise<{ members: any[]; total: number }> {
         
-        const { limit = 10, offset = 0, search, roles, statuses, startDate, endDate } = options;
+        const { limit = 10, offset = 0, search, roles, statuses, startDate, endDate, memberId } = options;
 
         let whereClause = 'WHERE wm.workspace_id = $1';
         const params: any[] = [workspaceId];
         let paramIndex = 2;
+
+        // Member ID filter
+        if (memberId) {
+            whereClause += ` AND wm.id = $${paramIndex}`;
+            params.push(memberId);
+            paramIndex++;
+        }
 
         // Search filter (name, email)
         if (search) {
@@ -117,6 +134,7 @@ export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> 
                 wm.workspace_id,
                 wm.joined_at,
                 wm.role_ids,
+                wm.status,
                 u.first_name,
                 u.last_name,
                 u.email,
@@ -144,7 +162,7 @@ export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> 
             lastName: row.last_name,
             email: row.email,
             joinedAt: row.joined_at,
-            status: 'Active' // Default status, pending would require invitation tracking
+            status: row.status || 'active'
         }));
 
         // Apply role filter (after getting results since we need role names)

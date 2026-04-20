@@ -2,6 +2,7 @@ import { Router } from 'express';
 import authRoutesV1 from '@domains/auth/routes/auth.routes';
 import userRoutesV1 from '@domains/users/routes/user.routes';
 import workspaceRoutesV1 from '@domains/workspaces/routes/workspace.routes';
+import invitationRoutesV1 from '@domains/workspaces/routes/invitation.routes';
 import settingsRoutesV1 from '@domains/settings/settings.routes';
 import featureFlagsRoutesV1 from '@domains/feature-flags/routes/feature-flags.routes';
 import subscriptionRoutesV1 from '@domains/subscription/routes/subscription.routes';
@@ -26,6 +27,7 @@ export class ApiRouter {
     this.router.use('/v1/auth', authRoutesV1);
     this.router.use('/v1/users', userRoutesV1);
     this.router.use('/v1/workspaces', workspaceRoutesV1);
+    this.router.use('/v1/invitations', invitationRoutesV1);
     this.router.use('/v1/settings', settingsRoutesV1);
     this.router.use('/v1/feature-flags', featureFlagsRoutesV1);
     this.router.use('/v1/subscription', subscriptionRoutesV1);

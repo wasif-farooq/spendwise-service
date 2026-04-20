@@ -50,3 +50,6 @@ Uses `@/*` imports: `@domains/*`, `@shared/*`, `@config/*`, `@database/*`, `@mes
 - Uses `ts-node` with `tsconfig-paths/register` for path alias resolution in dev
 - Environment: copy `.env.example` to `.env` before running
 - Kafka topics must be created: `npm run kafka:topics`
+
+## Related Projects
+- Frontend Repo: @../spendwise-web/

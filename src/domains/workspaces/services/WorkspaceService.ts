@@ -3,11 +3,14 @@ import { TOKENS } from '@di/tokens';
 import { WorkspaceRepository } from  '@domains/workspaces/repositories/WorkspaceRepository';
 import { WorkspaceMembersRepository } from  '@domains/workspaces/repositories/WorkspaceMembersRepository';
 import { WorkspaceRoleRepository } from  '@domains/workspaces/repositories/WorkspaceRoleRepository';
+import { WorkspaceInvitationsRepository } from  '@domains/workspaces/repositories/WorkspaceInvitationsRepository';
 import { IUserRepository } from '@domains/auth/repositories/IUserRepository';
+import { AuthService } from '@domains/auth/services/AuthService';
 import { Workspace } from  '@domains/workspaces/models/Workspace';
 import { WorkspaceMember } from  '@domains/workspaces/models/WorkspaceMember';
+import { WorkspaceInvitation } from  '@domains/workspaces/models/WorkspaceInvitation';
 import { AppError } from '@shared/errors/AppError';
-import { CreateWorkspaceDto, UpdateWorkspaceDto, InviteMemberDto } from  '@domains/workspaces/dto/workspace.dto';
+import { CreateWorkspaceDto, UpdateWorkspaceDto, InviteMemberDto, UpdateMemberDto, WorkspaceSettingsDto } from  '@domains/workspaces/dto/workspace.dto';
 import { CreateRoleDto, UpdateRoleDto } from  '@domains/workspaces/dto/role.dto';
 import { WorkspaceRole } from  '@domains/workspaces/models/WorkspaceRole';
 import { PermissionCache } from '@shared/permissionCache';
@@ -16,26 +19,33 @@ import { AccountRepository } from '@domains/accounts/repositories/AccountReposit
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
 import { CategoryService } from '@domains/categories/services/CategoryService';
+import { StorageService } from '@domains/storage/services/StorageService';
+import { v4 as uuidv4 } from 'uuid';
 
 export class WorkspaceService {
     constructor(
         @Inject(TOKENS.WorkspaceRepository) private workspaceRepository: WorkspaceRepository,
         @Inject(TOKENS.WorkspaceMembersRepository) private workspaceMembersRepository: WorkspaceMembersRepository,
         @Inject(TOKENS.WorkspaceRoleRepository) private workspaceRoleRepository: WorkspaceRoleRepository,
+        @Inject(TOKENS.WorkspaceInvitationsRepository) private workspaceInvitationsRepository: WorkspaceInvitationsRepository,
         @Inject('UserRepository') private userRepository: IUserRepository,
+        @Inject(TOKENS.AuthService) private authService: AuthService,
         @Inject(TOKENS.Database) private db: DatabaseFacade,
         @Inject(TOKENS.AccountRepository) private accountRepository: AccountRepository,
         @Inject(TOKENS.TransactionRepository) private transactionRepository: TransactionRepository,
         @Inject(TOKENS.CategoryRepository) private categoryRepository: CategoryRepository,
-        @Inject(TOKENS.CategoryService) private categoryService: CategoryService
+        @Inject(TOKENS.CategoryService) private categoryService: CategoryService,
+        @Inject(TOKENS.StorageService) private storageService: StorageService
     ) { }
 
-    async create(userId: string, dto: CreateWorkspaceDto): Promise<Workspace> {
+    async create(userId: string, dto: CreateWorkspaceDto, options?: { db?: DatabaseFacade }): Promise<Workspace> {
+        const db = options?.db;
+
         // Generate slug from name if not provided
         const slug = dto.slug || dto.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
         
         // Check if slug already exists
-        const existingWorkspaces = await this.workspaceRepository.findAll();
+        const existingWorkspaces = await this.workspaceRepository.findAll(db ? { db } : undefined);
         const slugExists = existingWorkspaces.some(w => w.slug === slug);
         if (slugExists) {
             throw new AppError('Workspace with this name already exists', 400);
@@ -45,10 +55,14 @@ export class WorkspaceService {
         const workspace = Workspace.create({
             name: dto.name,
             slug,
-            ownerId: userId
+            ownerId: userId,
+            description: dto.description,
+            website: dto.website,
+            industry: dto.industry,
+            size: dto.size
         });
 
-        await this.workspaceRepository.save(workspace);
+        await this.workspaceRepository.save(workspace, db ? { db } : undefined);
 
         // Create default "Owner" role for the workspace with all permissions
         const ownerRole = WorkspaceRole.create({
@@ -58,7 +72,7 @@ export class WorkspaceService {
             permissions: ['*'], // All permissions
             isSystem: true // System roles cannot be deleted or edited
         });
-        await this.workspaceRoleRepository.create(ownerRole);
+        await this.workspaceRoleRepository.create(ownerRole, db ? { db } : undefined);
 
         // Add owner as a member with Owner role
         const ownerMember = WorkspaceMember.create({
@@ -66,58 +80,39 @@ export class WorkspaceService {
             userId: userId,
             roleIds: [ownerRole.id]
         });
-        await this.workspaceMembersRepository.create(ownerMember);
+        await this.workspaceMembersRepository.create(ownerMember, db ? { db } : undefined);
 
         // Create default categories for the workspace
-        await this.createDefaultCategories(workspace.id);
+        await this.createDefaultCategories(workspace.id, db);
 
         return workspace;
     }
 
-    private async createDefaultCategories(workspaceId: string): Promise<void> {
-        // Default expense categories
+    private async createDefaultCategories(workspaceId: string, db?: DatabaseFacade): Promise<void> {
         const expenseCategories = [
-            { name: 'Food & Dining', icon: '🍽️', color: '#FF6B6B' },
-            { name: 'Transportation', icon: '🚗', color: '#4ECDC4' },
-            { name: 'Shopping', icon: '🛍️', color: '#45B7D1' },
-            { name: 'Entertainment', icon: '🎬', color: '#96CEB4' },
-            { name: 'Bills & Utilities', icon: '💡', color: '#FFEAA7' },
-            { name: 'Health & Fitness', icon: '💪', color: '#DDA0DD' },
-            { name: 'Travel', icon: '✈️', color: '#98D8C8' },
-            { name: 'Education', icon: '📚', color: '#F7DC6F' },
-            { name: 'Personal Care', icon: '💅', color: '#BB8FCE' },
-            { name: 'Home & Garden', icon: '🏠', color: '#85C1E9' },
+            { name: 'Food & Dining', type: 'expense' as const, icon: '🍽️', color: '#FF6B6B' },
+            { name: 'Transportation', type: 'expense' as const, icon: '🚗', color: '#4ECDC4' },
+            { name: 'Shopping', type: 'expense' as const, icon: '🛍️', color: '#45B7D1' },
+            { name: 'Entertainment', type: 'expense' as const, icon: '🎬', color: '#96CEB4' },
+            { name: 'Bills & Utilities', type: 'expense' as const, icon: '💡', color: '#FFEAA7' },
+            { name: 'Health & Fitness', type: 'expense' as const, icon: '💪', color: '#DDA0DD' },
+            { name: 'Travel', type: 'expense' as const, icon: '✈️', color: '#98D8C8' },
+            { name: 'Education', type: 'expense' as const, icon: '📚', color: '#F7DC6F' },
+            { name: 'Personal Care', type: 'expense' as const, icon: '💅', color: '#BB8FCE' },
+            { name: 'Home & Garden', type: 'expense' as const, icon: '🏠', color: '#85C1E9' },
         ];
 
-        // Default income categories
         const incomeCategories = [
-            { name: 'Salary', icon: '💰', color: '#27AE60' },
-            { name: 'Freelance', icon: '💻', color: '#2980B9' },
-            { name: 'Investments', icon: '📈', color: '#8E44AD' },
-            { name: 'Business', icon: '🏢', color: '#16A085' },
-            { name: 'Gifts', icon: '🎁', color: '#E74C3C' },
-            { name: 'Other Income', icon: '💵', color: '#F39C12' },
+            { name: 'Salary', type: 'income' as const, icon: '💰', color: '#27AE60' },
+            { name: 'Freelance', type: 'income' as const, icon: '💻', color: '#2980B9' },
+            { name: 'Investments', type: 'income' as const, icon: '📈', color: '#8E44AD' },
+            { name: 'Business', type: 'income' as const, icon: '🏢', color: '#16A085' },
+            { name: 'Gifts', type: 'income' as const, icon: '🎁', color: '#E74C3C' },
+            { name: 'Other Income', type: 'income' as const, icon: '💵', color: '#F39C12' },
         ];
 
-        // Create expense categories
-        for (const cat of expenseCategories) {
-            await this.categoryService.createCategory({
-                name: cat.name,
-                type: 'expense',
-                icon: cat.icon,
-                color: cat.color,
-            }, workspaceId);
-        }
-
-        // Create income categories
-        for (const cat of incomeCategories) {
-            await this.categoryService.createCategory({
-                name: cat.name,
-                type: 'income',
-                icon: cat.icon,
-                color: cat.color,
-            }, workspaceId);
-        }
+        const allCategories = [...expenseCategories, ...incomeCategories];
+        await this.categoryService.bulkCreate(allCategories, workspaceId, db ? { db } : undefined);
     }
 
     async update(workspaceId: string, userId: string, dto: UpdateWorkspaceDto): Promise<Workspace> {
@@ -137,31 +132,30 @@ export class WorkspaceService {
             throw new AppError('Insufficient permissions to update workspace', 403);
         }
 
-        if (dto.name) workspace.changeName(dto.name);
+        workspace.updateDetails({
+            name: dto.name,
+            description: dto.description,
+            logo: dto.logo,
+            website: dto.website,
+            industry: dto.industry,
+            size: dto.size
+        });
         await this.workspaceRepository.save(workspace);
         return workspace;
     }
 
-    async delete(workspaceId: string, userId: string): Promise<void> {
+    async getById(workspaceId: string, userId: string): Promise<Workspace> {
+        const member = await this.workspaceMembersRepository.findByUserAndWorkspace(userId, workspaceId);
+        if (!member) {
+            throw new AppError('Not a member of this workspace', 403);
+        }
+
         const workspace = await this.workspaceRepository.findById(workspaceId);
         if (!workspace) {
             throw new AppError('Workspace not found', 404);
         }
 
-        if (workspace.ownerId !== userId) {
-            throw new AppError('Only owner can delete workspace', 403);
-        }
-
-        // Delete workspace - let CASCADE handle related records
-        await this.workspaceRepository.delete(workspaceId);
-    }
-
-    async getUserWorkspaces(userId: string): Promise<Workspace[]> {
-        const memberships = await this.workspaceMembersRepository.findByUserId(userId);
-        if (memberships.length === 0) return [];
-
-        const workspaceIds = memberships.map(m => m.workspaceId);
-        return this.workspaceRepository.findByIds(workspaceIds);
+        return workspace;
     }
 
     async getMembers(workspaceId: string, userId: string, params: { 
@@ -193,41 +187,316 @@ export class WorkspaceService {
         });
     }
 
+    async getMember(workspaceId: string, userId: string, memberId: string): Promise<any> {
+        const member = await this.workspaceMembersRepository.findByUserAndWorkspace(userId, workspaceId);
+        if (!member) {
+            throw new AppError('Not a member of this workspace', 403);
+        }
+
+        const targetMember = await this.workspaceMembersRepository.findById(memberId);
+        if (!targetMember || targetMember.workspaceId !== workspaceId) {
+            throw new AppError('Member not found', 404);
+        }
+
+        const { members } = await this.workspaceMembersRepository.findAllWithDetails(workspaceId, {
+            limit: 1,
+            offset: 0,
+            memberId
+        });
+
+        return members[0];
+    }
+
+    async updateMember(workspaceId: string, userId: string, memberId: string, dto: UpdateMemberDto): Promise<void> {
+        const member = await this.workspaceMembersRepository.findByUserAndWorkspace(userId, workspaceId);
+        if (!member) {
+            throw new AppError('Not a member of this workspace', 403);
+        }
+
+        const hasPermission = await this.checkPermission(workspaceId, userId, 'members:edit');
+        if (!hasPermission) {
+            throw new AppError('Insufficient permissions to update member', 403);
+        }
+
+        const targetMember = await this.workspaceMembersRepository.findById(memberId);
+        if (!targetMember || targetMember.workspaceId !== workspaceId) {
+            throw new AppError('Member not found', 404);
+        }
+
+        // Update role if provided
+        if (dto.roleName) {
+            const role = await this.workspaceRoleRepository.findByNameAndWorkspace(dto.roleName, workspaceId);
+            if (!role) {
+                throw new AppError('Role not found', 404);
+            }
+            targetMember.setRoles([role.id]);
+        }
+
+        // Update status if provided
+        if (dto.status) {
+            targetMember.updateStatus(dto.status);
+        }
+
+        // Update account permissions if provided
+        if (dto.accountPermissions && Object.keys(dto.accountPermissions).length > 0) {
+            await this.workspaceMembersRepository.saveAccountPermissions(memberId, dto.accountPermissions);
+        }
+
+        await this.workspaceMembersRepository.save(targetMember);
+    }
+
+    async delete(workspaceId: string, userId: string): Promise<void> {
+        const workspace = await this.workspaceRepository.findById(workspaceId);
+        if (!workspace) {
+            throw new AppError('Workspace not found', 404);
+        }
+
+        if (workspace.ownerId !== userId) {
+            throw new AppError('Only owner can delete workspace', 403);
+        }
+
+        // Delete workspace - let CASCADE handle related records
+        await this.workspaceRepository.delete(workspaceId);
+    }
+
+    async getUserWorkspaces(userId: string): Promise<Workspace[]> {
+        const memberships = await this.workspaceMembersRepository.findByUserId(userId);
+        if (memberships.length === 0) return [];
+
+        const workspaceIds = memberships.map(m => m.workspaceId);
+        return this.workspaceRepository.findByIds(workspaceIds);
+    }
+
     async inviteMember(workspaceId: string, userId: string, dto: InviteMemberDto): Promise<void> {
         const hasPermission = await this.checkPermission(workspaceId, userId, 'members:create');
         if (!hasPermission) {
             throw new AppError('Insufficient permissions to invite members', 403);
         }
 
-        const userToInvite = await this.userRepository.findByEmail(dto.email);
-        if (!userToInvite) {
-            throw new AppError('User not found. Invite flow for non-existent users not implemented yet.', 400);
+        const existingUser = await this.userRepository.findByEmail(dto.email);
+        if (existingUser) {
+            const existingMember = await this.workspaceMembersRepository.findByUserAndWorkspace(
+                existingUser.id,
+                workspaceId
+            );
+            if (existingMember) {
+                throw new AppError('User is already a member', 409);
+            }
         }
 
-        const existingMember = await this.workspaceMembersRepository.findByUserAndWorkspace(userToInvite.id, workspaceId);
-        if (existingMember) {
-            throw new AppError('User is already a member', 409);
+        const existingInvitation = await this.workspaceInvitationsRepository.findByWorkspaceAndEmail(
+            workspaceId,
+            dto.email,
+            'pending'
+        );
+        if (existingInvitation) {
+            throw new AppError('Invitation already sent to this email', 409);
         }
 
         const role = await this.workspaceRoleRepository.findByNameAndWorkspace(dto.roleName, workspaceId);
         if (!role) throw new AppError('Role not found', 404);
 
-        const newMember = WorkspaceMember.create({
-            workspaceId: workspaceId,
-            userId: userToInvite.id,
-            roleIds: [role.id]
+        const token = this.generateInviteToken();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7);
+
+        const invitation = WorkspaceInvitation.create({
+            workspaceId,
+            email: dto.email,
+            roleIds: [role.id],
+            accountPermissions: dto.accountPermissions,
+            token,
+            expiresAt,
+            invitedBy: userId
         });
 
-        // Save member first to get the ID
+        const createdInvitation = await this.workspaceInvitationsRepository.create(invitation);
+
+        await this.sendInvitationEmail(createdInvitation, workspaceId);
+    }
+
+    private generateInviteToken(): string {
+        return uuidv4() + '-' + Date.now();
+    }
+
+    private async sendInvitationEmail(invitation: WorkspaceInvitation, workspaceId: string): Promise<void> {
+        const workspace = await this.workspaceRepository.findById(workspaceId);
+        if (!workspace) return;
+
+        const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
+        const acceptUrl = `${baseUrl}/invitations/accept?token=${invitation.token}`;
+
+        console.log(`
+[Email] Invitation to join workspace "${workspace.name}"
+To: ${invitation.email}
+Click to accept: ${acceptUrl}
+Expires in 7 days.
+        `);
+    }
+
+    async resendInvitation(workspaceId: string, userId: string, invitationId: string): Promise<void> {
+        const hasPermission = await this.checkPermission(workspaceId, userId, 'members:create');
+        if (!hasPermission) {
+            throw new AppError('Insufficient permissions to resend invitations', 403);
+        }
+
+        const invitation = await this.workspaceInvitationsRepository.findById(invitationId);
+        if (!invitation || invitation.workspaceId !== workspaceId) {
+            throw new AppError('Invitation not found', 404);
+        }
+
+        if (invitation.status !== 'pending') {
+            throw new AppError('Invitation already accepted or expired', 400);
+        }
+
+        if (invitation.isExpired()) {
+            invitation.markAsExpired();
+            await this.workspaceInvitationsRepository.updateInvitation(invitation);
+            throw new AppError('Invitation has expired. Please create a new invitation.', 400);
+        }
+
+        const newToken = this.generateInviteToken();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7);
+
+        invitation.regenerateToken(newToken, expiresAt);
+        await this.workspaceInvitationsRepository.updateInvitation(invitation);
+
+        await this.sendInvitationEmail(invitation, workspaceId);
+    }
+
+    async cancelInvitation(workspaceId: string, userId: string, invitationId: string): Promise<void> {
+        const hasPermission = await this.checkPermission(workspaceId, userId, 'members:delete');
+        if (!hasPermission) {
+            throw new AppError('Insufficient permissions to cancel invitations', 403);
+        }
+
+        const invitation = await this.workspaceInvitationsRepository.findById(invitationId);
+        if (!invitation || invitation.workspaceId !== workspaceId) {
+            throw new AppError('Invitation not found', 404);
+        }
+
+        await this.workspaceInvitationsRepository.deleteInvitation(invitationId);
+    }
+
+    async getInvitations(workspaceId: string, userId: string, params: {
+        page?: number;
+        limit?: number;
+        status?: string;
+    } = {}): Promise<{ invitations: any[]; total: number }> {
+        const hasPermission = await this.checkPermission(workspaceId, userId, 'members:read');
+        if (!hasPermission) {
+            throw new AppError('Insufficient permissions to view invitations', 403);
+        }
+
+        const page = params.page || 1;
+        const limit = params.limit || 10;
+        const offset = (page - 1) * limit;
+
+        return this.workspaceInvitationsRepository.findByWorkspaceId(workspaceId, {
+            limit,
+            offset,
+            status: params.status
+        });
+    }
+
+    async acceptInvitation(
+        token: string,
+        registrationData?: { firstName: string; lastName: string; password: string }
+    ): Promise<{ success: boolean; message: string }> {
+        const invitation = await this.workspaceInvitationsRepository.findByToken(token);
+        if (!invitation) {
+            throw new AppError('Invalid invitation', 400);
+        }
+
+        if (invitation.status === 'accepted') {
+            throw new AppError('Invitation already accepted', 400);
+        }
+
+        if (invitation.status === 'expired' || invitation.isExpired()) {
+            invitation.markAsExpired();
+            await this.workspaceInvitationsRepository.updateInvitation(invitation);
+            throw new AppError('Invitation expired', 400);
+        }
+
+        let userId: string;
+        const existingUser = await this.userRepository.findByEmail(invitation.email);
+
+        if (existingUser) {
+            userId = existingUser.id;
+
+            const alreadyMember = await this.workspaceMembersRepository.findByUserAndWorkspace(userId, invitation.workspaceId);
+            if (alreadyMember) {
+                invitation.markAsExpired();
+                await this.workspaceInvitationsRepository.updateInvitation(invitation);
+                throw new AppError('You are already a member of this workspace', 409);
+            }
+        } else {
+            if (!registrationData) {
+                throw new AppError('Registration required. Please provide your name and password.', 400);
+            }
+
+            const registeredUser = await this.authService.register({
+                email: invitation.email,
+                firstName: registrationData.firstName,
+                lastName: registrationData.lastName,
+                password: registrationData.password
+            });
+
+            userId = registeredUser.user.id;
+        }
+
+        const newMember = WorkspaceMember.create({
+            workspaceId: invitation.workspaceId,
+            userId: userId,
+            roleIds: invitation.roleIds,
+            status: 'active'
+        });
+
         const createdMember = await this.workspaceMembersRepository.create(newMember);
-        
-        // Save account permissions if provided
-        if (dto.accountPermissions && Object.keys(dto.accountPermissions).length > 0) {
+
+        if (invitation.accountPermissions && Object.keys(invitation.accountPermissions).length > 0) {
             await this.workspaceMembersRepository.saveAccountPermissions(
-                createdMember.id, 
-                dto.accountPermissions
+                createdMember.id,
+                invitation.accountPermissions
             );
         }
+
+        invitation.accept(userId);
+        await this.workspaceInvitationsRepository.updateInvitation(invitation);
+
+        return { success: true, message: 'Successfully joined workspace' };
+    }
+
+    async getMyInvitations(userId: string): Promise<any[]> {
+        const user = await this.userRepository.findById(userId);
+        if (!user) {
+            throw new AppError('User not found', 404);
+        }
+
+        const invitations = await this.workspaceInvitationsRepository.findByEmail(user.email);
+        
+        const validInvitations = [];
+        for (const inv of invitations) {
+            if (inv.isExpired()) {
+                inv.markAsExpired();
+                await this.workspaceInvitationsRepository.updateInvitation(inv);
+            } else {
+                const workspace = await this.workspaceRepository.findById(inv.workspaceId);
+                validInvitations.push({
+                    id: inv.id,
+                    workspaceId: inv.workspaceId,
+                    workspaceName: workspace?.name,
+                    email: inv.email,
+                    roleIds: inv.roleIds,
+                    status: inv.status,
+                    expiresAt: inv.expiresAt,
+                    createdAt: inv.createdAt
+                });
+            }
+        }
+
+        return validInvitations;
     }
 
     async removeMember(workspaceId: string, userId: string, memberIdToRemove: string): Promise<void> {
@@ -350,6 +619,63 @@ export class WorkspaceService {
 
         // Invalidate permission cache for all members in this workspace
         await PermissionCache.invalidateWorkspace(workspaceId);
+    }
+
+    async duplicateRole(workspaceId: string, userId: string, roleId: string): Promise<WorkspaceRole> {
+        const hasPermission = await this.checkPermission(workspaceId, userId, 'roles:create');
+        if (!hasPermission) throw new AppError('Insufficient permissions to duplicate roles', 403);
+
+        const role = await this.workspaceRoleRepository.findById(roleId);
+        if (!role || role.workspaceId !== workspaceId) throw new AppError('Role not found', 404);
+
+        // Check if role with same name already exists
+        const existing = await this.workspaceRoleRepository.findByNameAndWorkspace(`${role.name} (Copy)`, workspaceId);
+        if (existing) throw new AppError('Role "Copy" already exists in this workspace', 400);
+
+        const newRole = WorkspaceRole.create({
+            name: `${role.name} (Copy)`,
+            description: role.description,
+            workspaceId: workspaceId,
+            permissions: [...role.permissions]
+        });
+
+        await this.workspaceRoleRepository.create(newRole);
+        return newRole;
+    }
+
+    async uploadLogo(workspaceId: string, userId: string, file: Buffer, filename: string, contentType: string): Promise<{ logoUrl: string }> {
+        const member = await this.workspaceMembersRepository.findByUserAndWorkspace(userId, workspaceId);
+        if (!member) {
+            throw new AppError('Not a member of this workspace', 403);
+        }
+
+        const hasPermission = await this.checkPermission(workspaceId, userId, 'workspace:update');
+        if (!hasPermission) {
+            throw new AppError('Insufficient permissions to upload logo', 403);
+        }
+
+        const workspace = await this.workspaceRepository.findById(workspaceId);
+        if (!workspace) {
+            throw new AppError('Workspace not found', 404);
+        }
+
+        const bucket = this.storageService.getBucket('avatars');
+        const attachment = await this.storageService.uploadFile({
+            file,
+            filename: `logo-${workspaceId}-${uuidv4()}`,
+            contentType,
+            bucket,
+            workspaceId,
+            userId,
+            metadata: { type: 'workspace-logo', workspaceId }
+        });
+
+        const logoUrl = this.storageService.getPublicUrl(bucket, attachment.key);
+
+        workspace.updateDetails({ logo: logoUrl });
+        await this.workspaceRepository.save(workspace);
+
+        return { logoUrl };
     }
 
     async checkPermission(workspaceId: string, userId: string, permission: string): Promise<boolean> {

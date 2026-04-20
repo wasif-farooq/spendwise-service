@@ -18,6 +18,7 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { WorkspaceRepository } from '@domains/workspaces/repositories/WorkspaceRepository';
 import { WorkspaceRoleRepository } from '@domains/workspaces/repositories/WorkspaceRoleRepository';
 import { WorkspaceMembersRepository } from '@domains/workspaces/repositories/WorkspaceMembersRepository';
+import { WorkspaceService } from '@domains/workspaces/services/WorkspaceService';
 import { Workspace } from '@domains/workspaces/models/Workspace';
 import { WorkspaceRole } from '@domains/workspaces/models/WorkspaceRole';
 import { WorkspaceMember } from '@domains/workspaces/models/WorkspaceMember';
@@ -30,6 +31,7 @@ export class AuthService {
         @Inject(TOKENS.WorkspaceRepository) private workspaceRepository: WorkspaceRepository,
         @Inject(TOKENS.WorkspaceRoleRepository) private workspaceRoleRepository: WorkspaceRoleRepository,
         @Inject(TOKENS.WorkspaceMembersRepository) private workspaceMembersRepository: WorkspaceMembersRepository,
+        @Inject(TOKENS.WorkspaceService) private workspaceService: WorkspaceService,
         // Optional Cache Injection (Manual for now in Factory)
         private cache?: any
     ) { }
@@ -68,36 +70,22 @@ export class AuthService {
         });
 
         // Transactional registration
-        await this.db.transaction(async (trx) => {
-            // 1. Save User
-            await this.userRepo.save(user, { db: trx });
-            await this.authRepo.save(identity, { db: trx });
+        try {
+            await this.db.transaction(async (trx) => {
+                // 1. Save User
+                await this.userRepo.save(user, { db: trx });
+                await this.authRepo.save(identity, { db: trx });
 
-            // 2. Create Workspace "My Account"
-            const workspace = Workspace.create({
-                name: "My Account",
-                slug: `my-account-${user.id.substring(0, 8)}`, // Simple slug generation
-                ownerId: user.id
+                // 2. Create Workspace "My Account" with default categories
+                await this.workspaceService.create(user.id, {
+                    name: "My Account",
+                    slug: `my-account-${user.id.substring(0, 8)}`
+                }, { db: trx });
             });
-            const trxWorkspace = await this.workspaceRepository.create(workspace, { db: trx });
-
-            // 3. Create Role "Owner"
-            const adminRole = WorkspaceRole.create({
-                name: "Owner",
-                workspaceId: trxWorkspace.id,
-                permissions: ['*'],
-                isSystem: true
-            });
-            const trxRole = await this.workspaceRoleRepository.create(adminRole, { db: trx });
-
-            // 4. Assign Role to User
-            const member = WorkspaceMember.create({
-                userId: user.id,
-                workspaceId: trxWorkspace.id,
-                roleIds: [trxRole.id]
-            });
-            await this.workspaceMembersRepository.create(member, { db: trx });
-        });
+        } catch (txError) {
+            console.error('[AuthService] Registration transaction failed:', txError);
+            throw txError;
+        }
 
         // Mock Send Registration Email
         console.log(`[Mock Email] Registration verification code for ${user.email}: ${verificationCode}`);

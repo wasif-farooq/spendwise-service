@@ -2,6 +2,7 @@ import { CategoryRepository } from '../repositories/CategoryRepository';
 import { Category, CategoryProps } from '../models/Category';
 import { AppError } from '@shared/errors/AppError';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
+import { DatabaseFacade } from '@facades/DatabaseFacade';
 
 export class CategoryService {
     constructor(
@@ -25,12 +26,20 @@ export class CategoryService {
         return this.categoryRepo.findByType(type, workspaceId);
     }
 
-    async createCategory(data: CategoryProps, workspaceId: string): Promise<Category> {
+    async createCategory(data: CategoryProps, workspaceId: string, options?: { db?: DatabaseFacade }): Promise<Category> {
         const categoryData = {
             ...data,
             workspaceId,
         };
-        return this.categoryRepo.create(categoryData);
+        return this.categoryRepo.create(categoryData, options);
+    }
+
+    async bulkCreate(categories: CategoryProps[], workspaceId: string, options?: { db?: DatabaseFacade }): Promise<Category[]> {
+        const categoriesWithWorkspace = categories.map(cat => ({
+            ...cat,
+            workspaceId,
+        }));
+        return this.categoryRepo.bulkCreate(categoriesWithWorkspace, options);
     }
 
     async updateCategory(id: string, data: Partial<CategoryProps>, workspaceId: string): Promise<Category> {

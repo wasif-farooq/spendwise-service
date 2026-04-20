@@ -20,6 +20,8 @@ export class ServiceFactory {
         const redisInfo = this.redisFactory.createClient();
         redisInfo.connect().catch(console.error); // Lazy connect
 
+        const workspaceService = this.createWorkspaceService();
+
         return new AuthService(
             this.db,
             this.repositoryFactory.createUserRepository(),
@@ -27,6 +29,7 @@ export class ServiceFactory {
             this.repositoryFactory.createWorkspaceRepository(),
             this.repositoryFactory.createWorkspaceRoleRepository(),
             this.repositoryFactory.createWorkspaceMembersRepository(),
+            workspaceService,
             redisInfo
         );
     }
@@ -49,7 +52,9 @@ export class ServiceFactory {
             this.repositoryFactory.createWorkspaceRepository(),
             this.repositoryFactory.createWorkspaceMembersRepository(),
             this.repositoryFactory.createWorkspaceRoleRepository(),
+            this.repositoryFactory.createWorkspaceInvitationsRepository(),
             this.repositoryFactory.createUserRepository(),
+            this.createAuthService(),
             this.db,
             this.repositoryFactory.createAccountRepository(),
             this.repositoryFactory.createTransactionRepository(),

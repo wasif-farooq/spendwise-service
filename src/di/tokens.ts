@@ -13,6 +13,7 @@ export const TOKENS = {
     WorkspaceRepository: 'WorkspaceRepository',
     WorkspaceRoleRepository: 'WorkspaceRoleRepository',
     WorkspaceMembersRepository: 'WorkspaceMembersRepository',
+    WorkspaceInvitationsRepository: 'WorkspaceInvitationsRepository',
     UserPreferencesRepository: 'UserPreferencesRepository',
     UserPreferencesService: 'UserPreferencesService',
     WorkspaceService: 'WorkspaceService',
