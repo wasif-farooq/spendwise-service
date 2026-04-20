@@ -40,3 +40,5 @@ grafana_data/
 
 # Project Specific
 config/monitoring/prometheus.yml
+
+.agents/

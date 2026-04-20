@@ -63,7 +63,7 @@ export class TransactionRepository {
 
     async findByAccountId(accountId: string, limit = 100, offset = 0): Promise<Transaction[]> {
         const result = await this.dbToUse.query(
-            'SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.account_id = $1 ORDER BY t.date DESC, t.created_at DESC LIMIT $2 OFFSET $3',
+            'SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.account_id = $1 ORDER BY t.created_at DESC, t.id DESC LIMIT $2 OFFSET $3',
             [accountId, limit, offset]
         );
         return result.rows.map((row: any) => this.mapToEntity(row));
@@ -72,16 +72,16 @@ export class TransactionRepository {
     // ==================== CURSOR-BASED PAGINATION ====================
 
     /**
-     * Decode cursor string to get id and date for pagination
-     * Cursor format: base64("id-date")
+     * Decode cursor string to get id and created_at for pagination
+     * Cursor format: base64("id-created_at")
      */
     private decodeCursor(cursor?: string): { id: string; date: string } | null {
         if (!cursor) return null;
         try {
             const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
-            const [id, date] = decoded.split('|');
-            if (!id || !date) return null;
-            return { id, date };
+            const [id, createdAt] = decoded.split('|');
+            if (!id || !createdAt) return null;
+            return { id, date: createdAt };
         } catch {
             return null;
         }
@@ -89,13 +89,13 @@ export class TransactionRepository {
 
     /**
      * Encode transaction to cursor string
-     * Cursor format: base64("id-date")
+     * Cursor format: base64("id-created_at")
      */
     private encodeCursor(transaction: Transaction): string {
-        const dateStr = transaction.date instanceof Date 
-            ? transaction.date.toISOString().split('T')[0]
-            : String(transaction.date);
-        return Buffer.from(`${transaction.id}|${dateStr}`).toString('base64');
+        const createdAtStr = transaction.createdAt instanceof Date 
+            ? transaction.createdAt.toISOString()
+            : String(transaction.createdAt);
+        return Buffer.from(`${transaction.id}|${createdAtStr}`).toString('base64');
     }
 
     /**
@@ -114,9 +114,9 @@ export class TransactionRepository {
         const params: any[] = [accountId];
         let paramIndex = 2;
 
-        // Apply cursor-based filtering (use date + id for stable ordering)
+        // Apply cursor-based filtering (use created_at + id for stable ordering)
         if (cursorData) {
-            whereClause += ` AND (date < $${paramIndex} OR (date = $${paramIndex} AND id < $${paramIndex + 1}))`;
+            whereClause += ` AND (created_at < $${paramIndex} OR (created_at = $${paramIndex} AND id < $${paramIndex + 1}))`;
             params.push(cursorData.date, cursorData.id);
             paramIndex += 2;
         }
@@ -158,7 +158,7 @@ export class TransactionRepository {
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id 
             ${whereClause} 
-            ORDER BY date DESC, id DESC 
+            ORDER BY created_at DESC, id DESC 
             LIMIT $${paramIndex}
         `;
         params.push(limit + 1);
@@ -248,7 +248,7 @@ export class TransactionRepository {
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id
             ${whereClause}
-            ORDER BY t.date DESC, t.id DESC
+            ORDER BY t.created_at DESC, t.id DESC
             LIMIT $${paramIndex}
         `;
         params.push(limit + 1);
@@ -349,7 +349,7 @@ export class TransactionRepository {
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id
             ${whereClause}
-            ORDER BY t.date DESC, t.created_at DESC
+            ORDER BY t.created_at DESC, t.id DESC
             LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
         `;
         
