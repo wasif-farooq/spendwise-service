@@ -77,6 +77,59 @@ export class StorageController {
     }
 
     /**
+     * POST /v1/storage/:workspaceId/transactions/receipt
+     * Upload a transaction receipt (dedicated endpoint)
+     */
+    async uploadTransactionReceipt(req: Request, res: Response): Promise<void> {
+        try {
+            if (!req.file) {
+                res.status(400).json({ error: 'No file uploaded' });
+                return;
+            }
+
+            const { workspaceId } = req.params;
+            const userId = req.user?.id;
+
+            if (!workspaceId) {
+                res.status(400).json({ error: 'workspaceId is required' });
+                return;
+            }
+
+            // Use receipts bucket
+            const bucket = this.service.getBucket('receipts');
+
+            const attachment = await this.service.uploadFile({
+                file: req.file.buffer,
+                filename: req.file.originalname,
+                contentType: req.file.mimetype,
+                bucket,
+                workspaceId,
+                userId,
+            });
+
+            // Get presigned URL for immediate use
+            const { url, urlExpiresAt } = await this.service.getFile(attachment.id);
+
+            res.status(201).json({
+                id: attachment.id,
+                workspaceId: attachment.workspaceId,
+                userId: attachment.userId,
+                bucket: attachment.bucket,
+                key: attachment.key,
+                filename: attachment.filename,
+                contentType: attachment.contentType,
+                size: attachment.size,
+                url,
+                urlExpiresAt,
+                createdAt: attachment.createdAt,
+            });
+        } catch (error) {
+            console.error('Receipt upload error:', error);
+            res.status(500).json({ error: error instanceof Error ? error.message : 'Receipt upload failed' });
+        }
+    }
+
+    /**
      * GET /v1/storage/:id
      * Get file metadata and presigned URL
      */

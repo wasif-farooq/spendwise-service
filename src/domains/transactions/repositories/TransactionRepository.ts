@@ -647,6 +647,7 @@ export class TransactionRepository {
             exchange_rate: data.exchangeRate,
             converted_amount: data.convertedAmount,
             base_amount: data.baseAmount,
+            receipt_id: data.receiptId,
             created_at: data.createdAt,
             updated_at: data.updatedAt,
         };
@@ -681,8 +682,9 @@ export class TransactionRepository {
                 exchange_rate = $9,
                 converted_amount = $10,
                 base_amount = $11,
-                updated_at = $12
-            WHERE id = $13
+                receipt_id = $12,
+                updated_at = $13
+            WHERE id = $14
             RETURNING *
         `;
 
@@ -698,6 +700,7 @@ export class TransactionRepository {
             data.exchangeRate,
             data.convertedAmount,
             data.baseAmount,
+            data.receiptId,
             new Date(),
             transaction.id
         ]);
@@ -728,6 +731,7 @@ export class TransactionRepository {
             exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
             convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
             baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
+            receiptId: row.receipt_id,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
         };
@@ -750,6 +754,7 @@ export class TransactionRepository {
             exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
             convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
             baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
+            receiptId: row.receipt_id,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
         };

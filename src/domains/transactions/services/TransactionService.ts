@@ -16,6 +16,7 @@ export interface CreateTransactionDTO {
     categoryId?: string;
     linkedTransactionIds?: string[];
     exchangeRate?: number;
+    receiptId?: string;
 }
 
 export interface UpdateTransactionDTO {
@@ -29,6 +30,7 @@ export interface UpdateTransactionDTO {
     categoryId?: string;
     linkedTransactionIds?: string[] | null;
     exchangeRate?: number;
+    receiptId?: string;
 }
 
 export interface LinkTransactionDTO {

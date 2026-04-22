@@ -89,4 +89,17 @@ router.get(
     controller.listByWorkspace.bind(controller)
 );
 
+/**
+ * POST /v1/storage/:workspaceId/transactions/receipt
+ * Upload a transaction receipt
+ * Body: multipart/form-data
+ * - file: File (required)
+ */
+router.post(
+    '/:workspaceId/transactions/receipt',
+    upload.single('file'),
+    requirePermission('storage:create'),
+    controller.uploadTransactionReceipt.bind(controller)
+);
+
 export default router;
