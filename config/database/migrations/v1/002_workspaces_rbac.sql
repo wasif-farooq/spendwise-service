@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS workspace_members (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     role_ids TEXT[] DEFAULT '{}',
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'invited', 'removed')),
     joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, workspace_id)
 );

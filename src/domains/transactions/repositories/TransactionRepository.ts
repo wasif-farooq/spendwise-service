@@ -82,9 +82,14 @@ export class TransactionRepository {
         if (!result.rows[0]) return null;
 
         const row = result.rows[0];
-        const linkedTransaction = row.linked_transaction_id 
-            ? await this.findByIdBasic(row.linked_transaction_id)
-            : null;
+        
+        // Fetch all linked transactions
+        const linkedTransactionIds = row.linked_transaction_ids || [];
+        const linkedTransactions = await Promise.all(
+            linkedTransactionIds.map((linkedId: string) => this.findByIdBasic(linkedId))
+        );
+        
+        const filteredLinkedTransactions = linkedTransactions.filter(Boolean);
 
         return {
             id: row.id,
@@ -105,19 +110,18 @@ export class TransactionRepository {
             categoryName: row.category_name,
             categoryIcon: row.category_icon,
             categoryColor: row.category_color,
-            linkedTransactionId: row.linked_transaction_id,
-            linkedTransaction: linkedTransaction ? {
-                id: linkedTransaction.id,
-                accountId: linkedTransaction.account_id,
-                accountName: linkedTransaction.account_name,
-                amount: parseFloat(linkedTransaction.amount),
-                currency: linkedTransaction.currency,
-                type: linkedTransaction.type,
-                description: linkedTransaction.description,
-                date: linkedTransaction.date,
-                categoryName: linkedTransaction.category_name
-            } : null,
-            linkedAccountId: row.linked_account_id,
+            linkedTransactionIds: linkedTransactionIds,
+            linkedTransactions: filteredLinkedTransactions.map(linkedTx => ({
+                id: linkedTx.id,
+                accountId: linkedTx.account_id,
+                accountName: linkedTx.account_name,
+                amount: parseFloat(linkedTx.amount),
+                currency: linkedTx.currency,
+                type: linkedTx.type,
+                description: linkedTx.description,
+                date: linkedTx.date,
+                categoryName: linkedTx.category_name
+            })),
             exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
             convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
             baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
@@ -639,8 +643,7 @@ export class TransactionRepository {
             description: data.description,
             date: data.date,
             category_id: data.categoryId,
-            linked_transaction_id: data.linkedTransactionId,
-            linked_account_id: data.linkedAccountId,
+            linked_transaction_ids: data.linkedTransactionIds || [],
             exchange_rate: data.exchangeRate,
             converted_amount: data.convertedAmount,
             base_amount: data.baseAmount,
@@ -674,13 +677,12 @@ export class TransactionRepository {
                 description = $5,
                 date = $6,
                 category_id = $7,
-                linked_transaction_id = $8,
-                linked_account_id = $9,
-                exchange_rate = $10,
-                converted_amount = $11,
-                base_amount = $12,
-                updated_at = $13
-            WHERE id = $14
+                linked_transaction_ids = $8,
+                exchange_rate = $9,
+                converted_amount = $10,
+                base_amount = $11,
+                updated_at = $12
+            WHERE id = $13
             RETURNING *
         `;
 
@@ -692,8 +694,7 @@ export class TransactionRepository {
             data.description,
             data.date,
             data.categoryId,
-            data.linkedTransactionId,
-            data.linkedAccountId,
+            data.linkedTransactionIds || [],
             data.exchangeRate,
             data.convertedAmount,
             data.baseAmount,
@@ -723,8 +724,7 @@ export class TransactionRepository {
             description: row.description,
             date: row.date,
             categoryId: row.category_id,
-            linkedTransactionId: row.linked_transaction_id,
-            linkedAccountId: row.linked_account_id,
+            linkedTransactionIds: row.linked_transaction_ids || [],
             exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
             convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
             baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
@@ -746,8 +746,7 @@ export class TransactionRepository {
             date: row.date,
             categoryId: row.category_id,
             categoryName: row.category_name || null,
-            linkedTransactionId: row.linked_transaction_id,
-            linkedAccountId: row.linked_account_id,
+            linkedTransactionIds: row.linked_transaction_ids || [],
             exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
             convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
             baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,

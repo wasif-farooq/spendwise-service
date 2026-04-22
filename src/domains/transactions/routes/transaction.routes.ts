@@ -35,8 +35,7 @@ const CreateTransactionSchema = z.object({
     description: z.string().optional(),
     date: z.string(),
     categoryId: z.string().uuid().optional(),
-    linkedTransactionId: z.string().uuid().optional(),
-    linkedAccountId: z.string().uuid().optional(),
+    linkedTransactionIds: z.array(z.string().uuid()).optional(),
     exchangeRate: z.number().optional(),
 });
 
@@ -48,15 +47,18 @@ const UpdateTransactionSchema = z.object({
     description: z.string().optional(),
     date: z.string().optional(),
     categoryId: z.string().uuid().optional(),
-    linkedTransactionId: z.string().uuid().optional(),
-    linkedAccountId: z.string().uuid().optional(),
+    linkedTransactionIds: z.array(z.string().uuid()).optional(),
     exchangeRate: z.number().optional(),
 });
 
-// Link transaction schema
+// Link transaction schema (add single)
 const LinkTransactionSchema = z.object({
     linkedTransactionId: z.string().uuid('Invalid linked transaction ID'),
-    linkedAccountId: z.string().uuid('Invalid linked account ID'),
+});
+
+// Unlink transaction schema (remove single)
+const UnlinkTransactionSchema = z.object({
+    linkedId: z.string().uuid('Invalid linked transaction ID'),
 });
 
 // Transfer schema
@@ -132,11 +134,12 @@ router.post('/:workspaceId/accounts/:accountId/transactions/:id/link',
     controller.linkTransaction.bind(controller)
 );
 
-// Unlink transaction
+// Unlink transaction (remove single link by linkedId in body)
 router.delete('/:workspaceId/accounts/:accountId/transactions/:id/link', 
     validateParams(WorkspaceIdParamSchema), 
     validateParams(AccountIdParamSchema),
     validateParams(TransactionIdParamSchema), 
+    validateBody(UnlinkTransactionSchema), 
     requirePermission('transaction:edit'), 
     controller.unlinkTransaction.bind(controller)
 );

@@ -1,26 +1,45 @@
 import { RepositoryFactory } from './RepositoryFactory';
 import { RedisFactory } from '@database/factories/RedisFactory';
-import { AuthService } from '@domains/auth/services/AuthService';
-import { UserService } from '@domains/users/services/UserService';
-import { UserPreferencesService } from '@domains/users/services/UserPreferencesService';
-import { FeatureFlagService } from '@domains/feature-flags/services/FeatureFlagService';
-import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
-
+import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
+import { CategoryService } from '@domains/categories/services/CategoryService';
 
 export class ServiceFactory {
     private redisFactory = new RedisFactory();
+    private redisClient: ReturnType<RedisFactory['createClient']> | null = null;
 
     constructor(
         private repositoryFactory: RepositoryFactory,
         private db: DatabaseFacade
     ) { }
 
-    createAuthService(): AuthService {
-        const redisInfo = this.redisFactory.createClient();
-        redisInfo.connect().catch(console.error); // Lazy connect
+    private getRedisClient() {
+        if (!this.redisClient) {
+            this.redisClient = this.redisFactory.createClient();
+            this.redisClient.connect().catch(console.error);
+        }
+        return this.redisClient;
+    }
 
-        const workspaceService = this.createWorkspaceService();
+    createAuthService() {
+        const { AuthService } = require('@domains/auth/services/AuthService');
+        const { WorkspaceService } = require('@domains/workspaces/services/WorkspaceService');
+
+        const categoryRepo = new CategoryRepository(this.db);
+        const categoryService = new CategoryService(categoryRepo, this.repositoryFactory.createTransactionRepository());
+        const wsService = new WorkspaceService(
+            this.repositoryFactory.createWorkspaceRepository(),
+            this.repositoryFactory.createWorkspaceMembersRepository(),
+            this.repositoryFactory.createWorkspaceRoleRepository(),
+            this.repositoryFactory.createWorkspaceInvitationsRepository(),
+            this.repositoryFactory.createUserRepository(),
+            null as any,
+            this.db,
+            this.repositoryFactory.createAccountRepository(),
+            this.repositoryFactory.createTransactionRepository(),
+            categoryRepo,
+            categoryService
+        );
 
         return new AuthService(
             this.db,
@@ -29,32 +48,29 @@ export class ServiceFactory {
             this.repositoryFactory.createWorkspaceRepository(),
             this.repositoryFactory.createWorkspaceRoleRepository(),
             this.repositoryFactory.createWorkspaceMembersRepository(),
-            workspaceService,
-            redisInfo
+            wsService,
+            this.getRedisClient()
         );
     }
 
-    createUserService(): UserService {
-        return new UserService(
-            this.repositoryFactory.createUserRepository()
-        );
+    createUserService() {
+        const { UserService } = require('@domains/users/services/UserService');
+        return new UserService(this.repositoryFactory.createUserRepository());
     }
 
-    createWorkspaceService(): import('@domains/workspaces/services/WorkspaceService').WorkspaceService {
+    createWorkspaceService() {
         const { WorkspaceService } = require('@domains/workspaces/services/WorkspaceService');
-        const { CategoryRepository } = require('@domains/categories/repositories/CategoryRepository');
-        const { CategoryService } = require('@domains/categories/services/CategoryService');
-        
+
         const categoryRepo = new CategoryRepository(this.db);
         const categoryService = new CategoryService(categoryRepo, this.repositoryFactory.createTransactionRepository());
-        
+
         return new WorkspaceService(
             this.repositoryFactory.createWorkspaceRepository(),
             this.repositoryFactory.createWorkspaceMembersRepository(),
             this.repositoryFactory.createWorkspaceRoleRepository(),
             this.repositoryFactory.createWorkspaceInvitationsRepository(),
             this.repositoryFactory.createUserRepository(),
-            this.createAuthService(),
+            null as any,
             this.db,
             this.repositoryFactory.createAccountRepository(),
             this.repositoryFactory.createTransactionRepository(),
@@ -63,19 +79,18 @@ export class ServiceFactory {
         );
     }
 
-    createUserPreferencesService(): UserPreferencesService {
-        return new UserPreferencesService(
-            this.repositoryFactory.createUserPreferencesRepository()
-        );
+    createUserPreferencesService() {
+        const { UserPreferencesService } = require('@domains/users/services/UserPreferencesService');
+        return new UserPreferencesService(this.repositoryFactory.createUserPreferencesRepository());
     }
 
-    createFeatureFlagService(): FeatureFlagService {
-        return new FeatureFlagService(
-            this.repositoryFactory.createFeatureFlagRepository()
-        );
+    createFeatureFlagService() {
+        const { FeatureFlagService } = require('@domains/feature-flags/services/FeatureFlagService');
+        return new FeatureFlagService(this.repositoryFactory.createFeatureFlagRepository());
     }
 
-    createSubscriptionService(): SubscriptionService {
+    createSubscriptionService() {
+        const { SubscriptionService } = require('@domains/subscription/services/SubscriptionService');
         return new SubscriptionService(
             this.repositoryFactory.createSubscriptionPlanRepository(),
             this.repositoryFactory.createUserSubscriptionRepository()

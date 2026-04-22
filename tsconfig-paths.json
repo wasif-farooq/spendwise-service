@@ -1,0 +1,21 @@
+{
+    "baseUrl": ".",
+    "paths": {
+        "@shared/*": ["src/@shared/*"],
+        "@domains/*": ["src/domains/*"],
+        "@facades/*": ["src/facades/*"],
+        "@interfaces/*": ["src/interfaces/*"],
+        "@abstract-factories/*": ["src/abstract-factories/*"],
+        "@factories/*": ["src/factories/*"],
+        "@config/*": ["src/config/*"],
+        "@di/*": ["src/di/*"],
+        "@cache/*": ["src/cache/*"],
+        "@messaging/*": ["src/messaging/*"],
+        "@monitoring/*": ["src/monitoring/*"],
+        "@bootstrap/*": ["src/bootstrap/*"],
+        "@server/*": ["src/server/*"],
+        "@database/*": ["src/database/*"],
+        "@processes/*": ["processes/*"],
+        "@tests/*": ["tests/*"]
+    }
+}

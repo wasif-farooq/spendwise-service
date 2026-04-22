@@ -14,9 +14,7 @@ export interface CreateTransactionDTO {
     description?: string;
     date: string;
     categoryId?: string;
-    // For linked transactions (replaces transfer)
-    linkedTransactionId?: string;
-    linkedAccountId?: string;
+    linkedTransactionIds?: string[];
     exchangeRate?: number;
 }
 
@@ -29,14 +27,16 @@ export interface UpdateTransactionDTO {
     date?: string;
     category?: string;
     categoryId?: string;
-    linkedTransactionId?: string;
-    linkedAccountId?: string;
+    linkedTransactionIds?: string[] | null;
     exchangeRate?: number;
 }
 
 export interface LinkTransactionDTO {
     linkedTransactionId: string;
-    linkedAccountId: string;
+}
+
+export interface UnlinkTransactionDTO {
+    linkedId: string;
 }
 
 export interface TransferDTO {
@@ -143,7 +143,7 @@ export class TransactionService {
                 currency: data.currency,
                 description: data.description || `Transfer to ${toAccount.name}`,
                 date: new Date(data.date),
-                linkedAccountId: data.toAccountId,
+                linkedTransactionIds: [],
                 exchangeRate,
                 convertedAmount,
             });
@@ -160,8 +160,7 @@ export class TransactionService {
                 currency: toAccount.currency,
                 description: data.description || `Transfer from ${fromAccount.name}`,
                 date: new Date(data.date),
-                linkedAccountId: data.fromAccountId,
-                linkedTransactionId: savedWithdraw.id,
+                linkedTransactionIds: [savedWithdraw.id],
                 exchangeRate,
                 convertedAmount: data.amount, // store original amount
             });
@@ -171,7 +170,7 @@ export class TransactionService {
             // Update withdraw to reference the deposit
             const updatedWithdraw = Transaction.restore({
                 ...savedWithdraw.getProps(),
-                linkedTransactionId: savedDeposit.id,
+                linkedTransactionIds: [savedDeposit.id],
             }, savedWithdraw.id);
             await trxTransactionRepo.update(updatedWithdraw);
 
@@ -269,8 +268,7 @@ export class TransactionService {
                 description: data.description,
                 date: new Date(data.date),
                 categoryId: data.categoryId,
-                linkedTransactionId: data.linkedTransactionId,
-                linkedAccountId: data.linkedAccountId,
+                linkedTransactionIds: data.linkedTransactionIds || [],
                 exchangeRate: data.exchangeRate,
             });
 
@@ -281,22 +279,21 @@ export class TransactionService {
             const stats = await trxTransactionRepo.getAccountStats(data.accountId);
             await trxAccountRepo.updateBalance(data.accountId, stats.balance);
 
-            // If linking to another transaction, update the linked transaction
-            if (data.linkedTransactionId && data.linkedAccountId) {
-                const linkedTx = await trxTransactionRepo.findById(data.linkedTransactionId);
-                if (linkedTx) {
-                    const linkedProps = linkedTx.getProps();
-                    const updatedLinked = Transaction.create({
-                        ...linkedProps,
-                        linkedTransactionId: saved.id,
-                        linkedAccountId: data.accountId,
-                    });
-                    (updatedLinked as any).id = linkedTx.id;
-                    await trxTransactionRepo.update(updatedLinked);
-                    // Invalidate cache and update balance for linked account too
-                    trxTransactionRepo.invalidateAccountStatsCache(data.linkedAccountId);
-                    const linkedStats = await trxTransactionRepo.getAccountStats(data.linkedAccountId);
-                    await trxAccountRepo.updateBalance(data.linkedAccountId, linkedStats.balance);
+            // If linking to transactions, update them as well (bidirectional)
+            if (data.linkedTransactionIds && data.linkedTransactionIds.length > 0) {
+                for (const linkedTxId of data.linkedTransactionIds) {
+                    const linkedTx = await trxTransactionRepo.findById(linkedTxId);
+                    if (linkedTx) {
+                        const linkedProps = linkedTx.getProps();
+                        const existingLinkedIds = linkedProps.linkedTransactionIds || [];
+                        if (!existingLinkedIds.includes(saved.id)) {
+                            const updatedLinked = Transaction.restore({
+                                ...linkedProps,
+                                linkedTransactionIds: [...existingLinkedIds, saved.id],
+                            }, linkedTx.id);
+                            await trxTransactionRepo.update(updatedLinked);
+                        }
+                    }
                 }
             }
 
@@ -332,8 +329,9 @@ export class TransactionService {
                 date: data.date ? new Date(data.date) : updatedProps.date,
                 categoryId: data.categoryId ?? updatedProps.categoryId,
                 categoryName: data.category ?? updatedProps.categoryName,
-                linkedTransactionId: data.linkedTransactionId ?? updatedProps.linkedTransactionId,
-                linkedAccountId: data.linkedAccountId ?? updatedProps.linkedAccountId,
+                linkedTransactionIds: data.linkedTransactionIds !== undefined 
+                    ? (data.linkedTransactionIds || []) 
+                    : updatedProps.linkedTransactionIds,
                 exchangeRate: data.exchangeRate ?? updatedProps.exchangeRate,
                 baseAmount: updatedProps.baseAmount,
                 createdAt: updatedProps.createdAt,
@@ -374,31 +372,35 @@ export class TransactionService {
         }
 
         const updatedProps = existing.getProps();
+        const currentLinkedIds = updatedProps.linkedTransactionIds || [];
         
-        const updatedTransaction = Transaction.create({
+        // Don't add if already linked
+        if (currentLinkedIds.includes(dto.linkedTransactionId)) {
+            throw new AppError('Transaction already linked', 400);
+        }
+        
+        const updatedTransaction = Transaction.restore({
             ...updatedProps,
-            linkedTransactionId: dto.linkedTransactionId,
-            linkedAccountId: dto.linkedAccountId,
-        });
-
-        (updatedTransaction as any).id = id;
+            linkedTransactionIds: [...currentLinkedIds, dto.linkedTransactionId],
+        }, id);
         
         const saved = await this.transactionRepo.update(updatedTransaction);
 
-        // Update the linked transaction to reference back
+        // Update the linked transaction to reference back (bidirectional)
         const linkedProps = linkedTx.getProps();
-        const updatedLinked = Transaction.create({
-            ...linkedProps,
-            linkedTransactionId: id,
-            linkedAccountId: existing.accountId,
-        });
-        (updatedLinked as any).id = dto.linkedTransactionId;
-        await this.transactionRepo.update(updatedLinked);
+        const existingLinkedBackIds = linkedProps.linkedTransactionIds || [];
+        if (!existingLinkedBackIds.includes(id)) {
+            const updatedLinked = Transaction.restore({
+                ...linkedProps,
+                linkedTransactionIds: [...existingLinkedBackIds, id],
+            }, dto.linkedTransactionId);
+            await this.transactionRepo.update(updatedLinked);
+        }
 
         return saved;
     }
 
-    async unlinkTransaction(id: string, workspaceId: string): Promise<Transaction> {
+    async unlinkTransaction(id: string, dto: UnlinkTransactionDTO, workspaceId: string): Promise<Transaction> {
         const existing = await this.transactionRepo.findById(id);
         if (!existing) {
             throw new AppError('Transaction not found', 404);
@@ -408,33 +410,30 @@ export class TransactionService {
             throw new AppError('Transaction not found', 404);
         }
 
-        const linkedTxId = existing.linkedTransactionId;
-        
+        const linkedIdToRemove = dto.linkedId;
         const updatedProps = existing.getProps();
+        const currentLinkedIds = updatedProps.linkedTransactionIds || [];
         
-        const updatedTransaction = Transaction.create({
+        // Filter out the linked transaction to remove
+        const updatedLinkedIds = currentLinkedIds.filter(linkedId => linkedId !== linkedIdToRemove);
+        
+        const updatedTransaction = Transaction.restore({
             ...updatedProps,
-            linkedTransactionId: undefined,
-            linkedAccountId: undefined,
-        });
-
-        (updatedTransaction as any).id = id;
+            linkedTransactionIds: updatedLinkedIds,
+        }, id);
         
         const saved = await this.transactionRepo.update(updatedTransaction);
 
-        // Also unlink the linked transaction
-        if (linkedTxId) {
-            const linkedTx = await this.transactionRepo.findById(linkedTxId);
-            if (linkedTx) {
-                const linkedProps = linkedTx.getProps();
-                const updatedLinked = Transaction.create({
-                    ...linkedProps,
-                    linkedTransactionId: undefined,
-                    linkedAccountId: undefined,
-                });
-                (updatedLinked as any).id = linkedTxId;
-                await this.transactionRepo.update(updatedLinked);
-            }
+        // Also remove the link from the linked transaction (bidirectional)
+        const linkedTx = await this.transactionRepo.findById(linkedIdToRemove);
+        if (linkedTx) {
+            const linkedProps = linkedTx.getProps();
+            const linkedBackIds = (linkedProps.linkedTransactionIds || []).filter(linkedId => linkedId !== id);
+            const updatedLinked = Transaction.restore({
+                ...linkedProps,
+                linkedTransactionIds: linkedBackIds,
+            }, linkedIdToRemove);
+            await this.transactionRepo.update(updatedLinked);
         }
 
         return saved;
@@ -457,8 +456,9 @@ export class TransactionService {
             // Store accountId before deleting for cache invalidation
             const accountId = existing.accountId;
 
-            // Unlink from linked transaction before deleting
-            if (existing.linkedTransactionId) {
+            // Unlink from all linked transactions before deleting
+            const linkedIds = existing.linkedTransactionIds || [];
+            if (linkedIds.length > 0) {
                 await this.unlinkTransactionInTransaction(id, workspaceId, trxDb);
             }
 
@@ -478,31 +478,27 @@ export class TransactionService {
         const existing = await trxTransactionRepo.findById(id);
         if (!existing) return;
 
-        const linkedTxId = existing.linkedTransactionId;
+        const linkedIds = existing.linkedTransactionIds || [];
         
         const updatedProps = existing.getProps();
         
-        const updatedTransaction = Transaction.create({
+        const updatedTransaction = Transaction.restore({
             ...updatedProps,
-            linkedTransactionId: undefined,
-            linkedAccountId: undefined,
-        });
-
-        (updatedTransaction as any).id = id;
+            linkedTransactionIds: [],
+        }, id);
         
         await trxTransactionRepo.update(updatedTransaction);
 
-        // Also unlink the linked transaction
-        if (linkedTxId) {
+        // Also unlink from all linked transactions
+        for (const linkedTxId of linkedIds) {
             const linkedTx = await trxTransactionRepo.findById(linkedTxId);
             if (linkedTx) {
                 const linkedProps = linkedTx.getProps();
-                const updatedLinked = Transaction.create({
+                const filteredIds = (linkedProps.linkedTransactionIds || []).filter(txId => txId !== id);
+                const updatedLinked = Transaction.restore({
                     ...linkedProps,
-                    linkedTransactionId: undefined,
-                    linkedAccountId: undefined,
-                });
-                (updatedLinked as any).id = linkedTxId;
+                    linkedTransactionIds: filteredIds,
+                }, linkedTxId);
                 await trxTransactionRepo.update(updatedLinked);
             }
         }

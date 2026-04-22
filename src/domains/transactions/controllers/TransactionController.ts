@@ -268,7 +268,8 @@ export class TransactionController {
                 throw new AppError('Workspace not found', 404);
             }
 
-            const transaction = await this.transactionService.unlinkTransaction(id, workspaceId);
+            const dto = { linkedId: req.body.linkedId };
+            const transaction = await this.transactionService.unlinkTransaction(id, dto, workspaceId);
             res.json(transaction.toJSON());
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });

@@ -11,9 +11,8 @@ export interface TransactionProps {
     date: Date;
     categoryId?: string;
     categoryName?: string | null;
-    // For linked transactions (replaces internal transfer)
-    linkedTransactionId?: string;
-    linkedAccountId?: string;
+    // For linked transactions (multiple)
+    linkedTransactionIds?: string[];
     exchangeRate?: number;
     // Converted amount in destination currency (for transfers)
     convertedAmount?: number;
@@ -52,8 +51,7 @@ export class Transaction extends Entity<TransactionProps> {
     get date(): Date { return this.props.date; }
     get categoryId(): string | undefined { return this.props.categoryId; }
     get categoryName(): string | null | undefined { return this.props.categoryName; }
-    get linkedTransactionId(): string | undefined { return this.props.linkedTransactionId; }
-    get linkedAccountId(): string | undefined { return this.props.linkedAccountId; }
+    get linkedTransactionIds(): string[] | undefined { return this.props.linkedTransactionIds; }
     get exchangeRate(): number | undefined { return this.props.exchangeRate; }
     get convertedAmount(): number | undefined { return this.props.convertedAmount; }
     get baseAmount(): number | undefined { return this.props.baseAmount; }
@@ -73,8 +71,7 @@ export class Transaction extends Entity<TransactionProps> {
             date: this.date,
             categoryId: this.categoryId,
             categoryName: this.categoryName,
-            linkedTransactionId: this.linkedTransactionId,
-            linkedAccountId: this.linkedAccountId,
+            linkedTransactionIds: this.linkedTransactionIds,
             exchangeRate: this.exchangeRate,
             convertedAmount: this.convertedAmount,
             baseAmount: this.baseAmount,
