@@ -20,6 +20,7 @@ export class UpdateUserQuery {
             .update({
                 first_name: user.firstName,
                 last_name: user.lastName,
+                avatar: user.avatar,
                 is_active: user.isActive,
                 status: user.status,
                 role: user.role,

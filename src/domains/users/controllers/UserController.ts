@@ -25,4 +25,19 @@ export class UserController {
         const user = await this.userRequestRepository.updateProfile(userId, req.body);
         res.json(user);
     }
+
+    async uploadAvatar(req: Request, res: Response) {
+        const userId = (req as any).user?.userId;
+        if (!userId) {
+            throw new AppError('Unauthorized', 401);
+        }
+
+        const file = (req as any).file;
+        if (!file) {
+            throw new AppError('No file uploaded', 400);
+        }
+
+        const result = await this.userRequestRepository.uploadAvatar(userId, file);
+        res.json(result);
+    }
 }

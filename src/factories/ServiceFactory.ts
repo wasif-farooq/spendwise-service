@@ -55,7 +55,15 @@ export class ServiceFactory {
 
     createUserService() {
         const { UserService } = require('@domains/users/services/UserService');
-        return new UserService(this.repositoryFactory.createUserRepository());
+        const { StorageService } = require('@domains/storage/services/StorageService');
+        const { StorageRepository } = require('@domains/storage/repositories/StorageRepository');
+        const { ConfigLoader } = require('@config/ConfigLoader');
+        
+        const config = ConfigLoader.getInstance();
+        const storageRepo = new StorageRepository(this.db);
+        const storageService = new StorageService(storageRepo, config);
+        
+        return new UserService(this.repositoryFactory.createUserRepository(), storageService);
     }
 
     createWorkspaceService() {

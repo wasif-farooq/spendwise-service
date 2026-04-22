@@ -6,6 +6,7 @@ export class UserMapper {
             email: row.email,
             firstName: row.first_name,
             lastName: row.last_name,
+            avatar: row.avatar,
             isActive: row.is_active,
             status: row.status || 'active',
             role: row.role || 'customer',

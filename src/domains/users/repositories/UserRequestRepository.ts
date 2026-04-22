@@ -49,6 +49,13 @@ export class UserRequestRepository {
         throw new Error('RPC mode not implemented in this wrapper');
     }
 
+    async uploadAvatar(userId: string, file: any) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.uploadAvatar(userId, file.buffer, file.originalname, file.mimetype));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
     async getPreferences(userId: string) {
         if (this.getMode() === 'direct') {
             return this.wrap(this.preferencesService.getPreferences(userId));

@@ -42,3 +42,4 @@ grafana_data/
 config/monitoring/prometheus.yml
 
 .agents/
+venv/

@@ -11,6 +11,7 @@ export interface UserProps {
     email: string;
     firstName?: string;
     lastName?: string;
+    avatar?: string;
     isActive: boolean; // Deprecated in favor of status? keeping for compatibility unless asked to remove.
     status: string;
     role: UserRole;
@@ -63,6 +64,7 @@ export class User extends Entity<UserProps> {
     get email(): string { return this.props.email; }
     get firstName(): string | undefined { return this.props.firstName; }
     get lastName(): string | undefined { return this.props.lastName; }
+    get avatar(): string | undefined { return this.props.avatar; }
     get isActive(): boolean { return this.props.isActive; }
     get role(): UserRole { return this.props.role; }
     get status(): string { return this.props.status; }
@@ -83,6 +85,11 @@ export class User extends Entity<UserProps> {
     public updateName(firstName: string, lastName: string) {
         this.props.firstName = firstName;
         this.props.lastName = lastName;
+        this.props.updatedAt = new Date();
+    }
+
+    public setAvatar(avatarUrl: string) {
+        this.props.avatar = avatarUrl;
         this.props.updatedAt = new Date();
     }
 
