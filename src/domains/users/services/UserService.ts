@@ -3,6 +3,8 @@ import { TOKENS } from '@di/tokens';
 import { IUserRepository } from '@domains/auth/repositories/IUserRepository';
 import { User } from '@domains/auth/models/User';
 import { StorageService } from '@domains/storage/services/StorageService';
+import { ConfigLoader } from '@config/ConfigLoader';
+import { AppError } from '@shared/errors/AppError';
 import { v4 as uuidv4 } from 'uuid';
 
 export class UserService {
@@ -37,22 +39,42 @@ export class UserService {
             throw new Error('User not found');
         }
 
-        const bucket = this.storageService.getBucket('avatars');
-        const attachment = await this.storageService.uploadFile({
-            file,
-            filename: `avatar-${userId}-${uuidv4()}`,
-            contentType,
-            bucket,
-            workspaceId: '',
-            userId,
-            metadata: { type: 'user-avatar', userId }
-        });
+        // Get bucket name
+        let bucket = this.storageService.getBucket('avatars');
+        
+        if (!bucket || bucket.includes('undefined')) {
+            bucket = 'spendwise-avatars';
+        }
 
-        const avatarUrl = this.storageService.getPublicUrl(bucket, attachment.key);
+        try {
+            // For user avatar, upload directly to S3 to bypass the workspace_id FK issue
+            const key = `avatars/${userId}/${uuidv4()}.${filename.split('.').pop()}`;
+            
+            const { Upload } = await import('@aws-sdk/lib-storage');
+            
+            const s3Client = (this.storageService as any).s3Client;
+            
+            const upload = new Upload({
+                client: s3Client,
+                params: {
+                    Bucket: bucket,
+                    Key: key,
+                    Body: file,
+                    ContentType: contentType,
+                },
+            });
+            
+            await upload.done();
 
-        user.setAvatar(avatarUrl);
-        await this.userRepo.save(user);
+            const avatarUrl = this.storageService.getPublicUrl(bucket, key);
 
-        return { avatarUrl };
+            user.setAvatar(avatarUrl);
+            await this.userRepo.save(user);
+
+            return { avatarUrl };
+        } catch (error: any) {
+            console.error('Avatar upload failed:', error.message);
+            throw new AppError('Avatar upload failed: ' + error.message, 500);
+        }
     }
 }

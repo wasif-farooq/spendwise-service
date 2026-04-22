@@ -16,8 +16,9 @@ export class StorageRepository implements IStorageRepository {
     }
 
     async create(attachment: Partial<Attachment>): Promise<Attachment> {
+        // Only include workspace_id if it's provided and valid
+        // For user-specific uploads (avatars, etc.), we can omit workspace_id
         const data: Record<string, any> = {
-            workspace_id: attachment.workspaceId,
             user_id: attachment.userId,
             bucket: attachment.bucket,
             key: attachment.key,
@@ -26,6 +27,11 @@ export class StorageRepository implements IStorageRepository {
             size: attachment.size,
             metadata: JSON.stringify(attachment.metadata || {}),
         };
+        
+        // Only add workspace_id if it's a valid UUID (not empty/undefined)
+        if (attachment.workspaceId && attachment.workspaceId.length === 36) {
+            data.workspace_id = attachment.workspaceId;
+        }
 
         const keys = Object.keys(data);
         const values = Object.values(data);

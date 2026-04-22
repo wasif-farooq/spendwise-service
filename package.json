@@ -44,7 +44,8 @@
         "archive:run": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts run",
         "archive:run-older": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts run-older",
         "archive:dry-run": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts dry-run",
-        "archive:stats": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts stats"
+        "archive:stats": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts stats",
+        "minio:avatars:public": "docker exec spendwise-service-minio-1 mc policy set-download local/spendwise-avatars || docker exec minio mc policy set-download local/spendwise-avatars"
     },
     "keywords": [
         "nodejs",

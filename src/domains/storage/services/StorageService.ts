@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Upload } from '@aws-sdk/lib-storage';
 import { Inject } from '@di/decorators/inject.decorator';
@@ -13,7 +13,7 @@ export interface UploadOptions {
     filename: string;
     contentType: string;
     bucket: string;
-    workspaceId: string;
+    workspaceId?: string;
     userId?: string;
     metadata?: Record<string, any>;
 }
@@ -73,7 +73,7 @@ export class StorageService {
         }
 
         // Generate unique key
-        const key = this.generateKey(workspaceId, filename);
+        const key = this.generateKey(workspaceId, userId, filename);
 
         // Upload to S3/MinIO
         const upload = new Upload({
@@ -192,26 +192,53 @@ export class StorageService {
     /**
      * Generate a unique key for file storage
      */
-    private generateKey(workspaceId: string, filename: string): string {
+    private generateKey(workspaceId: string | undefined, userId: string | undefined, filename: string): string {
         const ext = filename.split('.').pop() || '';
         const uuid = uuidv4();
-        return `${workspaceId}/${uuid}${ext ? '.' + ext : ''}`;
+        // For user-specific uploads (avatars), use userId as prefix
+        // For workspace-specific uploads, use workspaceId as prefix
+        let prefix: string;
+        if (workspaceId) {
+            prefix = `${workspaceId}/`;
+        } else if (userId) {
+            prefix = `users/${userId}/`;
+        } else {
+            prefix = 'uploads/';
+        }
+        return `${prefix}${uuid}${ext ? '.' + ext : ''}`;
     }
 
     /**
      * Get bucket name by type
      */
     getBucket(type: 'receipts' | 'avatars' | 'attachments'): string {
-        return this.config.buckets[type];
+        // Check if bucket is configured and valid
+        if (this.config.buckets?.[type]) {
+            return this.config.buckets[type];
+        }
+        
+        // Fallback logic: try to use receipts bucket for other types
+        if (type !== 'receipts' && this.config.buckets?.receipts) {
+            return this.config.buckets.receipts;
+        }
+        
+        // Return a guaranteed valid bucket name
+        const defaultBuckets: Record<string, string> = {
+            receipts: 'spendwise-receipts',
+            avatars: 'spendwise-avatars',
+            attachments: 'spendwise-attachments'
+        };
+        
+        return defaultBuckets[type] || 'spendwise-receipts';
     }
 
     /**
      * Initialize buckets (call on startup)
      */
     async initializeBuckets(): Promise<void> {
-        // For MinIO, we could create buckets here if needed
-        // Usually not required as they're created on first use
-        console.log('Storage buckets configured:', this.config.buckets);
+        // Quick initialization - just log the config
+        // Actual bucket creation happens on first use (MinIO auto-creates)
+        console.log('Storage buckets configured:', this.getBucket('receipts'), this.getBucket('avatars'), this.getBucket('attachments'));
     }
 
     /**

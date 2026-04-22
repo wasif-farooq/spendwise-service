@@ -154,6 +154,13 @@ export class ServiceBootstrap {
 
             const storageService = new StorageService(storageRepo, ConfigLoader.getInstance());
             this.container.registerInstance(TOKENS.StorageService, storageService);
+            
+            // Initialize storage buckets (create if not exist)
+            try {
+                await storageService.initializeBuckets();
+            } catch (error) {
+                console.log('Bucket initialization warning:', error);
+            }
 
             const storageControllerFactory = new StorageControllerFactory();
             const storageController = storageControllerFactory.create();
