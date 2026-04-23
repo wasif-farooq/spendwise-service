@@ -18,8 +18,8 @@ export interface TransactionProps {
     convertedAmount?: number;
     // Base amount in USD for conversions
     baseAmount?: number;
-    // Receipt/file attachment
-    receiptId?: string;
+    // Receipt/file attachments (multiple)
+    receiptIds?: string[];
     // Metadata
     createdAt: Date;
     updatedAt: Date;
@@ -57,7 +57,7 @@ export class Transaction extends Entity<TransactionProps> {
     get exchangeRate(): number | undefined { return this.props.exchangeRate; }
     get convertedAmount(): number | undefined { return this.props.convertedAmount; }
     get baseAmount(): number | undefined { return this.props.baseAmount; }
-    get receiptId(): string | undefined { return this.props.receiptId; }
+    get receiptIds(): string[] | undefined { return this.props.receiptIds; }
     get createdAt(): Date { return this.props.createdAt; }
     get updatedAt(): Date { return this.props.updatedAt; }
 
@@ -78,7 +78,7 @@ export class Transaction extends Entity<TransactionProps> {
             exchangeRate: this.exchangeRate,
             convertedAmount: this.convertedAmount,
             baseAmount: this.baseAmount,
-            receiptId: this.receiptId,
+            receiptIds: this.receiptIds,
             createdAt: this.createdAt,
             updatedAt: this.updatedAt
         };

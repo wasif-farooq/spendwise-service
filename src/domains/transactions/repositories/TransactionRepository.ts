@@ -1,6 +1,7 @@
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { Transaction, TransactionProps } from '../models/Transaction';
 import { CursorPaginationOptions, CursorFilters, PaginatedResult } from './types';
+import { Container } from '@di/Container';
 
 // In-memory cache for stats (fallback when Redis unavailable)
 interface CacheEntry<T> {
@@ -91,6 +92,67 @@ export class TransactionRepository {
         
         const filteredLinkedTransactions = linkedTransactions.filter(Boolean);
 
+        // Fetch attachments for receipt_ids
+        const receiptIds = row.receipt_ids || [];
+        let receipts: any[] = [];
+        
+        if (receiptIds.length > 0) {
+            try {
+                const attachmentsResult = await this.dbToUse.query(
+                    'SELECT * FROM attachments WHERE id = ANY($1)',
+                    [receiptIds]
+                );
+                
+                let storageService: any = null;
+                try {
+                    const StorageModule = await import('@domains/storage/services/StorageService');
+                    storageService = Container.getInstance().resolve<any>('StorageService');
+                } catch (e) {
+                    console.log('[TransactionRepository] StorageService not available');
+                }
+                
+                if (storageService) {
+                    receipts = await Promise.all(
+                        attachmentsResult.rows.map(async (att: any) => {
+                            try {
+                                const { url } = await storageService.getFile(att.id);
+                                return {
+                                    id: att.id,
+                                    filename: att.filename,
+                                    contentType: att.content_type,
+                                    size: att.size,
+                                    url
+                                };
+                            } catch (e) {
+                                return {
+                                    id: att.id,
+                                    filename: att.filename,
+                                    contentType: att.content_type,
+                                    size: att.size,
+                                    url: null
+                                };
+                            }
+                        })
+                    );
+                } else {
+                    // Just return basic info without URLs
+                    receipts = attachmentsResult.rows.map((att: any) => ({
+                        id: att.id,
+                        filename: att.filename,
+                        contentType: att.content_type,
+                        size: att.size,
+                        url: null
+                    }));
+                }
+                
+                // Sort by original order of receiptIds
+                receipts.sort((a, b) => receiptIds.indexOf(a.id) - receiptIds.indexOf(b.id));
+            } catch (e) {
+                console.error('[TransactionRepository] Error fetching attachments:', e);
+                receipts = [];
+            }
+        }
+
         return {
             id: row.id,
             accountId: row.account_id,
@@ -122,6 +184,8 @@ export class TransactionRepository {
                 date: linkedTx.date,
                 categoryName: linkedTx.category_name
             })),
+            receiptIds: receiptIds,
+            receipts: receipts,
             exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
             convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
             baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
@@ -647,7 +711,7 @@ export class TransactionRepository {
             exchange_rate: data.exchangeRate,
             converted_amount: data.convertedAmount,
             base_amount: data.baseAmount,
-            receipt_id: data.receiptId,
+            receipt_ids: data.receiptIds || [],
             created_at: data.createdAt,
             updated_at: data.updatedAt,
         };
@@ -682,7 +746,7 @@ export class TransactionRepository {
                 exchange_rate = $9,
                 converted_amount = $10,
                 base_amount = $11,
-                receipt_id = $12,
+                receipt_ids = $12,
                 updated_at = $13
             WHERE id = $14
             RETURNING *
@@ -700,7 +764,7 @@ export class TransactionRepository {
             data.exchangeRate,
             data.convertedAmount,
             data.baseAmount,
-            data.receiptId,
+            data.receiptIds || [],
             new Date(),
             transaction.id
         ]);
@@ -731,7 +795,7 @@ export class TransactionRepository {
             exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
             convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
             baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
-            receiptId: row.receipt_id,
+            receiptIds: row.receipt_ids || [],
             createdAt: row.created_at,
             updatedAt: row.updated_at,
         };
@@ -754,7 +818,7 @@ export class TransactionRepository {
             exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
             convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
             baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
-            receiptId: row.receipt_id,
+            receiptIds: row.receipt_ids || [],
             createdAt: row.created_at,
             updatedAt: row.updated_at,
         };

@@ -1,0 +1,7 @@
+-- Add extra fields to workspaces table
+
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS logo VARCHAR(500);
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS website VARCHAR(255);
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS industry VARCHAR(100);
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS size VARCHAR(50);

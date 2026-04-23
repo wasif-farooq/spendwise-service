@@ -16,7 +16,7 @@ export interface CreateTransactionDTO {
     categoryId?: string;
     linkedTransactionIds?: string[];
     exchangeRate?: number;
-    receiptId?: string;
+    receiptIds?: string[];
 }
 
 export interface UpdateTransactionDTO {
@@ -30,7 +30,7 @@ export interface UpdateTransactionDTO {
     categoryId?: string;
     linkedTransactionIds?: string[] | null;
     exchangeRate?: number;
-    receiptId?: string;
+    receiptIds?: string[];
 }
 
 export interface LinkTransactionDTO {
@@ -272,6 +272,7 @@ export class TransactionService {
                 categoryId: data.categoryId,
                 linkedTransactionIds: data.linkedTransactionIds || [],
                 exchangeRate: data.exchangeRate,
+                receiptIds: data.receiptIds || [],
             });
 
             const saved = await trxTransactionRepo.save(transaction);
@@ -336,6 +337,7 @@ export class TransactionService {
                     : updatedProps.linkedTransactionIds,
                 exchangeRate: data.exchangeRate ?? updatedProps.exchangeRate,
                 baseAmount: updatedProps.baseAmount,
+                receiptIds: data.receiptIds ?? updatedProps.receiptIds,
                 createdAt: updatedProps.createdAt,
                 updatedAt: new Date(),
             }, id);
