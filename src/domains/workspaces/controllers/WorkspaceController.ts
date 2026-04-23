@@ -193,6 +193,26 @@ export class WorkspaceController {
         res.json(result);
     }
 
+    async getLogo(req: Request, res: Response) {
+        const userId = (req as any).user?.userId || (req as any).user?.sub || (req as any).user?.id || '';
+        const workspaceId = req.params.id;
+
+        const result = await this.workspaceRequestRepository.getById(workspaceId, userId);
+
+        if (result.error || !result.data) {
+            res.status(404).json({ message: 'Workspace not found' });
+            return;
+        }
+
+        const logoUrl = result.data.logo;
+        if (!logoUrl) {
+            res.status(404).json({ message: 'Logo not found' });
+            return;
+        }
+
+        res.redirect(logoUrl);
+    }
+
     // Role methods
     async listRoles(req: Request, res: Response) {
         const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;

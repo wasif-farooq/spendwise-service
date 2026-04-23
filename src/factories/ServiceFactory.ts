@@ -68,6 +68,13 @@ export class ServiceFactory {
 
     createWorkspaceService() {
         const { WorkspaceService } = require('@domains/workspaces/services/WorkspaceService');
+        const { StorageService } = require('@domains/storage/services/StorageService');
+        const { StorageRepository } = require('@domains/storage/repositories/StorageRepository');
+        const { ConfigLoader } = require('@config/ConfigLoader');
+
+        const config = ConfigLoader.getInstance();
+        const storageRepo = new StorageRepository(this.db);
+        const storageService = new StorageService(storageRepo, config);
 
         const categoryRepo = new CategoryRepository(this.db);
         const categoryService = new CategoryService(categoryRepo, this.repositoryFactory.createTransactionRepository());
@@ -83,7 +90,8 @@ export class ServiceFactory {
             this.repositoryFactory.createAccountRepository(),
             this.repositoryFactory.createTransactionRepository(),
             categoryRepo,
-            categoryService
+            categoryService,
+            storageService
         );
     }
 

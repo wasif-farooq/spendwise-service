@@ -33,6 +33,8 @@ router.delete('/:id', requirePermission('workspace:delete'), controller.delete.b
 
 // Logo upload
 router.post('/:id/logo', requirePermission('workspace:update'), upload.single('logo'), controller.uploadLogo.bind(controller));
+// Logo download - redirect to public URL
+router.get('/:id/logo', controller.getLogo.bind(controller));
 
 // Members
 router.get('/:id/members', controller.getMembers.bind(controller));
