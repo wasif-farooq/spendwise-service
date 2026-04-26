@@ -37,16 +37,17 @@ router.post('/:id/logo', requirePermission('workspace:update'), upload.single('l
 router.get('/:id/logo', controller.getLogo.bind(controller));
 
 // Members
-router.get('/:id/members', controller.getMembers.bind(controller));
-router.get('/:id/members/:memberId', controller.getMember.bind(controller));
+// IMPORTANT: More specific routes must come BEFORE parameterized routes
+// Otherwise /:id/members/invitations gets matched as /:id/members/:memberId
 router.post('/:id/members/invite', requirePermission('members:create'), controller.inviteMember.bind(controller));
-router.put('/:id/members/:memberId', requirePermission('members:edit'), controller.updateMember.bind(controller));
-router.delete('/:id/members/:memberId', requirePermission('members:delete'), controller.removeMember.bind(controller));
-
-// Invitations
 router.get('/:id/members/invitations', controller.getInvitations.bind(controller));
 router.post('/:id/members/resend/:invitationId', requirePermission('members:create'), controller.resendInvitation.bind(controller));
 router.delete('/:id/members/invitations/:invitationId', requirePermission('members:delete'), controller.cancelInvitation.bind(controller));
+
+router.get('/:id/members', controller.getMembers.bind(controller));
+router.get('/:id/members/:memberId', controller.getMember.bind(controller));
+router.put('/:id/members/:memberId', requirePermission('members:edit'), controller.updateMember.bind(controller));
+router.delete('/:id/members/:memberId', requirePermission('members:delete'), controller.removeMember.bind(controller));
 
 // Leave workspace
 router.post('/:id/leave', controller.leave.bind(controller));

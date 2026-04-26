@@ -367,8 +367,25 @@ export class WorkspaceController {
         res.json({ message: 'Invitation cancelled successfully' });
     }
 
-    async acceptInvitation(req: Request, res: Response) {
+    async getInvitationByToken(req: Request, res: Response) {
         const { token } = req.query;
+
+        if (!token) {
+            res.status(400).json({ message: 'Token is required' });
+            return;
+        }
+
+        const result = await this.workspaceRequestRepository.getInvitationByToken(token as string);
+
+        if (result.error) {
+            res.status(result.statusCode || 400).json({ message: result.error });
+            return;
+        }
+        res.json(result.data || result);
+    }
+
+    async acceptInvitation(req: Request, res: Response) {
+        const token = req.body?.token || req.query?.token as string;
         const firstName = req.body.firstName;
         const lastName = req.body.lastName;
         const password = req.body.password;
@@ -382,7 +399,7 @@ export class WorkspaceController {
             ? { firstName, lastName, password }
             : undefined;
 
-        const result = await this.workspaceRequestRepository.acceptInvitation(token as string, registrationData);
+        const result = await this.workspaceRequestRepository.acceptInvitation(token, registrationData);
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });
@@ -395,6 +412,23 @@ export class WorkspaceController {
         const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
 
         const result = await this.workspaceRequestRepository.getMyInvitations(userId);
+
+        if (result.error) {
+            res.status(result.statusCode || 400).json({ message: result.error });
+            return;
+        }
+        res.json(result.data || result);
+    }
+
+    async declineInvitation(req: Request, res: Response) {
+        const token = req.body?.token || req.query?.token as string;
+
+        if (!token) {
+            res.status(400).json({ message: 'Token is required' });
+            return;
+        }
+
+        const result = await this.workspaceRequestRepository.declineInvitation(token);
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });

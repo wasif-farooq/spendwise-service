@@ -6,7 +6,7 @@ export interface WorkspaceInvitationProps {
     roleIds: string[];
     accountPermissions?: Record<string, { permissions: string[]; denied: string[] }>;
     token: string;
-    status: 'pending' | 'accepted' | 'expired';
+    status: 'pending' | 'accepted' | 'expired' | 'declined';
     expiresAt: Date;
     invitedBy: string;
     acceptedBy?: string;
@@ -49,7 +49,7 @@ export class WorkspaceInvitation extends Entity<WorkspaceInvitationProps> {
         return this.props.accountPermissions;
     }
     get token(): string { return this.props.token; }
-    get status(): 'pending' | 'accepted' | 'expired' { return this.props.status; }
+    get status(): 'pending' | 'accepted' | 'expired' | 'declined' { return this.props.status; }
     get expiresAt(): Date { return this.props.expiresAt; }
     get invitedBy(): string { return this.props.invitedBy; }
     get acceptedBy(): string | undefined { return this.props.acceptedBy; }
@@ -74,6 +74,11 @@ export class WorkspaceInvitation extends Entity<WorkspaceInvitationProps> {
 
     public markAsExpired(): void {
         this.props.status = 'expired';
+        this.props.updatedAt = new Date();
+    }
+
+    public markAsDeclined(): void {
+        this.props.status = 'declined';
         this.props.updatedAt = new Date();
     }
 }

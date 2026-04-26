@@ -23,8 +23,20 @@ export default {
                 'Origin',
                 'authorization',
                 'content-type',
-                'x-api-version'
+                'x-api-version',
+                'sec-ch-ua',
+                'sec-ch-ua-mobile', 
+                'sec-ch-ua-platform',
+                'Sec-Fetch-Dest',
+                'Sec-Fetch-Mode',
+                'Sec-Fetch-Site',
+                'Sec-GPC',
+                'User-Agent',
+                'Accept-Language',
+                'Referer',
+                'Connection'
             ],
+            exposedHeaders: ['Content-Length', 'Authorization'],
             optionsSuccessStatus: 200
         }
     },

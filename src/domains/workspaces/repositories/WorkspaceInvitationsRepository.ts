@@ -78,49 +78,41 @@ export class WorkspaceInvitationsRepository extends BaseRepository<WorkspaceInvi
     } = {}): Promise<{ invitations: any[]; total: number }> {
         const { limit = 10, offset = 0, status } = options;
 
-        let whereClause = 'WHERE wi.workspace_id = $1';
-        const params: any[] = [workspaceId];
-        let paramIndex = 2;
-
-        if (status) {
-            whereClause += ` AND wi.status = $${paramIndex}`;
-            params.push(status);
-            paramIndex++;
-        }
-
-        const countQuery = `
-            SELECT COUNT(*) as total 
-            FROM ${this.tableName} wi
-            ${whereClause}
-        `;
-        const countResult = await this.db.query(countQuery, params);
+        const countQuery = status 
+            ? `SELECT COUNT(*) as total FROM ${this.tableName} wi WHERE wi.workspace_id = $1 AND wi.status = $2`
+            : `SELECT COUNT(*) as total FROM ${this.tableName} wi WHERE wi.workspace_id = $1`;
+        
+        const countParams = status ? [workspaceId, status] : [workspaceId];
+        const countResult = await this.db.query(countQuery, countParams);
         const total = parseInt(countResult.rows[0]?.total || '0');
 
-        const query = `
-            SELECT 
-                wi.id,
-                wi.workspace_id,
-                wi.email,
-                wi.role_ids,
-                wi.account_permissions,
-                wi.token,
-                wi.status,
-                wi.expires_at,
-                wi.invited_by,
-                wi.accepted_by,
-                wi.created_at,
-                wi.updated_at,
-                u.first_name as inviter_first_name,
-                u.last_name as inviter_last_name
+        const query = status
+            ? `SELECT 
+                wi.id, wi.workspace_id, wi.email, wi.role_ids, wi.account_permissions,
+                wi.token, wi.status, wi.expires_at, wi.invited_by, wi.accepted_by,
+                wi.created_at, wi.updated_at,
+                u.first_name as inviter_first_name, u.last_name as inviter_last_name
             FROM ${this.tableName} wi
             LEFT JOIN users u ON wi.invited_by = u.id
-            ${whereClause}
+            WHERE wi.workspace_id = $1 AND wi.status = $2
             ORDER BY wi.created_at DESC
-            LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
-        `;
+            LIMIT $3 OFFSET $4`
+            : `SELECT 
+                wi.id, wi.workspace_id, wi.email, wi.role_ids, wi.account_permissions,
+                wi.token, wi.status, wi.expires_at, wi.invited_by, wi.accepted_by,
+                wi.created_at, wi.updated_at,
+                u.first_name as inviter_first_name, u.last_name as inviter_last_name
+            FROM ${this.tableName} wi
+            LEFT JOIN users u ON wi.invited_by = u.id
+            WHERE wi.workspace_id = $1
+            ORDER BY wi.created_at DESC
+            LIMIT $2 OFFSET $3`;
 
-        const finalParams = [...params, limit, offset];
-        const result = await this.db.query(query, finalParams);
+        const queryParams = status 
+            ? [workspaceId, status, limit, offset] 
+            : [workspaceId, limit, offset];
+
+        const result = await this.db.query(query, queryParams);
 
         const invitations = result.rows.map((row: any) => ({
             id: row.id,

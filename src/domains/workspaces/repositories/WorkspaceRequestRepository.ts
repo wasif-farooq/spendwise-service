@@ -195,6 +195,20 @@ export class WorkspaceRequestRepository {
         throw new Error('RPC mode not implemented in this wrapper');
     }
 
+    async declineInvitation(token: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.declineInvitation(token));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async getInvitationByToken(token: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getInvitationByToken(token));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
     async getMyInvitations(userId: string) {
         if (this.getMode() === 'direct') {
             return this.wrap(this.service.getMyInvitations(userId));

@@ -323,8 +323,8 @@ export class WorkspaceService {
         const workspace = await this.workspaceRepository.findById(workspaceId);
         if (!workspace) return;
 
-        const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
-        const acceptUrl = `${baseUrl}/invitations/accept?token=${invitation.token}`;
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const acceptUrl = `${frontendUrl}/invitations/accept?token=${invitation.token}`;
 
         console.log(`
 [Email] Invitation to join workspace "${workspace.name}"
@@ -400,6 +400,90 @@ Expires in 7 days.
         });
     }
 
+    async getInvitationByToken(token: string): Promise<{
+        id: string;
+        email: string;
+        roleName: string;
+        roleNames?: string[];
+        workspaceId: string;
+        workspaceName: string;
+        invitedByName: string;
+        status: string;
+        expiresAt: string;
+        capabilities?: string[];
+    }> {
+        const invitation = await this.workspaceInvitationsRepository.findByToken(token);
+        
+        if (!invitation) {
+            throw new AppError('Invalid invitation', 404);
+        }
+
+        if (invitation.status === 'accepted') {
+            return {
+                id: invitation.id,
+                email: invitation.email,
+                roleName: invitation.roleIds?.[0] || 'Member',
+                workspaceId: invitation.workspaceId,
+                workspaceName: '', // Will be populated below
+                invitedByName: '', // Will be populated below
+                status: invitation.status,
+                expiresAt: invitation.expiresAt.toISOString()
+            };
+        }
+
+        if (invitation.status === 'declined') {
+            return {
+                id: invitation.id,
+                email: invitation.email,
+                roleName: invitation.roleIds?.[0] || 'Member',
+                workspaceId: invitation.workspaceId,
+                workspaceName: '',
+                invitedByName: '',
+                status: invitation.status,
+                expiresAt: invitation.expiresAt.toISOString()
+            };
+        }
+
+        if (invitation.status === 'expired' || invitation.isExpired()) {
+            invitation.markAsExpired();
+            await this.workspaceInvitationsRepository.updateInvitation(invitation);
+            return {
+                id: invitation.id,
+                email: invitation.email,
+                roleName: invitation.roleIds?.[0] || 'Member',
+                workspaceId: invitation.workspaceId,
+                workspaceName: '',
+                invitedByName: '',
+                status: 'expired',
+                expiresAt: invitation.expiresAt.toISOString()
+            };
+        }
+
+        // Get workspace details
+        const workspace = await this.workspaceRepository.findById(invitation.workspaceId);
+        
+        // Get inviter details
+        const inviter = await this.userRepository.findById(invitation.invitedBy);
+
+        // Get role details
+        const roles = await this.workspaceRoleRepository.findByIds(invitation.roleIds || []);
+        const roleNames = roles.map(r => r.name);
+        const capabilities = roles.flatMap(r => r.permissions || []);
+
+        return {
+            id: invitation.id,
+            email: invitation.email,
+            roleName: roleNames[0] || 'Member',
+            roleNames,
+            workspaceId: invitation.workspaceId,
+            workspaceName: workspace?.name || '',
+            invitedByName: inviter ? `${inviter.firstName} ${inviter.lastName}`.trim() : '',
+            status: invitation.status,
+            expiresAt: invitation.expiresAt.toISOString(),
+            capabilities: [...new Set(capabilities)] // Unique capabilities
+        };
+    }
+
     async acceptInvitation(
         token: string,
         registrationData?: { firstName: string; lastName: string; password: string }
@@ -466,6 +550,28 @@ Expires in 7 days.
         await this.workspaceInvitationsRepository.updateInvitation(invitation);
 
         return { success: true, message: 'Successfully joined workspace' };
+    }
+
+    async declineInvitation(token: string): Promise<{ success: boolean; message: string }> {
+        const invitation = await this.workspaceInvitationsRepository.findByToken(token);
+        if (!invitation) {
+            throw new AppError('Invalid invitation', 400);
+        }
+
+        if (invitation.status === 'accepted') {
+            throw new AppError('Invitation already accepted', 400);
+        }
+
+        if (invitation.status === 'expired' || invitation.isExpired()) {
+            invitation.markAsExpired();
+            await this.workspaceInvitationsRepository.updateInvitation(invitation);
+            throw new AppError('Invitation expired', 400);
+        }
+
+        invitation.markAsDeclined();
+        await this.workspaceInvitationsRepository.updateInvitation(invitation);
+
+        return { success: true, message: 'Successfully declined invitation' };
     }
 
     async getMyInvitations(userId: string): Promise<any[]> {
