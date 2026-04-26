@@ -74,11 +74,12 @@ export class WorkspaceService {
         });
         await this.workspaceRoleRepository.create(ownerRole, db ? { db } : undefined);
 
-        // Add owner as a member with Owner role
+        // Add owner as a member with Owner role and mark as default (workspace creator)
         const ownerMember = WorkspaceMember.create({
             workspaceId: workspace.id,
             userId: userId,
-            roleIds: [ownerRole.id]
+            roleIds: [ownerRole.id],
+            isDefault: true
         });
         await this.workspaceMembersRepository.create(ownerMember, db ? { db } : undefined);
 
@@ -221,6 +222,10 @@ export class WorkspaceService {
         const targetMember = await this.workspaceMembersRepository.findById(memberId);
         if (!targetMember || targetMember.workspaceId !== workspaceId) {
             throw new AppError('Member not found', 404);
+        }
+
+        if (targetMember.isDefault) {
+            throw new AppError('Cannot modify workspace creator', 403);
         }
 
         // Update role if provided
@@ -616,6 +621,10 @@ Expires in 7 days.
             throw new AppError('Member not found', 404);
         }
 
+        if (memberToRemove.isDefault) {
+            throw new AppError('Cannot remove workspace creator', 403);
+        }
+
         await this.workspaceMembersRepository.delete(memberIdToRemove);
     }
 
@@ -695,6 +704,8 @@ Expires in 7 days.
 
         const member = await this.workspaceMembersRepository.findById(memberId);
         if (!member || member.workspaceId !== workspaceId) throw new AppError('Member not found', 404);
+
+        if (member.isDefault) throw new AppError('Cannot modify workspace creator', 400);
 
         const role = await this.workspaceRoleRepository.findById(roleId);
         if (!role || role.workspaceId !== workspaceId) throw new AppError('Role not valid for this workspace', 400);

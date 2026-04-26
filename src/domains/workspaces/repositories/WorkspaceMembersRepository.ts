@@ -24,7 +24,8 @@ export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> 
             workspaceId: row.workspace_id,
             roleIds: row.role_ids || [],
             joinedAt: row.joined_at,
-            status: row.status || 'active'
+            status: row.status || 'active',
+            isDefault: row.is_default || false
         }, row.id);
     }
 
@@ -135,6 +136,7 @@ export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> 
                 wm.joined_at,
                 wm.role_ids,
                 wm.status,
+                wm.is_default,
                 u.first_name,
                 u.last_name,
                 u.email,
@@ -161,6 +163,7 @@ export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> 
             firstName: row.first_name,
             lastName: row.last_name,
             email: row.email,
+            isDefault: row.is_default || false,
             joinedAt: row.joined_at,
             status: row.status || 'active'
         }));

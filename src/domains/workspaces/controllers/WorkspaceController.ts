@@ -294,9 +294,27 @@ export class WorkspaceController {
         const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
         const workspaceId = req.params.id;
         const memberId = req.params.memberId;
-        const { roleId } = req.body;
-
-        const result = await this.workspaceRequestRepository.assignRole(workspaceId, userId, memberId, { roleId });
+        
+        let roleId = req.body.roleId || req.body.role;
+        
+        if (roleId && !roleId.includes('-')) {
+            const { DatabaseFacade } = await import('@facades/DatabaseFacade');
+            const { PostgresFactory } = await import('@database/factories/PostgresFactory');
+            const { RepositoryFactory } = await import('@factories/RepositoryFactory');
+            
+            const db = new DatabaseFacade(new PostgresFactory());
+            const repoFactory = new RepositoryFactory(db);
+            const roleRepo = repoFactory.createWorkspaceRoleRepository();
+            const role = await roleRepo.findByNameAndWorkspace(roleId, workspaceId);
+            if (role) {
+                roleId = role.id;
+            } else {
+                res.status(400).json({ message: `Role '${roleId}' not found` });
+                return;
+            }
+        }
+        
+        const result = await this.workspaceRequestRepository.assignRole(workspaceId, userId, memberId, roleId);
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });
