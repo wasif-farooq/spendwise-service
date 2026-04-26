@@ -93,7 +93,7 @@ export class AuthService {
         return { user };
     }
 
-    async verifyEmail(emailStr: string, code: string): Promise<{ success: boolean; message: string }> {
+    async verifyEmail(emailStr: string, code: string): Promise<{ success: boolean; message: string; token?: string; refreshToken?: string; user?: any }> {
         const email = Email.create(emailStr);
         const user = await this.userRepo.findByEmail(email.raw);
         if (!user) throw new AppError('User not found', 404);
@@ -109,9 +109,15 @@ export class AuthService {
         user.verifyEmail();
         await this.userRepo.save(user);
 
+        const token = this.generateAccessToken(user);
+        const refreshToken = this.generateRefreshToken(user);
+
         return {
             success: true,
-            message: 'Email verified successfully'
+            message: 'Email verified successfully',
+            token,
+            refreshToken,
+            user: user.toJSON()
         };
     }
 
