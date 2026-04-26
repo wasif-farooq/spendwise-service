@@ -43,6 +43,7 @@ router.post('/:id/members/invite', requirePermission('members:create'), controll
 router.get('/:id/members/invitations', controller.getInvitations.bind(controller));
 router.post('/:id/members/resend/:invitationId', requirePermission('members:create'), controller.resendInvitation.bind(controller));
 router.delete('/:id/members/invitations/:invitationId', requirePermission('members:delete'), controller.cancelInvitation.bind(controller));
+router.post('/:id/members/invitations/:invitationId/cancel', requirePermission('members:delete'), controller.cancelInvitation.bind(controller));
 
 router.get('/:id/members', controller.getMembers.bind(controller));
 router.get('/:id/members/:memberId', controller.getMember.bind(controller));

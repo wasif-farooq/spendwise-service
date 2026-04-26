@@ -381,7 +381,8 @@ Expires in 7 days.
             throw new AppError('Invitation not found', 404);
         }
 
-        await this.workspaceInvitationsRepository.deleteInvitation(invitationId);
+        invitation.markAsCancelled();
+        await this.workspaceInvitationsRepository.updateInvitation(invitation);
     }
 
     async getInvitations(workspaceId: string, userId: string, params: {
