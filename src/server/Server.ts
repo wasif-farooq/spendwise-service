@@ -44,24 +44,26 @@ export class Server {
         this.app.use('/api', versionMiddleware);
     }
 
-    private configureRoutes() {
-        this.app.get('/health', (req, res) => {
-            res.json({ status: 'ok', timestamp: new Date(), service: 'API Gateway' });
-        });
+private configureRoutes() {
+    this.app.get('/health', (req, res) => {
+        res.json({ status: 'ok', timestamp: new Date(), service: 'API Gateway' });
+    });
 
-        // Metrics endpoint
-        this.app.get('/metrics', async (req, res) => {
-            const metricsService = MetricsService.getInstance();
-            res.set('Content-Type', metricsService.getContentType());
-            res.send(await metricsService.getMetrics());
-        });
+    // Metrics endpoint
+    this.app.get('/metrics', async (req, res) => {
+        const metricsService = MetricsService.getInstance();
+        res.set('Content-Type', metricsService.getContentType());
+        res.send(await metricsService.getMetrics());
+    });
 
-        // Mount API Router here
-        this.app.use('/api', new ApiRouter().getRouter());
+    // Mount API Router here
+    console.log('[Server] Mounting API router at /api');
+    this.app.use('/api', new ApiRouter().getRouter());
+    console.log('[Server] API router mounted');
 
-        // Global Error Handler
-        this.app.use(errorMiddleware);
-    }
+    // Global Error Handler
+    this.app.use(errorMiddleware);
+}
 
     public start() {
         const port = this.config.get('server.port') || 3000;

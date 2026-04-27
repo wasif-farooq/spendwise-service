@@ -50,4 +50,6 @@ export const TOKENS = {
     // Payment domain
     PaymentRepository: 'PaymentRepository',
     PaymentService: 'PaymentService',
+    // User domain
+    UserRepository: 'UserRepository',
 };

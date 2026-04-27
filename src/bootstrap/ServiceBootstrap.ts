@@ -109,6 +109,10 @@ export class ServiceBootstrap {
             const userSubRepo = repoFactory.createUserSubscriptionRepository();
             this.container.registerInstance(TOKENS.UserSubscriptionRepository, userSubRepo);
 
+            // User Repository (used by PaymentController)
+            const userRepo = repoFactory.createUserRepository();
+            this.container.registerInstance('UserRepository', userRepo);
+
             const subscriptionService = serviceFactory.createSubscriptionService();
             this.container.registerInstance(TOKENS.SubscriptionService, subscriptionService);
 
