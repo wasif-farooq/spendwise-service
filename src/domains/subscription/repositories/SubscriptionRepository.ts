@@ -14,11 +14,13 @@ export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan>
         return SubscriptionPlan.restore({
             name: row.name,
             price: parseFloat(row.price),
+            yearlyPrice: parseFloat(row.yearly_price) || 0,
             currency: row.currency,
             billingPeriod: row.billing_period,
             description: row.description,
-            features: row.features, // JSONB auto-parsed
-            limits: row.limits, // JSONB auto-parsed
+            features: row.features || [], // JSONB auto-parsed
+            featuresDisplay: row.features_display || row.features || [], // Use display names if available
+            limits: row.limits || {}, // JSONB auto-parsed
             isActive: row.is_active,
             createdAt: row.created_at,
             updatedAt: row.updated_at
@@ -28,6 +30,7 @@ export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan>
     protected mapToDb(data: any): any {
         const mapped = super.mapToDb(data);
         if (mapped.features) mapped.features = JSON.stringify(mapped.features);
+        if (mapped.featuresDisplay) mapped.features_display = JSON.stringify(mapped.featuresDisplay);
         if (mapped.limits) mapped.limits = JSON.stringify(mapped.limits);
         return mapped;
     }

@@ -14,6 +14,7 @@ import { AccountRepository } from '@domains/accounts/repositories/AccountReposit
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
 import { StorageRepository } from '@domains/storage/repositories/StorageRepository';
+import { PaymentRepository } from '@domains/payment/repositories/PaymentRepository';
 
 
 export class RepositoryFactory {
@@ -73,5 +74,9 @@ export class RepositoryFactory {
 
     createStorageRepository(): StorageRepository {
         return new StorageRepository(this.db);
+    }
+
+    createPaymentRepository(): PaymentRepository {
+        return new PaymentRepository(this.db);
     }
 }

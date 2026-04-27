@@ -47,4 +47,7 @@ export const TOKENS = {
     StorageController: 'StorageController',
     StorageServiceFactory: 'StorageServiceFactory',
     StorageControllerFactory: 'StorageControllerFactory',
+    // Payment domain
+    PaymentRepository: 'PaymentRepository',
+    PaymentService: 'PaymentService',
 };

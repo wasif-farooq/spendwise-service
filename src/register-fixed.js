@@ -50,13 +50,16 @@ Module._resolveFilename = function(request, parent, isMain, options) {
                     } catch {}
                 }
                 
-                const indexPath = fullPath + '/index.js';
-                try {
-                    const stats = fs.statSync(indexPath);
-                    if (stats.isFile()) {
-                        return origResolve(indexPath, parent, isMain, options);
-                    }
-                } catch {}
+                const indexExtensions = ['index.ts', 'index.js', 'index.json'];
+                for (const indexExt of indexExtensions) {
+                    const indexPath = fullPath + '/' + indexExt;
+                    try {
+                        const stats = fs.statSync(indexPath);
+                        if (stats.isFile()) {
+                            return origResolve(indexPath, parent, isMain, options);
+                        }
+                    } catch {}
+                }
             } finally {
                 inResolve = false;
             }

@@ -106,11 +106,14 @@ export class SubscriptionController {
                 plans: plans.map(p => ({
                     id: p.id,
                     name: p.name,
-                    price: p.price,
+                    price: {
+                        monthly: p.price,
+                        yearly: p.yearlyPrice
+                    },
                     currency: p.currency,
                     billingPeriod: p.billingPeriod,
                     description: p.description,
-                    features: p.features,
+                    features: p.featuresDisplay.length > 0 ? p.featuresDisplay : p.features,
                     limits: p.limits
                 }))
             });
@@ -209,6 +212,30 @@ export class SubscriptionController {
             return res.json({ usage });
         } catch (error: any) {
             return res.status(500).json({ message: error.message });
+        }
+    }
+
+    async cancel(req: Request, res: Response) {
+        try {
+            const userId = (req as any).user.userId;
+
+            if (!userId) {
+                return res.status(401).json({ message: 'User not authenticated' });
+            }
+
+            const subscription = await this.subscriptionService.cancelSubscription(userId);
+
+            return res.json({
+                message: 'Subscription cancelled successfully',
+                subscription: {
+                    plan: subscription.planId,
+                    status: subscription.status,
+                    cancelledAt: subscription.cancelledAt,
+                }
+            });
+
+        } catch (error: any) {
+            return res.status(400).json({ message: error.message });
         }
     }
 }

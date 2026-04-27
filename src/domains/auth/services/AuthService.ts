@@ -22,6 +22,7 @@ import { WorkspaceService } from '@domains/workspaces/services/WorkspaceService'
 import { Workspace } from '@domains/workspaces/models/Workspace';
 import { WorkspaceRole } from '@domains/workspaces/models/WorkspaceRole';
 import { WorkspaceMember } from '@domains/workspaces/models/WorkspaceMember';
+import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
 
 export class AuthService {
     constructor(
@@ -32,6 +33,7 @@ export class AuthService {
         @Inject(TOKENS.WorkspaceRoleRepository) private workspaceRoleRepository: WorkspaceRoleRepository,
         @Inject(TOKENS.WorkspaceMembersRepository) private workspaceMembersRepository: WorkspaceMembersRepository,
         @Inject(TOKENS.WorkspaceService) private workspaceService: WorkspaceService,
+        @Inject(TOKENS.SubscriptionService) private subscriptionService: SubscriptionService,
         // Optional Cache Injection (Manual for now in Factory)
         private cache?: any
     ) { }
@@ -76,7 +78,10 @@ export class AuthService {
                 await this.userRepo.save(user, { db: trx });
                 await this.authRepo.save(identity, { db: trx });
 
-                // 2. Create Workspace "My Account" with default categories
+                // 2. Create free subscription for user
+                await this.subscriptionService.createFreeSubscription(user.id);
+
+                // 3. Create Workspace "My Account" with default categories
                 await this.workspaceService.create(user.id, {
                     name: "My Account",
                     slug: `my-account-${user.id.substring(0, 8)}`

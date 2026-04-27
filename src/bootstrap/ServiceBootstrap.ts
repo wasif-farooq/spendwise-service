@@ -166,6 +166,13 @@ export class ServiceBootstrap {
             const storageController = storageControllerFactory.create();
             this.container.registerInstance(TOKENS.StorageController, storageController);
 
+            // Payment domain registrations
+            const paymentRepo = repoFactory.createPaymentRepository();
+            this.container.registerInstance(TOKENS.PaymentRepository, paymentRepo);
+
+            // PaymentService is a singleton, get instance directly
+            const { PaymentService } = require('@domains/payment/services/PaymentService');
+            this.container.registerInstance(TOKENS.PaymentService, PaymentService.getInstance());
 
             // Connect Infrastructure
             // await dbFacade.connect(); // Optional based on service

@@ -63,6 +63,12 @@ export class UserSubscription extends Entity<UserSubscriptionProps> {
         this.props.updatedAt = new Date();
     }
 
+    public cancel(): void {
+        this.props.status = 'cancelled';
+        this.props.cancelledAt = new Date();
+        this.props.updatedAt = new Date();
+    }
+
     // Getters
     get userId(): string { return this.props.userId; }
     get planId(): string { return this.props.planId; }
@@ -73,4 +79,5 @@ export class UserSubscription extends Entity<UserSubscriptionProps> {
     get merchantSubscriptionId(): string | undefined { return this.props.merchantSubscriptionId; }
     get startDate(): Date { return this.props.startDate; }
     get currentPeriodEnd(): Date | undefined { return this.props.currentPeriodEnd; }
+    get cancelledAt(): Date | undefined { return this.props.cancelledAt; }
 }
