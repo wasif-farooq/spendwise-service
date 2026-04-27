@@ -796,6 +796,24 @@ Expires in 7 days.
         return { logoUrl };
     }
 
+    async getUserWorkspaceContext(workspaceId: string, userId: string) {
+        const member = await this.workspaceMembersRepository.findByUserAndWorkspace(userId, workspaceId);
+        if (!member) {
+            throw new AppError('Not a member of this workspace', 403);
+        }
+
+        const roles = await this.workspaceRoleRepository.findByIds(member.roleIds);
+        const permissions = this.calculateUserPermissions(roles);
+        const accountPermissions = await this.workspaceMembersRepository.getAccountPermissions(member.id);
+
+        return {
+            member,
+            roles,
+            permissions,
+            accountPermissions
+        };
+    }
+
     async checkPermission(workspaceId: string, userId: string, permission: string): Promise<boolean> {
         const workspace = await this.workspaceRepository.findById(workspaceId);
         if (!workspace) return false;

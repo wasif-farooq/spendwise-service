@@ -34,6 +34,13 @@ export class WorkspaceRequestRepository {
             }));
     }
 
+    async getUserWorkspaceContext(workspaceId: string, userId: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getUserWorkspaceContext(workspaceId, userId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
     async create(userId: string, dto: any) {
         if (this.getMode() === 'direct') {
             return this.wrap(this.service.create(userId, dto));

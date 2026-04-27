@@ -83,7 +83,7 @@ router.use(requireAuth);
 router.get('/:workspaceId/accounts/:accountId/transactions', 
     validateParams(WorkspaceIdParamSchema), 
     validateParams(AccountIdParamSchema),
-    requirePermission('transaction:read'), 
+    requirePermission('transactions:view'), 
     controller.getTransactions.bind(controller)
 );
 
@@ -92,7 +92,7 @@ router.get('/:workspaceId/accounts/:accountId/transactions/:id',
     validateParams(WorkspaceIdParamSchema), 
     validateParams(AccountIdParamSchema),
     validateParams(TransactionIdParamSchema), 
-    requirePermission('transaction:read'), 
+    requirePermission('transactions:view'), 
     controller.getTransactionById.bind(controller)
 );
 
@@ -152,21 +152,21 @@ router.delete('/:workspaceId/accounts/:accountId/transactions/:id/link',
 router.get('/:workspaceId/accounts/:accountId/transactions/stats', 
     validateParams(WorkspaceIdParamSchema), 
     validateParams(AccountIdParamSchema),
-    requirePermission('transaction:read'), 
+    requirePermission('transactions:view'), 
     controller.getAccountStats.bind(controller)
 );
 
 // Get all accounts stats for workspace
 router.get('/:workspaceId/transactions/accounts/stats', 
     validateParams(WorkspaceIdParamSchema), 
-    requirePermission('transaction:read'), 
+    requirePermission('transactions:view'), 
     controller.getWorkspaceAccountStats.bind(controller)
 );
 
 // Get workspace-wide stats
 router.get('/:workspaceId/transactions/stats', 
     validateParams(WorkspaceIdParamSchema), 
-    requirePermission('transaction:read'), 
+    requirePermission('transactions:view'), 
     controller.getWorkspaceStats.bind(controller)
 );
 
@@ -181,7 +181,7 @@ router.post('/:workspaceId/transactions/transfer',
 // Get all transactions for workspace (for dashboard)
 router.get('/:workspaceId/transactions/all',
     validateParams(WorkspaceIdParamSchema),
-    requirePermission('transaction:read'),
+    requirePermission('transactions:view'),
     controller.getAllTransactions.bind(controller)
 );
 

@@ -91,7 +91,7 @@ export class AuthController {
 
     async getMe(req: Request, res: Response) {
         // userId should be attached by requireAuth middleware
-        const userId = (req as any).user?.userId || (req as any).user?.sub;
+        const userId = (req as any).user?.userId || (req as any).user?.sub || (req as any).user?.id;
         if (!userId) {
             res.status(401).json({ message: 'Unauthorized' });
             return;
@@ -102,7 +102,13 @@ export class AuthController {
             res.status(result.statusCode || 404).json({ message: result.error });
             return;
         }
-        res.json(result);
+        
+        // Ensure user is serialized if it's an entity
+        const userData = (result.data && typeof result.data.toJSON === 'function') 
+            ? result.data.toJSON() 
+            : result.data;
+
+        res.json({ ...result, data: userData });
     }
 
     async refresh(req: Request, res: Response) {

@@ -45,7 +45,7 @@ router.post(
  */
 router.get(
     '/:id',
-    requirePermission('storage:read'),
+    requirePermission('storage:view'),
     controller.get.bind(controller)
 );
 
@@ -65,7 +65,7 @@ router.delete(
  */
 router.get(
     '/:id/download',
-    requirePermission('storage:read'),
+    requirePermission('storage:view'),
     controller.download.bind(controller)
 );
 
@@ -75,7 +75,7 @@ router.get(
  */
 router.post(
     '/refresh-url/:id',
-    requirePermission('storage:read'),
+    requirePermission('storage:view'),
     controller.refreshUrl.bind(controller)
 );
 
@@ -85,7 +85,7 @@ router.post(
  */
 router.get(
     '/workspace/:workspaceId',
-    requirePermission('storage:read'),
+    requirePermission('storage:view'),
     controller.listByWorkspace.bind(controller)
 );
 

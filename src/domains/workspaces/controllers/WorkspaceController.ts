@@ -4,6 +4,18 @@ import { WorkspaceRequestRepository } from '../repositories/WorkspaceRequestRepo
 export class WorkspaceController {
     constructor(private workspaceRequestRepository: WorkspaceRequestRepository) { }
 
+    async getMe(req: Request, res: Response) {
+        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+        const workspaceId = req.params.workspaceId;
+        const result = await this.workspaceRequestRepository.getUserWorkspaceContext(workspaceId, userId);
+
+        if (result.error) {
+            res.status(result.statusCode || 400).json({ message: result.error });
+            return;
+        }
+        res.json(result.data || result);
+    }
+
     async create(req: Request, res: Response) {
         const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
         const result = await this.workspaceRequestRepository.create(userId, req.body);
@@ -155,7 +167,13 @@ export class WorkspaceController {
             res.status(result.statusCode || 400).json({ message: result.error });
             return;
         }
-        res.json({ data: result });
+
+        // Ensure member is serialized if it's an entity
+        const memberData = (result.data && typeof result.data.toJSON === 'function') 
+            ? result.data.toJSON() 
+            : result.data;
+
+        res.json({ ...result, data: memberData });
     }
 
     async updateMember(req: Request, res: Response) {

@@ -62,35 +62,35 @@ const validateQuery = <T extends z.ZodType>(schema: T) => {
 router.get('/:workspaceId/analytics/overview', 
     validateParams(WorkspaceIdParamSchema),
     validateQuery(PeriodQuerySchema),
-    requirePermission('analytics:read'), 
+    requirePermission('analytics:view'), 
     controller.getOverview.bind(controller)
 );
 
 router.get('/:workspaceId/analytics/category-trends',
     validateParams(WorkspaceIdParamSchema),
     validateQuery(MonthsQuerySchema),
-    requirePermission('analytics:read'),
+    requirePermission('analytics:view'),
     controller.getCategoryTrends.bind(controller)
 );
 
 router.get('/:workspaceId/analytics/monthly-comparison',
     validateParams(WorkspaceIdParamSchema),
     validateQuery(MonthsQuerySchema),
-    requirePermission('analytics:read'),
+    requirePermission('analytics:view'),
     controller.getMonthlyComparison.bind(controller)
 );
 
 router.get('/:workspaceId/analytics/spending-trend',
     validateParams(WorkspaceIdParamSchema),
     validateQuery(SpendingTrendQuerySchema),
-    requirePermission('analytics:read'),
+    requirePermission('analytics:view'),
     controller.getSpendingTrend.bind(controller)
 );
 
 router.get('/:workspaceId/analytics/top-merchants',
     validateParams(WorkspaceIdParamSchema),
     validateQuery(z.object({ ...MonthsQuerySchema.shape, ...LimitQuerySchema.shape })),
-    requirePermission('analytics:read'),
+    requirePermission('analytics:view'),
     controller.getTopMerchants.bind(controller)
 );
 

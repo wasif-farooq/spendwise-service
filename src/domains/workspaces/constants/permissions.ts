@@ -39,6 +39,14 @@ export const PERMISSIONS = {
     WORKSPACE: {
         UPDATE: 'workspace:update',
         DELETE: 'workspace:delete'
+    },
+    STORAGE: {
+        VIEW: 'storage:view',
+        CREATE: 'storage:create',
+        DELETE: 'storage:delete'
+    },
+    ANALYTICS: {
+        VIEW: 'analytics:view'
     }
 } as const;
 

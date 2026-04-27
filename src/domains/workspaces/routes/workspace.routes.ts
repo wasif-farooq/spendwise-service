@@ -27,6 +27,7 @@ router.use(requireAuth); // Protect all routes
 
 router.post('/', controller.create.bind(controller));
 router.get('/', controller.list.bind(controller));
+router.get('/:workspaceId/me', controller.getMe.bind(controller));
 router.get('/:id', controller.getById.bind(controller));
 router.put('/:id', requirePermission('workspace:update'), controller.update.bind(controller));
 router.delete('/:id', requirePermission('workspace:delete'), controller.delete.bind(controller));

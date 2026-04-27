@@ -28,8 +28,8 @@ router.put('/:workspaceId/accounts/:id', validateParams(WorkspaceIdParamSchema),
 router.delete('/:workspaceId/accounts/:id', validateParams(WorkspaceIdParamSchema), validateParams(AccountIdParamSchema), requirePermission('account:delete'), controller.deleteAccount.bind(controller));
 
 // Read operations (less specific)
-router.get('/:workspaceId/accounts/balance', validateParams(WorkspaceIdParamSchema), requirePermission('account:read'), controller.getTotalBalance.bind(controller));
-router.get('/:workspaceId/accounts/:id', validateParams(WorkspaceIdParamSchema), validateParams(AccountIdParamSchema), requirePermission('account:read'), controller.getAccountById.bind(controller));
-router.get('/:workspaceId/accounts', validateParams(WorkspaceIdParamSchema), requirePermission('account:read'), controller.getAccounts.bind(controller));
+router.get('/:workspaceId/accounts/balance', validateParams(WorkspaceIdParamSchema), requirePermission('accounts:view'), controller.getTotalBalance.bind(controller));
+router.get('/:workspaceId/accounts/:id', validateParams(WorkspaceIdParamSchema), validateParams(AccountIdParamSchema), requirePermission('accounts:view'), controller.getAccountById.bind(controller));
+router.get('/:workspaceId/accounts', validateParams(WorkspaceIdParamSchema), requirePermission('accounts:view'), controller.getAccounts.bind(controller));
 
 export default router;
