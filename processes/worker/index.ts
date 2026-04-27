@@ -31,8 +31,8 @@ const startWorker = async () => {
     const container = Container.getInstance();
     const serviceFactory = container.resolve<any>(TOKENS.ServiceFactory);
 
-    // Resolve Services
-    const authService = serviceFactory.createAuthService() as AuthService;
+    // Resolve Services (AuthService.createAuthService is async due to Redis connection)
+    const authService = await serviceFactory.createAuthService() as AuthService;
     const userService = serviceFactory.createUserService() as UserService;
     const workspaceService = serviceFactory.createWorkspaceService() as WorkspaceService;
     const featureFlagService = serviceFactory.createFeatureFlagService() as FeatureFlagService;

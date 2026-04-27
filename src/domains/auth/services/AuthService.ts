@@ -71,21 +71,11 @@ export class AuthService {
             passwordHash: password.hash
         });
 
-        // Transactional registration
+        // Transactional registration: only save user and auth identity
         try {
             await this.db.transaction(async (trx) => {
-                // 1. Save User
                 await this.userRepo.save(user, { db: trx });
                 await this.authRepo.save(identity, { db: trx });
-
-                // 2. Create free subscription for user
-                await this.subscriptionService.createFreeSubscription(user.id);
-
-                // 3. Create Workspace "My Account" with default categories
-                await this.workspaceService.create(user.id, {
-                    name: "My Account",
-                    slug: `my-account-${user.id.substring(0, 8)}`
-                }, { db: trx });
             });
         } catch (txError) {
             console.error('[AuthService] Registration transaction failed:', txError);
@@ -98,7 +88,7 @@ export class AuthService {
         return { user };
     }
 
-    async verifyEmail(emailStr: string, code: string): Promise<{ success: boolean; message: string; token?: string; refreshToken?: string; user?: any }> {
+    async verifyEmail(emailStr: string, code: string): Promise<{ success: boolean; message: string; token?: string; refreshToken?: string; user?: any; warning?: string }> {
         const email = Email.create(emailStr);
         const user = await this.userRepo.findByEmail(email.raw);
         if (!user) throw new AppError('User not found', 404);
@@ -114,6 +104,18 @@ export class AuthService {
         user.verifyEmail();
         await this.userRepo.save(user);
 
+        let resourceWarning: string | undefined;
+        try {
+            await this.subscriptionService.createFreeSubscription(user.id);
+            await this.workspaceService.create(user.id, {
+                name: "My Account",
+                slug: `my-account-${user.id.substring(0, 8)}`
+            });
+        } catch (resourceError) {
+            console.error('[AuthService] Post-verification resource creation failed:', resourceError);
+            resourceWarning = 'Email verified, but workspace setup failed. Please contact support.';
+        }
+
         const token = this.generateAccessToken(user);
         const refreshToken = this.generateRefreshToken(user);
 
@@ -122,7 +124,8 @@ export class AuthService {
             message: 'Email verified successfully',
             token,
             refreshToken,
-            user: user.toJSON()
+            user: user.toJSON(),
+            warning: resourceWarning
         };
     }
 
@@ -445,12 +448,23 @@ export class AuthService {
 
         // Cache the secret and backup codes temporarily for verification step
         if (this.cache) {
-            await this.cache.set(`2fa_pending:${userId}:${method}`, JSON.stringify({
-                secret,
-                backupCodes,
-                method,
-                target: method === 'email' ? providedEmail : undefined
-            }), { EX: 600 });
+            const cacheKey = `2fa_pending:${userId}:${method}`;
+            console.log(`[AuthService] Caching 2FA pending data for user ${userId}, method ${method}`);
+            console.log(`[AuthService] Cache key: ${cacheKey}`);
+            console.log(`[AuthService] Cache client readyState: ${this.cache.readyState}`);
+            try {
+                await this.cache.set(cacheKey, JSON.stringify({
+                    secret,
+                    backupCodes,
+                    method,
+                    target: method === 'email' ? providedEmail : undefined
+                }), { EX: 600 });
+                console.log(`[AuthService] Successfully cached 2FA pending data`);
+            } catch (cacheErr) {
+                console.error(`[AuthService] Failed to cache 2FA pending data:`, cacheErr);
+            }
+        } else {
+            console.log(`[AuthService] Cache is not available!`);
         }
 
         return {
@@ -462,9 +476,21 @@ export class AuthService {
 
     async enable2FA(userId: string, code: string, method: 'app' | 'sms' | 'email' = 'app'): Promise<void> {
         let pending: any = null;
+        const cacheKey = `2fa_pending:${userId}:${method}`;
+        console.log(`[AuthService] enable2FA called for user ${userId}, method ${method}`);
+        console.log(`[AuthService] Looking for cache key: ${cacheKey}`);
+        console.log(`[AuthService] Cache client available: ${!!this.cache}`);
         if (this.cache) {
-            const data = await this.cache.get(`2fa_pending:${userId}:${method}`);
-            if (data) pending = JSON.parse(data);
+            console.log(`[AuthService] Cache client readyState: ${this.cache.readyState}`);
+            try {
+                const data = await this.cache.get(cacheKey);
+                console.log(`[AuthService] Cache get result: ${data ? 'FOUND' : 'NOT FOUND'}`);
+                if (data) pending = JSON.parse(data);
+            } catch (cacheErr) {
+                console.error(`[AuthService] Failed to get 2FA pending data from cache:`, cacheErr);
+            }
+        } else {
+            console.log(`[AuthService] Cache is not available!`);
         }
 
         if (!pending) {

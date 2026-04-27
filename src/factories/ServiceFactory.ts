@@ -3,25 +3,42 @@ import { RedisFactory } from '@database/factories/RedisFactory';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
 import { CategoryService } from '@domains/categories/services/CategoryService';
+import { AuthService } from '@domains/auth/services/AuthService';
+import { RedisClientType } from 'redis';
 
 export class ServiceFactory {
-    private redisFactory = new RedisFactory();
-    private redisClient: ReturnType<RedisFactory['createClient']> | null = null;
+    private static redisFactory = new RedisFactory();
+    private static redisClient: ReturnType<RedisFactory['createClient']> | null = null;
+    private static redisConnecting: Promise<void> | null = null;
 
     constructor(
         private repositoryFactory: RepositoryFactory,
         private db: DatabaseFacade
     ) { }
 
-    private getRedisClient() {
-        if (!this.redisClient) {
-            this.redisClient = this.redisFactory.createClient();
-            this.redisClient.connect().catch(console.error);
+    private async getRedisClient(): Promise<RedisClientType> {
+        if (!ServiceFactory.redisClient) {
+            ServiceFactory.redisClient = ServiceFactory.redisFactory.createClient();
+            ServiceFactory.redisClient.on('error', (err) => console.error('[Redis] Client error:', err));
+            ServiceFactory.redisClient.on('connect', () => console.log('[Redis] Client connected'));
+
+            ServiceFactory.redisConnecting = ServiceFactory.redisClient.connect()
+                .then(() => {
+                    console.log('[Redis] Connection established');
+                    ServiceFactory.redisConnecting = null;
+                })
+                .catch((err) => {
+                    console.error('[Redis] Connection error:', err);
+                    ServiceFactory.redisClient = null;
+                    ServiceFactory.redisConnecting = null;
+                });
+
+            await ServiceFactory.redisConnecting;
         }
-        return this.redisClient;
+        return ServiceFactory.redisClient;
     }
 
-    createAuthService() {
+    async createAuthService(): Promise<AuthService> {
         const { AuthService } = require('@domains/auth/services/AuthService');
         const { WorkspaceService } = require('@domains/workspaces/services/WorkspaceService');
 
@@ -41,6 +58,9 @@ export class ServiceFactory {
             categoryService
         );
 
+        const redisClient = await this.getRedisClient();
+        const subscriptionService = this.createSubscriptionService();
+
         return new AuthService(
             this.db,
             this.repositoryFactory.createUserRepository(),
@@ -49,7 +69,8 @@ export class ServiceFactory {
             this.repositoryFactory.createWorkspaceRoleRepository(),
             this.repositoryFactory.createWorkspaceMembersRepository(),
             wsService,
-            this.getRedisClient()
+            subscriptionService,
+            redisClient
         );
     }
 
