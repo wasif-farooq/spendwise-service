@@ -46,7 +46,16 @@ export const PERMISSIONS = {
         DELETE: 'storage:delete'
     },
     ANALYTICS: {
-        VIEW: 'analytics:view'
+        VIEW: 'analytics:view',
+        EXPORT: 'analytics:export'
+    },
+    SUBSCRIPTION: {
+        VIEW: 'subscription:view',
+        EDIT: 'subscription:edit'
+    },
+    AI_ADVISOR: {
+        VIEW: 'aiAdvisor:view',
+        USE: 'aiAdvisor:use'
     }
 } as const;
 

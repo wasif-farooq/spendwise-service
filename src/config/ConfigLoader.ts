@@ -21,7 +21,15 @@ export class ConfigLoader {
 
         // Load .env file
         const envFile = path.resolve(process.cwd(), `.env.${env}`);
-        dotenv.config({ path: envFile });
+        const defaultEnvFile = path.resolve(process.cwd(), '.env');
+        
+        if (require('fs').existsSync(envFile)) {
+            dotenv.config({ path: envFile });
+        } else if (require('fs').existsSync(defaultEnvFile)) {
+            dotenv.config({ path: defaultEnvFile });
+        } else {
+            dotenv.config(); // Fallback to default behavior
+        }
 
         // Load config file
         try {
