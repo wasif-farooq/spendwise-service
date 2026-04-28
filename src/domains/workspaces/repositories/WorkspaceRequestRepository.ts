@@ -113,7 +113,7 @@ export class WorkspaceRequestRepository {
 
     async updateRole(workspaceId: string, userId: string, roleId: string, dto: any) {
         if (this.getMode() === 'direct') {
-            return this.wrap(this.service.updateRole(workspaceId, userId, roleId, dto));
+            return this.wrap(this.service.updateRole(workspaceId, userId, roleId, dto.permissions));
         }
         throw new Error('RPC mode not implemented in this wrapper');
     }
