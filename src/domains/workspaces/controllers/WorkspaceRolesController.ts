@@ -87,13 +87,21 @@ export class WorkspaceRolesController {
     }
 
     async assign(req: Request, res: Response) {
+        console.log('[assign] ====== START ======');
+        console.log('[assign] req.params:', req.params);
+        console.log('[assign] req.body:', req.body);
+        
         const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
         const workspaceId = req.params.id;
         const memberId = req.params.memberId;
         
         let roleId = req.body.roleId || req.body.role;
+        const accountPermissions = req.body.accountPermissions;
+        
+        console.log('[assign] Extracted - roleId:', roleId, 'accountPermissions:', accountPermissions);
         
         if (roleId && !roleId.includes('-')) {
+            console.log('[assign] Role is a name, looking up by name:', roleId);
             const { DatabaseFacade } = await import('@facades/DatabaseFacade');
             const { PostgresFactory } = await import('@database/factories/PostgresFactory');
             const { RepositoryFactory } = await import('@factories/RepositoryFactory');
@@ -101,16 +109,23 @@ export class WorkspaceRolesController {
             const db = new DatabaseFacade(new PostgresFactory());
             const repoFactory = new RepositoryFactory(db);
             const roleRepo = repoFactory.createWorkspaceRoleRepository();
+            console.log('[assign] Calling findByNameAndWorkspace:', roleId, workspaceId);
             const role = await roleRepo.findByNameAndWorkspace(roleId, workspaceId);
+            console.log('[assign] Found role:', role);
             if (role) {
                 roleId = role.id;
+                console.log('[assign] Set roleId to:', roleId);
             } else {
                 res.status(400).json({ message: `Role '${roleId}' not found` });
                 return;
             }
+        } else {
+            console.log('[assign] Role appears to be a UUID already:', roleId);
         }
         
-        const result = await this.workspaceRequestRepository.assignRole(workspaceId, userId, memberId, roleId);
+        console.log('[assign] Final roleId to use:', roleId);
+        console.log('[assign] Calling repository with:', { roleId, accountPermissions });
+        const result = await this.workspaceRequestRepository.assignRole(workspaceId, userId, memberId, { roleId, accountPermissions });
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });

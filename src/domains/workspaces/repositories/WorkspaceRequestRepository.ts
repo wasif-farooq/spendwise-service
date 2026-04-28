@@ -118,9 +118,9 @@ export class WorkspaceRequestRepository {
         throw new Error('RPC mode not implemented in this wrapper');
     }
 
-    async assignRole(workspaceId: string, userId: string, memberId: string, dto: any) {
+    async assignRole(workspaceId: string, userId: string, memberId: string, dto: { roleId: string; accountPermissions?: Record<string, { permissions: string[]; denied: string[] }> }) {
         if (this.getMode() === 'direct') {
-            return this.wrap(this.service.assignRole(workspaceId, userId, memberId, dto));
+            return this.wrap(this.service.assignRole(workspaceId, userId, memberId, dto.roleId, dto.accountPermissions));
         }
         throw new Error('RPC mode not implemented in this wrapper');
     }

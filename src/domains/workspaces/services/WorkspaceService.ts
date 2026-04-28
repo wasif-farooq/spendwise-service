@@ -205,7 +205,17 @@ export class WorkspaceService {
             memberId
         });
 
-        return members[0];
+        const memberData = members[0];
+        
+        // Fetch account permissions for this member
+        const accountPermissions = await this.workspaceMembersRepository.getAccountPermissions(memberId);
+        
+        // Add accountPermissions to the response if they exist
+        if (accountPermissions && Object.keys(accountPermissions).length > 0) {
+            memberData.accountPermissions = accountPermissions;
+        }
+
+        return memberData;
     }
 
     async updateMember(workspaceId: string, userId: string, memberId: string, dto: UpdateMemberDto): Promise<void> {
@@ -228,9 +238,10 @@ export class WorkspaceService {
             throw new AppError('Cannot modify workspace creator', 403);
         }
 
-        // Update role if provided
-        if (dto.roleName) {
-            const role = await this.workspaceRoleRepository.findByNameAndWorkspace(dto.roleName, workspaceId);
+        // Update role if provided (accept both 'role' and 'roleName' from frontend)
+        const roleName = dto.roleName || dto.role;
+        if (roleName) {
+            const role = await this.workspaceRoleRepository.findByNameAndWorkspace(roleName, workspaceId);
             if (!role) {
                 throw new AppError('Role not found', 404);
             }
@@ -243,8 +254,14 @@ export class WorkspaceService {
         }
 
         // Update account permissions if provided
-        if (dto.accountPermissions && Object.keys(dto.accountPermissions).length > 0) {
-            await this.workspaceMembersRepository.saveAccountPermissions(memberId, dto.accountPermissions);
+        if (dto.accountPermissions) {
+            if (Object.keys(dto.accountPermissions).length > 0) {
+                // Save permissions when object has content
+                await this.workspaceMembersRepository.saveAccountPermissions(memberId, dto.accountPermissions);
+            } else {
+                // Clear permissions when empty object is sent
+                await this.workspaceMembersRepository.deleteAccountPermissions(memberId);
+            }
         }
 
         await this.workspaceMembersRepository.save(targetMember);
@@ -699,7 +716,9 @@ Expires in 7 days.
         await PermissionCache.invalidateWorkspace(workspaceId);
     }
 
-    async assignRole(workspaceId: string, userId: string, memberId: string, roleId: string): Promise<void> {
+    async assignRole(workspaceId: string, userId: string, memberId: string, roleId: string, accountPermissions?: Record<string, { permissions: string[]; denied: string[] }>): Promise<void> {
+        console.log('[Service assignRole] START - roleId:', roleId, 'accountPermissions:', accountPermissions);
+        
         const hasPermission = await this.checkPermission(workspaceId, userId, 'members:edit');
         if (!hasPermission) throw new AppError('Insufficient permissions to assign roles', 403);
 
@@ -708,10 +727,18 @@ Expires in 7 days.
 
         if (member.isDefault) throw new AppError('Cannot modify workspace creator', 400);
 
+        console.log('[Service assignRole] Looking for role:', roleId, 'workspaceId:', workspaceId);
         const role = await this.workspaceRoleRepository.findById(roleId);
+        console.log('[Service assignRole] Found role:', role);
         if (!role || role.workspaceId !== workspaceId) throw new AppError('Role not valid for this workspace', 400);
 
         member.addRole(roleId);
+        
+        // Save account permissions if provided
+        if (accountPermissions && Object.keys(accountPermissions).length > 0) {
+            await this.workspaceMembersRepository.saveAccountPermissions(memberId, accountPermissions);
+        }
+        
         await this.workspaceMembersRepository.save(member);
 
         // Invalidate permission cache for the member whose role changed

@@ -37,24 +37,28 @@ router.post('/:id/logo', requirePermission('workspace:update'), upload.single('l
 // Logo download - redirect to public URL
 router.get('/:id/logo', controller.getLogo.bind(controller));
 
-// Members
-// IMPORTANT: More specific routes must come BEFORE parameterized routes
-// Otherwise /:id/members/invitations gets matched as /:id/members/:memberId
+// FIRST: Roles routes (must come BEFORE members routes to avoid route conflicts)
+// Remove duplicate - keep only this one
+router.use('/:id/roles', workspaceRolesRoutes);
+
+// Members - come AFTER roles routes
+// Invite members (specific routes before parameterized)
 router.post('/:id/members/invite', requirePermission('members:create'), controller.inviteMember.bind(controller));
 router.get('/:id/members/invitations', controller.getInvitations.bind(controller));
 router.post('/:id/members/resend/:invitationId', requirePermission('members:create'), controller.resendInvitation.bind(controller));
 router.delete('/:id/members/invitations/:invitationId', requirePermission('members:delete'), controller.cancelInvitation.bind(controller));
 router.post('/:id/members/invitations/:invitationId/cancel', requirePermission('members:delete'), controller.cancelInvitation.bind(controller));
 
+// Members list/details
 router.get('/:id/members', controller.getMembers.bind(controller));
 router.get('/:id/members/:memberId', controller.getMember.bind(controller));
+
+// Member actions
 router.put('/:id/members/:memberId', requirePermission('members:edit'), controller.updateMember.bind(controller));
 router.delete('/:id/members/:memberId', requirePermission('members:delete'), controller.removeMember.bind(controller));
 
 // Leave workspace
 router.post('/:id/leave', controller.leave.bind(controller));
-
-router.use('/:id/roles', workspaceRolesRoutes);
 
 // My invitations (authenticated)
 router.get('/invitations/me', controller.getMyInvitations.bind(controller));
