@@ -8,6 +8,8 @@ import { UserService } from '@domains/users/services/UserService';
 import { WorkspaceService } from '@domains/workspaces/services/WorkspaceService';
 import { FeatureFlagService } from '@domains/feature-flags/services/FeatureFlagService';
 import { AppError } from '@shared/errors/AppError';
+import { ReportService } from '../../src/domains/reports/services/ReportService';
+import { ExportReportRequest } from '../../src/domains/reports/types';
 
 // Consolidate Worker Logic
 const startWorker = async () => {
@@ -36,6 +38,7 @@ const startWorker = async () => {
     const userService = serviceFactory.createUserService() as UserService;
     const workspaceService = serviceFactory.createWorkspaceService() as WorkspaceService;
     const featureFlagService = serviceFactory.createFeatureFlagService() as FeatureFlagService;
+    const reportService = new ReportService();
 
     console.log('Unified Worker Listening...');
 
@@ -85,12 +88,18 @@ const startWorker = async () => {
     // Subscribe to Feature Flag Topics
     await consumer.subscribe({ topic: 'feature-flags.service.get-all', fromBeginning: false });
 
+    // Subscribe to Report Topics
+    await consumer.subscribe({ topic: 'reports.export', fromBeginning: false });
+
     await consumer.run({
         eachMessage: async ({ topic, partition, message }) => {
             const replyTo = message.headers?.replyTo?.toString();
             const correlationId = message.headers?.correlationId?.toString();
 
-            if (!replyTo || !correlationId) return;
+            // Fire-and-forget messages (like reports.export) don't have replyTo
+            const isFireAndForget = !replyTo && !correlationId;
+
+            if (!replyTo && !correlationId && topic !== 'reports.export') return;
 
             try {
                 const payload = JSON.parse(message.value?.toString() || '{}');
@@ -227,30 +236,47 @@ const startWorker = async () => {
                     result = await featureFlagService.getAllFlags();
                 }
 
-                // Reply Success
-                await producer.send({
-                    topic: replyTo,
-                    messages: [{
-                        value: JSON.stringify(result ?? { success: true }),
-                        headers: { correlationId }
-                    }]
-                });
+                // --- Report Handling (Fire & Forget - No Reply) ---
+                else if (topic === 'reports.export') {
+                    console.log(`[Report] Processing Export request for workspace ${payload.workspaceId}`);
+                    try {
+                        await reportService.handleExportRequest(payload as ExportReportRequest);
+                        console.log(`[Report] Export completed for ${payload.userEmail}`);
+                    } catch (error: any) {
+                        console.error(`[Report] Export failed:`, error);
+                    }
+                    // No reply for fire-and-forget messages
+                }
+
+                // Reply Success (only for RPC requests with replyTo)
+                else if (replyTo && correlationId) {
+                    await producer.send({
+                        topic: replyTo,
+                        messages: [{
+                            value: JSON.stringify(result ?? { success: true }),
+                            headers: { correlationId }
+                        }]
+                    });
+                }
 
             } catch (error: any) {
                 console.error(`Error processing RPC [${topic}]`, error);
 
-                const errorResponse = {
-                    error: error.message || 'Internal Error',
-                    statusCode: (error instanceof AppError) ? error.statusCode : 500
-                };
+                // Only reply if it's an RPC request
+                if (replyTo && correlationId) {
+                    const errorResponse = {
+                        error: error.message || 'Internal Error',
+                        statusCode: (error instanceof AppError) ? error.statusCode : 500
+                    };
 
-                await producer.send({
-                    topic: replyTo,
-                    messages: [{
-                        value: JSON.stringify(errorResponse),
-                        headers: { correlationId }
-                    }]
-                });
+                    await producer.send({
+                        topic: replyTo,
+                        messages: [{
+                            value: JSON.stringify(errorResponse),
+                            headers: { correlationId }
+                        }]
+                    });
+                }
             }
         },
     });

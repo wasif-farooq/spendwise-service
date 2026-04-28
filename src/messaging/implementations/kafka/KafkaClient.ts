@@ -35,6 +35,15 @@ export class KafkaClient implements IMessageQueue {
     }
 
     async publish(topic: string, message: any): Promise<void> {
+        if (!this.connected) {
+            console.log('[KafkaClient] Connecting to Kafka...');
+            try {
+                await this.connect();
+            } catch (err) {
+                console.error('[KafkaClient] Failed to connect to Kafka:', err);
+                throw new Error('Kafka unavailable');
+            }
+        }
         await this.producer.send({
             topic,
             messages: [{ value: JSON.stringify(message) }],
