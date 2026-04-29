@@ -5,18 +5,36 @@ import { TransactionRepository } from '@domains/transactions/repositories/Transa
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { TOKENS } from '@di/tokens';
 import { Container } from '@di/Container';
+import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
 
 let categoryServiceInstance: CategoryService | null = null;
+let subscriptionServiceInstance: SubscriptionService | null = null;
+let categoryDbInstance: DatabaseFacade | null = null;
 
 function getCategoryService(): CategoryService {
     if (!categoryServiceInstance) {
         const container = Container.getInstance();
         const db = container.resolve<DatabaseFacade>(TOKENS.Database as any);
+        categoryDbInstance = db;
         const categoryRepo = new CategoryRepository(db);
         const transactionRepo = new TransactionRepository(db);
         categoryServiceInstance = new CategoryService(categoryRepo, transactionRepo);
     }
     return categoryServiceInstance;
+}
+
+function getSubscriptionService(): SubscriptionService {
+    if (!subscriptionServiceInstance) {
+        subscriptionServiceInstance = Container.getInstance().resolve<SubscriptionService>('SubscriptionService');
+    }
+    return subscriptionServiceInstance;
+}
+
+function getDb(): DatabaseFacade {
+    if (!categoryDbInstance) {
+        categoryDbInstance = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database as any);
+    }
+    return categoryDbInstance;
 }
 
 export class CategoryController {
@@ -55,8 +73,21 @@ export class CategoryController {
     async createCategory(req: Request, res: Response) {
         const workspaceId = req.params.workspaceId;
         const { name, type, icon, color, description } = req.body;
+        const userId = (req as any).user?.userId || (req as any).user?.id;
 
         try {
+            // Check subscription limits before creating category
+            if (userId) {
+                const db = getDb();
+                const countResult = await db.query(
+                    `SELECT COUNT(*) as count FROM categories WHERE workspace_id = $1`,
+                    [workspaceId]
+                );
+                const currentCount = parseInt(countResult.rows[0]?.count || '0', 10);
+                const subService = getSubscriptionService();
+                await subService.checkFeatureLimit(userId, 'categories_per_workspace', currentCount);
+            }
+
             const service = getCategoryService();
             const category = await service.createCategory({
                 name,

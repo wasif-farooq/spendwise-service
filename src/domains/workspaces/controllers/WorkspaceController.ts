@@ -4,9 +4,16 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
 import { RepositoryFactory } from '@factories/RepositoryFactory';
+import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
 
 export class WorkspaceController {
-    constructor(private workspaceRequestRepository: WorkspaceRequestRepository) { }
+    private subscriptionService: SubscriptionService;
+    private db: DatabaseFacade;
+
+    constructor(private workspaceRequestRepository: WorkspaceRequestRepository) {
+        this.subscriptionService = Container.getInstance().resolve<SubscriptionService>('SubscriptionService');
+        this.db = Container.getInstance().resolve<DatabaseFacade>('Database');
+    }
 
     async getMe(req: Request, res: Response) {
         const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
@@ -22,6 +29,15 @@ export class WorkspaceController {
 
     async create(req: Request, res: Response) {
         const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+
+        // Check subscription limits before creating workspace
+        const countResult = await this.db.query(
+            `SELECT COUNT(*) as count FROM workspaces WHERE owner_id = $1`,
+            [userId]
+        );
+        const currentCount = parseInt(countResult.rows[0]?.count || '0', 10);
+        await this.subscriptionService.checkFeatureLimit(userId, 'workspaces', currentCount);
+
         const result = await this.workspaceRequestRepository.create(userId, req.body);
 
         if (result.error) {
@@ -114,6 +130,21 @@ export class WorkspaceController {
     async inviteMember(req: Request, res: Response) {
         const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
         const workspaceId = req.params.id;
+
+        // Check subscription limits before inviting member
+        const memberCountResult = await this.db.query(
+            `SELECT COUNT(*) as count FROM workspace_members WHERE workspace_id = $1`,
+            [workspaceId]
+        );
+        const invitationCountResult = await this.db.query(
+            `SELECT COUNT(*) as count FROM workspace_invitations WHERE workspace_id = $1 AND status = 'pending'`,
+            [workspaceId]
+        );
+        const memberCount = parseInt(memberCountResult.rows[0]?.count || '0', 10);
+        const invitationCount = parseInt(invitationCountResult.rows[0]?.count || '0', 10);
+        const totalCount = memberCount + invitationCount;
+        await this.subscriptionService.checkFeatureLimit(userId, 'members', totalCount);
+
         const result = await this.workspaceRequestRepository.inviteMember(workspaceId, userId, req.body);
 
         if (result.error) {

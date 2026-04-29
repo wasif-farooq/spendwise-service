@@ -53,8 +53,8 @@ export class UserSubscriptionRepository extends BaseRepository<UserSubscription>
             trialEndsAt: row.trial_ends_at,
             paymentProvider: row.payment_provider,
             merchantSubscriptionId: row.merchant_subscription_id,
-            featuresSnapshot: row.features_snapshot,
-            limitsSnapshot: row.limits_snapshot,
+            featuresSnapshot: typeof row.features_snapshot === 'string' ? JSON.parse(row.features_snapshot) : row.features_snapshot,
+            limitsSnapshot: typeof row.limits_snapshot === 'string' ? JSON.parse(row.limits_snapshot) : row.limits_snapshot,
             createdAt: row.created_at,
             updatedAt: row.updated_at
         }, row.id);
