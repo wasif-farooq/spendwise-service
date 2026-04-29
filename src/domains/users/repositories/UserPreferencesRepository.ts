@@ -16,6 +16,9 @@ export class UserPreferencesRepository extends BaseRepository<UserPreference> {
             language: row.language,
             timezone: row.timezone,
             color: row.color,
+            colorScheme: row.color_scheme,
+            layout: row.layout,
+            currency: row.currency,
             notifications: row.notifications,
             createdAt: row.created_at,
             updatedAt: row.updated_at
@@ -31,35 +34,38 @@ export class UserPreferencesRepository extends BaseRepository<UserPreference> {
     }
 
     async save(entity: UserPreference): Promise<void> {
-        // Upsert logic
         const exists = await this.findByUserId(entity.userId);
 
         if (exists) {
-            // Update
             await this.db.query(
                 `UPDATE ${this.tableName} SET 
                     theme = $1, 
                     language = $2, 
                     timezone = $3, 
                     color = $4, 
-                    notifications = $5, 
+                    color_scheme = $5,
+                    layout = $6,
+                    currency = $7,
+                    notifications = $8, 
                     updated_at = NOW() 
-                WHERE user_id = $6`,
+                WHERE user_id = $9`,
                 [
                     entity.theme,
                     entity.language,
                     entity.timezone,
                     entity.color,
+                    entity.colorScheme,
+                    entity.layout,
+                    entity.currency,
                     JSON.stringify(entity.notifications),
                     entity.userId
                 ]
             );
         } else {
-            // Insert
             await this.db.query(
                 `INSERT INTO ${this.tableName} 
-                (id, user_id, theme, language, timezone, color, notifications, created_at, updated_at) 
-                VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
+                (id, user_id, theme, language, timezone, color, color_scheme, layout, currency, notifications, created_at, updated_at) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
                 [
                     entity.id,
                     entity.userId,
@@ -67,6 +73,9 @@ export class UserPreferencesRepository extends BaseRepository<UserPreference> {
                     entity.language,
                     entity.timezone,
                     entity.color,
+                    entity.colorScheme,
+                    entity.layout,
+                    entity.currency,
                     JSON.stringify(entity.notifications)
                 ]
             );

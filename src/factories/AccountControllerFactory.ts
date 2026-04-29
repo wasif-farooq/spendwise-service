@@ -5,15 +5,18 @@ import { AccountRepository } from '@domains/accounts/repositories/AccountReposit
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { TOKENS } from '@di/tokens';
 import { Container } from '@di/Container';
+import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
+import { ExchangeRateRepository } from '@domains/exchange-rates/repositories/ExchangeRateRepository';
 
 export class AccountControllerFactory {
     private accountService: AccountService;
 
     constructor(private serviceFactory: ServiceFactory) {
-        // Get database from container (same pattern as other factories)
         const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
         const accountRepository = new AccountRepository(db);
-        this.accountService = new AccountService(accountRepository);
+        const exchangeRateRepository = new ExchangeRateRepository(db);
+        const exchangeRateService = new ExchangeRateService(exchangeRateRepository);
+        this.accountService = new AccountService(accountRepository, exchangeRateService);
     }
 
     create(): AccountController {

@@ -7,7 +7,8 @@ import { ExportReportRequest } from '../types';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { PostgresFactory } from '@database/factories/PostgresFactory';
+import { Container } from '@di/Container';
+import { TOKENS } from '@di/tokens';
 
 export class ReportService {
   private emailService: IEmailService;
@@ -16,8 +17,8 @@ export class ReportService {
   constructor() {
     this.emailService = EmailServiceFactory.create('console');
     
-    // Initialize repositories
-    const db = new DatabaseFacade(new PostgresFactory());
+    // Initialize repositories using singleton
+    const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
     const transactionRepo = new TransactionRepository(db);
     const categoryRepo = new CategoryRepository(db);
     

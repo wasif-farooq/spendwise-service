@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
 import { WorkspaceRequestRepository } from '../repositories/WorkspaceRequestRepository';
+import { DatabaseFacade } from '@facades/DatabaseFacade';
+import { Container } from '@di/Container';
+import { TOKENS } from '@di/tokens';
+import { RepositoryFactory } from '@factories/RepositoryFactory';
 
 export class WorkspaceController {
     constructor(private workspaceRequestRepository: WorkspaceRequestRepository) { }
@@ -316,11 +320,7 @@ export class WorkspaceController {
         let roleId = req.body.roleId || req.body.role;
         
         if (roleId && !roleId.includes('-')) {
-            const { DatabaseFacade } = await import('@facades/DatabaseFacade');
-            const { PostgresFactory } = await import('@database/factories/PostgresFactory');
-            const { RepositoryFactory } = await import('@factories/RepositoryFactory');
-            
-            const db = new DatabaseFacade(new PostgresFactory());
+            const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
             const repoFactory = new RepositoryFactory(db);
             const roleRepo = repoFactory.createWorkspaceRoleRepository();
             const role = await roleRepo.findByNameAndWorkspace(roleId, workspaceId);

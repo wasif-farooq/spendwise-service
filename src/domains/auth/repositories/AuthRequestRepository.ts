@@ -4,6 +4,8 @@ import { PostgresFactory } from '@database/factories/PostgresFactory';
 import { RepositoryFactory } from '@factories/RepositoryFactory';
 import { ServiceFactory } from '@factories/ServiceFactory';
 import { AuthService } from '@domains/auth/services/AuthService';
+import { Container } from '@di/Container';
+import { TOKENS } from '@di/tokens';
 
 export class AuthRequestRepository {
     private config = ConfigLoader.getInstance();
@@ -25,7 +27,7 @@ export class AuthRequestRepository {
         }
 
         console.log('[AuthRequestRepository] Creating new ServiceFactory instance');
-        const db = new DatabaseFacade(new PostgresFactory());
+        const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
         const repoFactory = new RepositoryFactory(db);
         const serviceFactory = new ServiceFactory(repoFactory, db);
 

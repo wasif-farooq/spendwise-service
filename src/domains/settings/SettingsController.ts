@@ -4,12 +4,13 @@ import { AuthRequestRepository } from '@domains/auth/repositories/AuthRequestRep
 import { UserPreferencesService } from '@domains/users/services/UserPreferencesService';
 import { ServiceFactory } from '@factories/ServiceFactory';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { PostgresFactory } from '@database/factories/PostgresFactory';
+import { Container } from '@di/Container';
+import { TOKENS } from '@di/tokens';
 import { RepositoryFactory } from '@factories/RepositoryFactory';
 import { AppError } from '@shared/errors/AppError';
 
-// Create service instances directly
-const dbFacade = new DatabaseFacade(new PostgresFactory());
+// Create service instances directly using singleton
+const dbFacade = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
 const repoFactory = new RepositoryFactory(dbFacade);
 const serviceFactory = new ServiceFactory(repoFactory, dbFacade);
 const userPreferencesService = serviceFactory.createUserPreferencesService();

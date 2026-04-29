@@ -4,9 +4,11 @@ CREATE TABLE "exchange_rates" (
     "base_currency" VARCHAR(10) NOT NULL,
     "target_currency" VARCHAR(10) NOT NULL,
     "rate" DECIMAL(15, 8) NOT NULL,
-    "date" DATE NOT NULL,
+    "date" DATE DEFAULT CURRENT_DATE,
+    "fetched_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE("base_currency", "target_currency"),
     UNIQUE("base_currency", "target_currency", "date")
 );
 

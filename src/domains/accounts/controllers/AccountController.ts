@@ -8,18 +8,23 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { AccountRepository } from '../repositories/AccountRepository';
 import { TransactionService } from '@domains/transactions/services/TransactionService';
 import { TOKENS } from '@di/tokens';
+import { UserPreferencesService } from '@domains/users/services/UserPreferencesService';
+import { ServiceFactory } from '@factories/ServiceFactory';
+import { RepositoryFactory } from '@factories/RepositoryFactory';
 
 export class AccountController {
     private subscriptionService: SubscriptionService;
     private accountRepo: AccountRepository;
     private transactionService: TransactionService;
     private db: DatabaseFacade;
+    private userPreferencesService: UserPreferencesService;
 
     constructor(private accountService: AccountService) {
         this.db = Container.getInstance().resolve<DatabaseFacade>('Database');
         this.subscriptionService = Container.getInstance().resolve<SubscriptionService>('SubscriptionService');
         this.accountRepo = new AccountRepository(this.db);
         this.transactionService = Container.getInstance().resolve<TransactionService>(TOKENS.TransactionService);
+        this.userPreferencesService = Container.getInstance().resolve<UserPreferencesService>(TOKENS.UserPreferencesService);
     }
 
     private getWorkspaceId(req: Request): string {
@@ -151,8 +156,11 @@ export class AccountController {
                 throw new AppError('Workspace not found', 404);
             }
 
-            // Membership checked by middleware
-            const result = await this.accountService.getTotalBalance(workspaceId);
+            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+            const userPrefs = await this.userPreferencesService.getPreferences(userId);
+            const targetCurrency = userPrefs.currency || 'USD';
+
+            const result = await this.accountService.getTotalBalance(workspaceId, targetCurrency);
             res.json(result);
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });

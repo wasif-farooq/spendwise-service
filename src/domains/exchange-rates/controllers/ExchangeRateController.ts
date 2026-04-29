@@ -2,13 +2,14 @@ import { Request, Response } from 'express';
 import { ExchangeRateService } from '../services/ExchangeRateService';
 import { ExchangeRateRepository } from '../repositories/ExchangeRateRepository';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { PostgresFactory } from '@database/factories/PostgresFactory';
+import { Container } from '@di/Container';
+import { TOKENS } from '@di/tokens';
 
 export class ExchangeRateController {
     private service: ExchangeRateService;
 
     constructor() {
-        const db = new DatabaseFacade(new PostgresFactory());
+        const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
         const repository = new ExchangeRateRepository(db);
         this.service = new ExchangeRateService(repository);
     }

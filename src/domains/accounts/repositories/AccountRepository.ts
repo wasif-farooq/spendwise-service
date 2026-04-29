@@ -1,6 +1,6 @@
 import { Account, AccountProps } from '../models/Account';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { IAccountRepository } from './IAccountRepository';
+import { IAccountRepository, AccountWithBalance } from './IAccountRepository';
 
 export class AccountRepository implements IAccountRepository {
     private dbToUse: DatabaseFacade;
@@ -131,6 +131,19 @@ export class AccountRepository implements IAccountRepository {
             [workspaceId]
         );
         return parseFloat(result.rows[0]?.total || '0');
+    }
+
+    async findAllWithBalancesForWorkspace(workspaceId: string): Promise<AccountWithBalance[]> {
+        const result = await this.dbToUse.query(
+            'SELECT id, name, balance, currency FROM accounts WHERE workspace_id = $1',
+            [workspaceId]
+        );
+        return result.rows.map((row: any) => ({
+            id: row.id,
+            name: row.name,
+            balance: parseFloat(row.balance),
+            currency: row.currency
+        }));
     }
 
     async updateBalance(id: string, balance: number): Promise<void> {

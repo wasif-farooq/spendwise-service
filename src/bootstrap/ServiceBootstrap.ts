@@ -132,7 +132,7 @@ export class ServiceBootstrap {
             const transactionService = new TransactionService(transactionRepo, accountRepo, dbFacade, exchangeRateService);
             this.container.registerInstance(TOKENS.TransactionService, transactionService);
 
-            const accountService = new AccountService(accountRepo);
+            const accountService = new AccountService(accountRepo, exchangeRateService);
             this.container.registerInstance(TOKENS.AccountService, accountService);
 
             const accountControllerFactory = new AccountControllerFactory(serviceFactory);

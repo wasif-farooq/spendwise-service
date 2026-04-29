@@ -6,6 +6,9 @@ export interface UserPreferenceProps {
     language: string;
     timezone: string;
     color: string;
+    colorScheme: string;
+    layout: string;
+    currency: string;
     notifications: Record<string, any>;
     createdAt: Date;
     updatedAt: Date;
@@ -22,6 +25,9 @@ export class UserPreference extends Entity<UserPreferenceProps> {
         language?: string;
         timezone?: string;
         color?: string;
+        colorScheme?: string;
+        layout?: string;
+        currency?: string;
         notifications?: Record<string, any>;
     }, id?: string): UserPreference {
         return new UserPreference({
@@ -30,6 +36,9 @@ export class UserPreference extends Entity<UserPreferenceProps> {
             language: props.language || 'en',
             timezone: props.timezone || 'UTC',
             color: props.color || 'blue',
+            colorScheme: props.colorScheme || 'blue',
+            layout: props.layout || 'sidebar-left',
+            currency: props.currency || 'USD',
             notifications: props.notifications || {},
             createdAt: new Date(),
             updatedAt: new Date()
@@ -45,6 +54,9 @@ export class UserPreference extends Entity<UserPreferenceProps> {
     get language(): string { return this.props.language; }
     get timezone(): string { return this.props.timezone; }
     get color(): string { return this.props.color; }
+    get colorScheme(): string { return this.props.colorScheme; }
+    get layout(): string { return this.props.layout; }
+    get currency(): string { return this.props.currency; }
     get notifications(): Record<string, any> { return this.props.notifications; }
 
     public update(props: Partial<{
@@ -52,12 +64,18 @@ export class UserPreference extends Entity<UserPreferenceProps> {
         language: string;
         timezone: string;
         color: string;
+        colorScheme: string;
+        layout: string;
+        currency: string;
         notifications: Record<string, any>;
     }>): void {
         if (props.theme) this.props.theme = props.theme;
         if (props.language) this.props.language = props.language;
         if (props.timezone) this.props.timezone = props.timezone;
         if (props.color) this.props.color = props.color;
+        if (props.colorScheme) this.props.colorScheme = props.colorScheme;
+        if (props.layout) this.props.layout = props.layout;
+        if (props.currency) this.props.currency = props.currency;
         if (props.notifications) this.props.notifications = props.notifications;
         this.props.updatedAt = new Date();
     }
