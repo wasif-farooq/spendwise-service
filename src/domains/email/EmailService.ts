@@ -1,4 +1,6 @@
+import nodemailer from 'nodemailer';
 import { EmailOptions, EmailResult } from './types';
+import { ConfigLoader } from '@config/ConfigLoader';
 
 export interface IEmailService {
   send(options: EmailOptions): Promise<EmailResult>;
@@ -46,13 +48,67 @@ export class ConsoleEmailService implements IEmailService {
   }
 }
 
-export class EmailServiceFactory {
-  static create(provider: 'console' = 'console'): IEmailService {
-    switch (provider) {
-      case 'console':
-        return new ConsoleEmailService();
-      default:
-        return new ConsoleEmailService();
+export class SmtpEmailService implements IEmailService {
+  private transporter: nodemailer.Transporter;
+  private fromAddress: string;
+  private fromName: string;
+
+  constructor() {
+    const config = ConfigLoader.getInstance();
+    const mailConfig = config.get('mail') || {};
+
+    this.fromAddress = mailConfig.fromAddress || 'noreply@spendwise.app';
+    this.fromName = mailConfig.fromName || 'SpendWise';
+
+    this.transporter = nodemailer.createTransport({
+      host: mailConfig.host || 'smtp.mailtrap.io',
+      port: parseInt(mailConfig.port) || 25,
+      secure: mailConfig.secure === true || mailConfig.secure === 'true',
+      auth: {
+        user: mailConfig.username || '',
+        pass: mailConfig.password || ''
+      }
+    });
+  }
+
+  async send(options: EmailOptions): Promise<EmailResult> {
+    try {
+      const result = await this.transporter.sendMail({
+        from: `${this.fromName} <${this.fromAddress}>`,
+        to: options.to,
+        subject: options.subject,
+        text: options.text,
+        html: options.html,
+        attachments: options.attachments?.map(a => ({
+          filename: a.filename,
+          content: a.content,
+          contentType: a.contentType
+        }))
+      });
+
+      return {
+        success: true,
+        messageId: result.messageId
+      };
+    } catch (error: any) {
+      console.error('[EMAIL] Failed to send email:', error);
+      return {
+        success: false,
+        messageId: undefined,
+        error: error.message
+      };
     }
+  }
+}
+
+export class EmailServiceFactory {
+  static create(provider?: string): IEmailService {
+    // Use provided provider, or fall back to environment variable, or default to console
+    const emailProvider = provider || process.env.MAIL_PROVIDER || 'console';
+    
+    if (emailProvider === 'smtp') {
+      return new SmtpEmailService();
+    }
+    return new ConsoleEmailService();
   }
 }

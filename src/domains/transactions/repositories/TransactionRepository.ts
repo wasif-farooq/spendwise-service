@@ -211,7 +211,7 @@ export class TransactionRepository {
 
     async findByAccountId(accountId: string, limit = 100, offset = 0): Promise<Transaction[]> {
         const result = await this.dbToUse.query(
-            'SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.account_id = $1 ORDER BY t.created_at DESC, t.id DESC LIMIT $2 OFFSET $3',
+            'SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.account_id = $1 ORDER BY t.date DESC, t.id DESC LIMIT $2 OFFSET $3',
             [accountId, limit, offset]
         );
         return result.rows.map((row: any) => this.mapToEntity(row));
@@ -220,16 +220,18 @@ export class TransactionRepository {
     // ==================== CURSOR-BASED PAGINATION ====================
 
     /**
-     * Decode cursor string to get id and created_at for pagination
-     * Cursor format: base64("id-created_at")
+     * Decode cursor string to get id and date for pagination
+     * Cursor format: base64("id-date")
      */
     private decodeCursor(cursor?: string): { id: string; date: string } | null {
         if (!cursor) return null;
         try {
             const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
-            const [id, createdAt] = decoded.split('|');
-            if (!id || !createdAt) return null;
-            return { id, date: createdAt };
+            const [id, date] = decoded.split('|');
+            if (!id) return null;
+            // Return null if date is empty or undefined
+            if (!date || date === 'undefined') return null;
+            return { id, date };
         } catch {
             return null;
         }
@@ -237,13 +239,17 @@ export class TransactionRepository {
 
     /**
      * Encode transaction to cursor string
-     * Cursor format: base64("id-created_at")
+     * Cursor format: base64("id-date")
      */
     private encodeCursor(transaction: Transaction): string {
-        const createdAtStr = transaction.createdAt instanceof Date 
-            ? transaction.createdAt.toISOString()
-            : String(transaction.createdAt);
-        return Buffer.from(`${transaction.id}|${createdAtStr}`).toString('base64');
+        const date = transaction.date;
+        if (!date) {
+            return Buffer.from(`${transaction.id}|`).toString('base64');
+        }
+        const dateStr = date instanceof Date 
+            ? date.toISOString()
+            : String(date);
+        return Buffer.from(`${transaction.id}|${dateStr}`).toString('base64');
     }
 
     /**
@@ -258,44 +264,44 @@ export class TransactionRepository {
         const cursorData = this.decodeCursor(cursor);
 
         // Build query with cursor filtering
-        let whereClause = 'WHERE account_id = $1';
+        let whereClause = 'WHERE t.account_id = $1';
         const params: any[] = [accountId];
         let paramIndex = 2;
 
-        // Apply cursor-based filtering (use created_at + id for stable ordering)
+        // Apply cursor-based filtering (use date + id for stable ordering)
         if (cursorData) {
-            whereClause += ` AND (created_at < $${paramIndex} OR (created_at = $${paramIndex} AND id < $${paramIndex + 1}))`;
+            whereClause += ` AND (t.date < $${paramIndex} OR (t.date = $${paramIndex} AND t.id < $${paramIndex + 1}))`;
             params.push(cursorData.date, cursorData.id);
             paramIndex += 2;
         }
 
         // Apply filters
         if (filters?.type) {
-            whereClause += ` AND type = $${paramIndex}`;
+            whereClause += ` AND t.type = $${paramIndex}`;
             params.push(filters.type);
             paramIndex++;
         }
 
         if (filters?.categoryId) {
-            whereClause += ` AND category_id = $${paramIndex}`;
+            whereClause += ` AND t.category_id = $${paramIndex}`;
             params.push(filters.categoryId);
             paramIndex++;
         }
 
         if (filters?.startDate) {
-            whereClause += ` AND date >= $${paramIndex}`;
+            whereClause += ` AND t.date >= $${paramIndex}`;
             params.push(filters.startDate);
             paramIndex++;
         }
 
         if (filters?.endDate) {
-            whereClause += ` AND date <= $${paramIndex}`;
+            whereClause += ` AND t.date <= $${paramIndex}`;
             params.push(filters.endDate);
             paramIndex++;
         }
 
         if (filters?.search) {
-            whereClause += ` AND (description ILIKE $${paramIndex} OR amount::text ILIKE $${paramIndex})`;
+            whereClause += ` AND (t.description ILIKE $${paramIndex} OR t.amount::text ILIKE $${paramIndex})`;
             params.push(`%${filters.search}%`);
             paramIndex++;
         }
@@ -306,7 +312,7 @@ export class TransactionRepository {
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id 
             ${whereClause} 
-            ORDER BY created_at DESC, id DESC 
+            ORDER BY t.date DESC, t.id DESC 
             LIMIT $${paramIndex}
         `;
         params.push(limit + 1);
@@ -396,7 +402,7 @@ export class TransactionRepository {
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id
             ${whereClause}
-            ORDER BY t.created_at DESC, t.id DESC
+            ORDER BY t.date DESC, t.id DESC
             LIMIT $${paramIndex}
         `;
         params.push(limit + 1);
@@ -497,7 +503,7 @@ export class TransactionRepository {
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id
             ${whereClause}
-            ORDER BY t.created_at DESC, t.id DESC
+            ORDER BY t.date DESC, t.id DESC
             LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
         `;
         

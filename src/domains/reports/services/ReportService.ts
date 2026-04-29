@@ -15,7 +15,7 @@ export class ReportService {
   private reportGenerator: ExpenseReportGenerator;
 
   constructor() {
-    this.emailService = EmailServiceFactory.create('console');
+    this.emailService = EmailServiceFactory.create();
     
     // Initialize repositories using singleton
     const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);

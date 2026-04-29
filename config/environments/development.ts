@@ -177,5 +177,16 @@ export default {
         presignedUrlExpiry: parseInt(process.env.STORAGE_PRESIGNED_URL_EXPIRY || '3600'), // 1 hour default
         maxFileSize: parseInt(process.env.STORAGE_MAX_FILE_SIZE || '10485760'), // 10MB
         allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+    },
+
+    // Email Configuration (Mailtrap/SMTP)
+    mail: {
+        host: process.env.MAIL_HOST || 'smtp.mailtrap.io',
+        port: parseInt(process.env.MAIL_PORT || '25'),
+        secure: process.env.MAIL_SMTP_SECURE === 'true' || process.env.MAIL_SMTP_SECURE === 'TLS',
+        username: process.env.MAIL_USERNAME,
+        password: process.env.MAIL_PASSWORD,
+        fromAddress: process.env.MAIL_FROM_ADDRESS || 'noreply@spendwise.app',
+        fromName: process.env.MAIL_FROM_NAME || 'SpendWise'
     }
 };

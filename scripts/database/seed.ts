@@ -1,8 +1,71 @@
 import { Client } from 'pg';
 import { ConfigLoader } from '@config/ConfigLoader';
+import bcrypt from 'bcrypt';
+import { v4 as uuidv4 } from 'uuid';
+
+interface Plan {
+    id: string;
+    name: string;
+}
+
+const PASSWORD = 'Test@123';
+const HASHED_PASSWORD = '$2a$10$rVqKxLVLKoK.vYj.7JZ9LuJ7LXJ.p9TjK.X.vYj.7JZ9LuJ7LXJ.p9Tj'; // Test@123 pre-hashed
+
+const EXPENSE_CATEGORIES = [
+    { name: 'Food & Dining', icon: 'Utensils', color: '#f97316' },
+    { name: 'Transport', icon: 'Car', color: '#3b82f6' },
+    { name: 'Shopping', icon: 'ShoppingBag', color: '#8b5cf6' },
+    { name: 'Housing', icon: 'Home', color: '#10b981' },
+    { name: 'Utilities', icon: 'Zap', color: '#f59e0b' },
+    { name: 'Health', icon: 'Heart', color: '#f43f5e' },
+    { name: 'Entertainment', icon: 'Gamepad2', color: '#ec4899' },
+    { name: 'Education', icon: 'GraduationCap', color: '#6366f1' },
+    { name: 'Travel', icon: 'Plane', color: '#0ea5e9' },
+    { name: 'Groceries', icon: 'ShoppingCart', color: '#22c55e' },
+    { name: 'Insurance', icon: 'Shield', color: '#64748b' },
+    { name: 'Personal Care', icon: 'Sparkles', color: '#f472b6' },
+    { name: 'Other Expense', icon: 'MoreHorizontal', color: '#6b7280' },
+];
+
+const INCOME_CATEGORIES = [
+    { name: 'Salary', icon: 'Briefcase', color: '#10b981' },
+    { name: 'Freelance', icon: 'Laptop', color: '#3b82f6' },
+    { name: 'Investment', icon: 'TrendingUp', color: '#8b5cf6' },
+    { name: 'Gift', icon: 'Gift', color: '#f97316' },
+    { name: 'Refund', icon: 'RotateCcw', color: '#06b6d4' },
+    { name: 'Other Income', icon: 'MoreHorizontal', color: '#6b7280' },
+];
+
+const ACCOUNT_TYPES = ['checking', 'savings', 'credit', 'cash', 'investment'];
+const ACCOUNT_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4'];
+const MERCHANTS = [
+    'Amazon', 'Walmart', 'Target', 'Costco', 'Whole Foods', 'Trader Joes',
+    'Shell Gas Station', 'Chevron', 'BP', 'ExxonMobil',
+    'Netflix', 'Spotify', 'Apple', 'Google', 'Microsoft',
+    'Starbucks', 'McDonalds', 'Subway', 'Chipotle', 'Panera Bread',
+    'CVS Pharmacy', 'Walgreens', 'Home Depot', 'Lowe\'s', 'Best Buy',
+    'Electric Company', 'Water Utility', 'Gas Company', 'Internet Provider',
+    'Gym Membership', 'Planet Fitness', 'LA Fitness',
+    'Doctor Visit', 'Dental Care', 'Vision Center'
+];
+
+function randomDate(start: Date, end: Date): Date {
+    return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
+}
+
+function randomAmount(min: number, max: number): number {
+    return Math.round((Math.random() * (max - min) + min) * 100) / 100;
+}
+
+function randomElement<T>(arr: T[]): T {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function slugify(text: string): string {
+    return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
 
 async function seed() {
-    // Load Config
     const configLoader = ConfigLoader.getInstance();
     const dbConfig = configLoader.get('database.postgres');
 
@@ -19,266 +82,295 @@ async function seed() {
         console.log('Connecting to database...');
         await client.connect();
 
-        console.log('Seeding Feature Flags...');
+        // Get subscription plans
+        console.log('Fetching subscription plans...');
+        const plansResult = await client.query('SELECT id, name FROM subscription_plans WHERE is_active = true');
+        const plans: Plan[] = plansResult.rows;
 
-        const flags = [
-            { name: 'ai_advisor', description: 'AI Budget Advisor: Enable the AI-powered personalized budget advisor', enabled: true },
-            { name: 'crypto_tracking', description: 'Crypto Wallet Sync: Support for syncing crypto wallets through Plaid', enabled: false },
-            { name: 'multicurrency', description: 'Multi-Currency Support: Allows users to maintain accounts in different currencies', enabled: true },
-            { name: 'advanced_analytics', description: 'Predictive Analytics: Advanced spending prediction models', enabled: false },
-            { name: 'dark_mode', description: 'Dark Mode v2: New improved dark mode with higher contrast', enabled: false },
-            { name: 'api_v2', description: 'API v2 Access: Grant access to the new REST API endpoints', enabled: false },
-            { name: 'audit_logs', description: 'Advanced Audit Logs: Detailed user activity tracking for enterprise accounts', enabled: true },
-            { name: 'teamCollaboration', description: 'Team Collaboration features', enabled: true },
-            { name: 'customReports', description: 'Custom Reporting capabilities', enabled: false },
-            { name: 'accounts_view', description: 'Accounts Management: View and manage bank accounts', enabled: true },
-            { name: 'transactions_view', description: 'Transactions: View and categorize transactions', enabled: true },
-            { name: 'exchange_rates', description: 'Exchange Rates: View operational exchange rates', enabled: true },
-            { name: 'manage_workspace', description: 'Workspace Management: Manage members and roles', enabled: true },
-            { name: 'billing_management', description: 'Billing Management: View invoices and subscription details', enabled: true },
-            { name: 'two_factor_auth', description: '2FA: Enable Two-Factor Authentication security', enabled: true }
-        ];
-
-        for (const flag of flags) {
-            await client.query(`
-                INSERT INTO feature_flags (name, description, enabled)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (name) DO UPDATE SET 
-                    description = EXCLUDED.description,
-                    enabled = EXCLUDED.enabled;
-            `, [flag.name, flag.description, flag.enabled]);
+        if (plans.length === 0) {
+            console.error('No subscription plans found. Run the seed first to create plans.');
+            process.exit(1);
         }
 
-        console.log('Feature Flags seeded successfully.');
+        const planMap = new Map(plans.map(p => [p.name, p.id]));
+        const planDistribution = [
+            { name: 'Free', count: 3 },
+            { name: 'Starter', count: 2 },
+            { name: 'Pro', count: 3 },
+            { name: 'Business', count: 2 },
+        ];
 
-        console.log('Seeding Subscription Plans...');
+        // Clear existing test data
+        console.log('Clearing existing test data...');
+        await client.query('DELETE FROM transactions WHERE user_id IN (SELECT id FROM users WHERE email LIKE \'seed_%@test.com\')');
+        await client.query('DELETE FROM attachments WHERE user_id IN (SELECT id FROM users WHERE email LIKE \'seed_%@test.com\')');
+        await client.query('DELETE FROM workspace_invitations WHERE workspace_id IN (SELECT id FROM workspaces WHERE owner_id IN (SELECT id FROM users WHERE email LIKE \'seed_%@test.com\'))');
+        await client.query('DELETE FROM workspace_member_account_permissions WHERE member_id IN (SELECT id FROM workspace_members WHERE workspace_id IN (SELECT id FROM workspaces WHERE owner_id IN (SELECT id FROM users WHERE email LIKE \'seed_%@test.com\')))');
+        await client.query('DELETE FROM workspace_members WHERE workspace_id IN (SELECT id FROM workspaces WHERE owner_id IN (SELECT id FROM users WHERE email LIKE \'seed_%@test.com\'))');
+        await client.query('DELETE FROM workspace_roles WHERE workspace_id IN (SELECT id FROM workspaces WHERE owner_id IN (SELECT id FROM users WHERE email LIKE \'seed_%@test.com\'))');
+        await client.query('DELETE FROM categories WHERE workspace_id IN (SELECT id FROM workspaces WHERE owner_id IN (SELECT id FROM users WHERE email LIKE \'seed_%@test.com\'))');
+        await client.query('DELETE FROM accounts WHERE workspace_id IN (SELECT id FROM workspaces WHERE owner_id IN (SELECT id FROM users WHERE email LIKE \'seed_%@test.com\'))');
+        await client.query('DELETE FROM workspaces WHERE owner_id IN (SELECT id FROM users WHERE email LIKE \'seed_%@test.com\')');
+        await client.query('DELETE FROM user_preferences WHERE user_id IN (SELECT id FROM users WHERE email LIKE \'seed_%@test.com\')');
+        await client.query('DELETE FROM user_subscriptions WHERE user_id IN (SELECT id FROM users WHERE email LIKE \'seed_%@test.com\')');
+        await client.query('DELETE FROM auth_identities WHERE user_id IN (SELECT id FROM users WHERE email LIKE \'seed_%@test.com\')');
+        await client.query('DELETE FROM users WHERE email LIKE \'seed_%@test.com\'');
 
-        // Delete existing plans and re-insert
-        await client.query('DELETE FROM subscription_plans');
+        console.log('Creating users with subscriptions...');
 
-        const plans = [
-            {
-                name: 'Free',
-                price_monthly: 0,
-                price_yearly: 0,
-                currency: 'USD',
-                description: 'Perfect for getting started',
-                features: [
-                    { name: 'Accounts', description: 'Number of accounts you can create', included: true, limit: '2 accounts' },
-                    { name: 'Transactions', description: 'Transactions per account per month', included: true, limit: '100 transactions' },
-                    { name: 'Basic Analytics', description: 'View spending patterns', included: true },
-                    { name: 'Team Members', description: 'Invite team members', included: true, limit: '2 members' },
-                    { name: 'Custom Roles', description: 'Create custom roles (Owner + 1)', included: true, limit: '2 roles' }
-                ],
-                limits: {
-                    accounts: 2,
-                    transactionsPerAccount: 100,
-                    members: 2,
-                    workspaces: 1,
-                    customRoles: 2,
-                    hasExchangeRates: false,
-                    hasPermissionOverrides: false,
-                    hasAIAdvisor: false,
-                    hasExportData: false,
-                    hasPrioritySupport: false,
-                    hasAPIAccess: false,
-                    transactionHistoryMonths: 3,
-                    analyticsHistoryDays: 30
-                },
-                is_active: true,
-                is_featured: false
-            },
-            {
-                name: 'Starter',
-                price_monthly: 9,
-                price_yearly: 86,
-                currency: 'USD',
-                description: 'For individuals who want more',
-                features: [
-                    { name: 'Accounts', description: 'Number of accounts you can create', included: true, limit: '5 accounts' },
-                    { name: 'Transactions', description: 'Transactions per account per month', included: true, limit: '500 transactions' },
-                    { name: 'Advanced Analytics', description: 'Detailed spending insights', included: true },
-                    { name: 'Team Members', description: 'Invite team members', included: true, limit: '5 members' },
-                    { name: 'Custom Roles', description: 'Create custom roles', included: true, limit: '5 roles' },
-                    { name: 'Exchange Rates', description: 'Real-time currency exchange', included: true }
-                ],
-                limits: {
-                    accounts: 5,
-                    transactionsPerAccount: 500,
-                    members: 5,
-                    workspaces: 2,
-                    customRoles: 5,
-                    hasExchangeRates: true,
-                    hasPermissionOverrides: false,
-                    hasAIAdvisor: false,
-                    hasExportData: false,
-                    hasPrioritySupport: false,
-                    hasAPIAccess: false,
-                    transactionHistoryMonths: 6,
-                    analyticsHistoryDays: 90
-                },
-                is_active: true,
-                is_featured: false
-            },
-            {
-                name: 'Pro',
-                price_monthly: 19,
-                price_yearly: 182,
-                currency: 'USD',
-                description: 'For power users and small teams',
-                features: [
-                    { name: 'Accounts', description: 'Number of accounts you can create', included: true, limit: '10 accounts' },
-                    { name: 'Transactions', description: 'Transactions per account per month', included: true, limit: '2,000 transactions' },
-                    { name: 'Advanced Analytics', description: 'Detailed spending insights', included: true },
-                    { name: 'Team Members', description: 'Invite team members', included: true, limit: '10 members' },
-                    { name: 'Custom Roles', description: 'Create custom roles', included: true, limit: '10 roles' },
-                    { name: 'Exchange Rates', description: 'Real-time currency exchange', included: true },
-                    { name: 'AI Advisor', description: 'AI-powered financial insights', included: true },
-                    { name: 'Export Data', description: 'Export to CSV/Excel', included: true },
-                    { name: 'Permission Overrides', description: 'Per-account permission settings', included: true },
-                    { name: 'Priority Support', description: 'Get help faster', included: true }
-                ],
-                limits: {
-                    accounts: 10,
-                    transactionsPerAccount: 2000,
-                    members: 10,
-                    workspaces: 5,
-                    customRoles: 10,
-                    hasExchangeRates: true,
-                    hasPermissionOverrides: true,
-                    hasAIAdvisor: true,
-                    hasExportData: true,
-                    hasPrioritySupport: true,
-                    hasAPIAccess: false,
-                    transactionHistoryMonths: 12,
-                    analyticsHistoryDays: 180
-                },
-                is_active: true,
-                is_featured: true
-            },
-            {
-                name: 'Business',
-                price_monthly: 49,
-                price_yearly: 470,
-                currency: 'USD',
-                description: 'For growing businesses',
-                features: [
-                    { name: 'Accounts', description: 'Number of accounts you can create', included: true, limit: '25 accounts' },
-                    { name: 'Transactions', description: 'Transactions per account per month', included: true, limit: 'Unlimited' },
-                    { name: 'Advanced Analytics', description: 'Detailed spending insights', included: true },
-                    { name: 'Team Members', description: 'Invite team members', included: true, limit: 'Unlimited' },
-                    { name: 'Custom Roles', description: 'Create custom roles', included: true, limit: 'Unlimited' },
-                    { name: 'Exchange Rates', description: 'Real-time currency exchange', included: true },
-                    { name: 'AI Advisor', description: 'AI-powered financial insights', included: true },
-                    { name: 'Export Data', description: 'Export to CSV/Excel', included: true },
-                    { name: 'Permission Overrides', description: 'Per-account permission settings', included: true },
-                    { name: 'Priority Support', description: '24/7 dedicated support', included: true },
-                    { name: 'API Access', description: 'Access to developer API', included: true }
-                ],
-                limits: {
-                    accounts: 25,
-                    transactionsPerAccount: -1,
-                    members: -1,
-                    workspaces: -1,
-                    customRoles: -1,
-                    hasExchangeRates: true,
-                    hasPermissionOverrides: true,
-                    hasAIAdvisor: true,
-                    hasExportData: true,
-                    hasPrioritySupport: true,
-                    hasAPIAccess: true,
-                    transactionHistoryMonths: -1,
-                    analyticsHistoryDays: -1
-                },
-                is_active: true,
-                is_featured: false
+        const firstNames = ['John', 'Jane', 'Mike', 'Sarah', 'David', 'Emily', 'Chris', 'Lisa', 'Tom', 'Amy'];
+        const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Wilson', 'Taylor'];
+        
+        let userIndex = 0;
+        const users: { id: string; email: string }[] = [];
+
+        for (const dist of planDistribution) {
+            const planId = planMap.get(dist.name);
+            if (!planId) continue;
+
+            for (let i = 0; i < dist.count; i++) {
+                const firstName = firstNames[userIndex];
+                const lastName = lastNames[userIndex];
+                const email = `seed_${firstName.toLowerCase()}${userIndex}@test.com`;
+                const userId = uuidv4();
+
+                // Create user
+                await client.query(`
+                    INSERT INTO users (id, email, first_name, last_name, role, status, is_active, created_at, updated_at, email_verified)
+                    VALUES ($1, $2, $3, $4, 'pro', 'active', true, NOW(), NOW(), true)
+                `, [userId, email, firstName, lastName]);
+
+                // Create auth identity (password)
+                const passwordHash = await bcrypt.hash(PASSWORD, 10);
+                await client.query(`
+                    INSERT INTO auth_identities (id, user_id, provider, password_hash, created_at)
+                    VALUES ($1, $2, 'local', $3, NOW())
+                `, [uuidv4(), userId, passwordHash]);
+
+                // Create subscription
+                const periodStart = new Date();
+                const periodEnd = new Date();
+                periodEnd.setMonth(periodEnd.getMonth() + 12);
+
+                await client.query(`
+                    INSERT INTO user_subscriptions (id, user_id, plan_id, status, billing_cycle, current_period_start, current_period_end, start_date, end_date, created_at, updated_at)
+                    VALUES ($1, $2, $3, 'active', 'monthly', $4, $5, $4, $5, NOW(), NOW())
+                `, [uuidv4(), userId, planId, periodStart, periodEnd]);
+
+                // Create user preferences
+                await client.query(`
+                    INSERT INTO user_preferences (id, user_id, currency, language, timezone, created_at, updated_at)
+                    VALUES ($1, $2, 'USD', 'en', 'UTC', NOW(), NOW())
+                `, [uuidv4(), userId]);
+
+                users.push({ id: userId, email });
+                console.log(`  Created user: ${email} (${dist.name} plan)`);
+                userIndex++;
             }
-        ];
-
-        for (const plan of plans) {
-            const id = require('uuid').v4();
-            await client.query(`
-                INSERT INTO subscription_plans (id, name, price_monthly, price_yearly, currency, description, features, limits, is_active, is_featured)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            `, [
-                id,
-                plan.name,
-                plan.price_monthly,
-                plan.price_yearly,
-                plan.currency,
-                plan.description,
-                JSON.stringify(plan.features),
-                JSON.stringify(plan.limits),
-                plan.is_active,
-                plan.is_featured
-            ]);
         }
 
-        console.log('Subscription Plans seeded successfully.');
+        console.log(`\nCreating workspaces, roles, members, categories, accounts, and transactions...`);
 
-        console.log('Subscription Plans seeded successfully.');
+        const workspaceNames = [
+            ['Personal', 'Family'],
+            ['Business', 'Side Hustle'],
+            ['Personal', 'Business', 'Investing'],
+            ['Family', 'Household'],
+            ['Work', 'Personal'],
+        ];
 
-        // Seed Categories
-        console.log('Seeding Categories...');
-        
-        // Get workspace IDs to associate categories with
-        const workspacesResult = await client.query('SELECT id FROM workspaces LIMIT 5');
-        const workspaceIds = workspacesResult.rows.map(r => r.id);
-        
-        if (workspaceIds.length > 0) {
-            const categories = [
-                // Expense Categories
-                { name: 'Food & Dining', type: 'expense', icon: 'Utensils', color: '#f97316' },
-                { name: 'Transport', type: 'expense', icon: 'Car', color: '#3b82f6' },
-                { name: 'Shopping', type: 'expense', icon: 'ShoppingBag', color: '#8b5cf6' },
-                { name: 'Housing', type: 'expense', icon: 'Home', color: '#10b981' },
-                { name: 'Utilities', type: 'expense', icon: 'Zap', color: '#f59e0b' },
-                { name: 'Health', type: 'expense', icon: 'Heart', color: '#f43f5e' },
-                { name: 'Entertainment', type: 'expense', icon: 'Gamepad2', color: '#ec4899' },
-                { name: 'Education', type: 'expense', icon: 'GraduationCap', color: '#6366f1' },
-                { name: 'Travel', type: 'expense', icon: 'Plane', color: '#0ea5e9' },
-                { name: 'Groceries', type: 'expense', icon: 'ShoppingCart', color: '#22c55e' },
-                { name: 'Insurance', type: 'expense', icon: 'Shield', color: '#64748b' },
-                { name: 'Personal Care', type: 'expense', icon: 'Sparkles', color: '#f472b6' },
-                { name: 'Other Expense', type: 'expense', icon: 'MoreHorizontal', color: '#6b7280' },
+        let totalTransactions = 0;
+
+        for (const user of users) {
+            const workspaceCount = Math.floor(Math.random() * 2) + 2; // 2-3 workspaces
+            const names = workspaceNames[userIndex % workspaceNames.length] || ['Personal'];
+
+            for (let w = 0; w < workspaceCount; w++) {
+                const workspaceId = uuidv4();
+                const workspaceName = names[w] || `Workspace ${w + 1}`;
+                const slug = slugify(`${workspaceName}-${user.email.split('@')[0]}-${Date.now()}`);
+
+                // Create workspace
+                await client.query(`
+                    INSERT INTO workspaces (id, name, slug, owner_id, currency, language, timezone, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, 'USD', 'en', 'UTC', NOW(), NOW())
+                `, [workspaceId, workspaceName, slug, user.id]);
+
+                // Create 2 roles + Owner system role
+                const adminRoleId = uuidv4();
+                const viewerRoleId = uuidv4();
+                const ownerRoleId = uuidv4();
+
+                // Create Owner system role first
+                await client.query(`
+                    INSERT INTO workspace_roles (id, workspace_id, name, description, permissions, is_default, is_system, created_at, updated_at)
+                    VALUES ($1, $2, 'Owner', 'Workspace owner with full access', ARRAY['*'], true, true, NOW(), NOW())
+                `, [ownerRoleId, workspaceId]);
+
+                await client.query(`
+                    INSERT INTO workspace_roles (id, workspace_id, name, description, permissions, is_default, is_system, created_at, updated_at)
+                    VALUES ($1, $2, 'Admin', 'Full access to all features', ARRAY['*'], false, false, NOW(), NOW())
+                `, [adminRoleId, workspaceId]);
+
+                await client.query(`
+                    INSERT INTO workspace_roles (id, workspace_id, name, description, permissions, is_default, is_system, created_at, updated_at)
+                    VALUES ($1, $2, 'Viewer', 'Read-only access', ARRAY['read'], false, false, NOW(), NOW())
+                `, [viewerRoleId, workspaceId]);
+
+                // Create additional role if Pro/Business
+                const planResult = await client.query(`
+                    SELECT sp.name FROM user_subscriptions us
+                    JOIN subscription_plans sp ON us.plan_id = sp.id
+                    WHERE us.user_id = $1
+                `, [user.id]);
                 
-                // Income Categories
-                { name: 'Salary', type: 'income', icon: 'Briefcase', color: '#10b981' },
-                { name: 'Freelance', type: 'income', icon: 'Laptop', color: '#3b82f6' },
-                { name: 'Investment', type: 'income', icon: 'TrendingUp', color: '#8b5cf6' },
-                { name: 'Gift', type: 'income', icon: 'Gift', color: '#f97316' },
-                { name: 'Refund', type: 'income', icon: 'RotateCcw', color: '#06b6d4' },
-                { name: 'Other Income', type: 'income', icon: 'MoreHorizontal', color: '#6b7280' },
-            ];
+                if (planResult.rows[0]?.name === 'Pro' || planResult.rows[0]?.name === 'Business') {
+                    const editorRoleId = uuidv4();
+                    await client.query(`
+                        INSERT INTO workspace_roles (id, workspace_id, name, description, permissions, is_default, is_system, created_at, updated_at)
+                        VALUES ($1, $2, 'Editor', 'Can edit transactions', ARRAY['read', 'write', 'transactions'], false, false, NOW(), NOW())
+                    `, [editorRoleId, workspaceId]);
+                }
 
-            for (const cat of categories) {
-                for (const workspaceId of workspaceIds) {
-                    // Check if category already exists
-                    const existing = await client.query(
-                        'SELECT id FROM categories WHERE workspace_id = $1 AND name = $2',
-                        [workspaceId, cat.name]
-                    );
+                // Create owner member and assign to Owner role
+                const ownerMemberId = uuidv4();
+                await client.query(`
+                    INSERT INTO workspace_members (id, workspace_id, user_id, role_id, role_ids, status, joined_at, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW(), NOW())
+                `, [ownerMemberId, workspaceId, user.id, ownerRoleId, [ownerRoleId]]);
+
+                // Create categories
+                const categoryIds: { income: string[]; expense: string[] } = { income: [], expense: [] };
+                
+                for (const cat of EXPENSE_CATEGORIES) {
+                    const catId = uuidv4();
+                    await client.query(`
+                        INSERT INTO categories (id, workspace_id, name, type, icon, color, is_income, is_system, created_at, updated_at)
+                        VALUES ($1, $2, $3, 'expense', $4, $5, false, false, NOW(), NOW())
+                    `, [catId, workspaceId, cat.name, cat.icon, cat.color]);
+                    categoryIds.expense.push(catId);
+                }
+
+                for (const cat of INCOME_CATEGORIES) {
+                    const catId = uuidv4();
+                    await client.query(`
+                        INSERT INTO categories (id, workspace_id, name, type, icon, color, is_income, is_system, created_at, updated_at)
+                        VALUES ($1, $2, $3, 'income', $4, $5, true, false, NOW(), NOW())
+                    `, [catId, workspaceId, cat.name, cat.icon, cat.color]);
+                    categoryIds.income.push(catId);
+                }
+
+                // Create 2-3 accounts
+                const accountCount = Math.floor(Math.random() * 2) + 2; // 2-3 accounts
+                const accounts: { id: string; type: string }[] = [];
+
+                for (let a = 0; a < accountCount; a++) {
+                    const accountId = uuidv4();
+                    const accountType = ACCOUNT_TYPES[a % ACCOUNT_TYPES.length];
+                    const balance = randomAmount(100, 50000);
+                    const color = randomElement(ACCOUNT_COLORS);
+
+                    await client.query(`
+                        INSERT INTO accounts (id, workspace_id, user_id, name, type, balance, currency, color, is_active, is_on_budget, created_at, updated_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, 'USD', $7, true, true, NOW(), NOW())
+                    `, [accountId, workspaceId, user.id, `${workspaceName} ${accountType.charAt(0).toUpperCase() + accountType.slice(1)}`, accountType, balance, color]);
+
+                    accounts.push({ id: accountId, type: accountType });
+
+                    // Create transactions for this account (13 months of data)
+                    const transactionCount = Math.floor(Math.random() * 50) + 100; // 100-150 transactions per account
                     
-                    if (existing.rows.length === 0) {
+                    const startDate = new Date();
+                    startDate.setFullYear(startDate.getFullYear() - 1);
+                    const endDate = new Date();
+
+                    for (let t = 0; t < transactionCount; t++) {
+                        const isIncome = Math.random() < 0.4; // 40% income
+                        const type = isIncome ? 'income' : 'expense';
+                        const categoryId = isIncome 
+                            ? randomElement(categoryIds.income) 
+                            : randomElement(categoryIds.expense);
+                        const amount = isIncome 
+                            ? randomAmount(500, 10000) // Income: $500-$10k
+                            : randomAmount(10, 500);   // Expense: $10-$500
+                        
+                        const date = randomDate(startDate, endDate);
+                        const merchant = randomElement(MERCHANTS);
+                        const hasNotes = Math.random() < 0.3;
+                        const notes = hasNotes ? `Monthly ${merchant.toLowerCase()} expense` : null;
+
                         await client.query(`
-                            INSERT INTO categories (id, name, type, icon, color, workspace_id, created_at, updated_at)
-                            VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+                            INSERT INTO transactions (id, workspace_id, account_id, category_id, user_id, type, amount, currency, description, date, merchant, notes, created_at, updated_at)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, 'USD', $8, $9, $10, $11, NOW(), NOW())
                         `, [
-                            require('uuid').v4(),
-                            cat.name,
-                            cat.type,
-                            cat.icon,
-                            cat.color,
-                            workspaceId
+                            uuidv4(), workspaceId, accountId, categoryId, user.id, 
+                            type, amount, `${merchant} transaction`, date, merchant, notes
                         ]);
+                        
+                        totalTransactions++;
+                    }
+
+                    // Update account totals
+                    await client.query(`
+                        UPDATE accounts SET 
+                            total_income = (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id = $1 AND type = 'income'),
+                            total_expense = (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id = $1 AND type = 'expense'),
+                            last_activity = (SELECT MAX(date) FROM transactions WHERE account_id = $1)
+                        WHERE id = $1
+                    `, [accountId]);
+                }
+
+                // Create 1-2 invitations
+                if (Math.random() < 0.7) {
+                    const inviteCount = Math.floor(Math.random() * 2) + 1;
+                    for (let inv = 0; inv < inviteCount; inv++) {
+                        const inviteEmail = `invite_${w}_${inv}_${user.email.split('@')[0]}@example.com`;
+                        const token = uuidv4();
+                        const expiresAt = new Date();
+                        expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
+                        
+                        await client.query(`
+                            INSERT INTO workspace_invitations (id, workspace_id, role_id, invited_by, email, status, token, expires_at, created_at, updated_at)
+                            VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, NOW(), NOW())
+                        `, [uuidv4(), workspaceId, viewerRoleId, user.id, inviteEmail, token, expiresAt]);
                     }
                 }
+
+                console.log(`  Created workspace: ${workspaceName} with ${accounts.length} accounts, ~${accounts.length * 120} transactions`);
             }
-            
-            console.log(`Categories seeded successfully for ${workspaceIds.length} workspace(s).`);
-        } else {
-            console.log('No workspaces found, skipping category seeding.');
+            userIndex++;
         }
+
+        // Create attachments for some transactions
+        console.log('\nCreating attachments...');
+        
+        const transactionsResult = await client.query(`
+            SELECT t.id, t.user_id, t.workspace_id FROM transactions t
+            JOIN users u ON t.user_id = u.id
+            WHERE u.email LIKE 'seed_%@test.com'
+            ORDER BY RANDOM()
+            LIMIT 50
+        `);
+
+        for (const row of transactionsResult.rows) {
+            await client.query(`
+                INSERT INTO attachments (id, user_id, workspace_id, transaction_id, filename, mime_type, size, created_at)
+                VALUES ($1, $2, $3, $4, $5, 'image/jpeg', $6, NOW())
+            `, [uuidv4(), row.user_id, row.workspace_id, row.id, `receipt_${row.id.slice(0, 8)}.jpg`, Math.floor(Math.random() * 500000) + 10000]);
+        }
+
+        console.log(`  Created ${transactionsResult.rows.length} attachments`);
+
+        // Summary
+        console.log('\n========================================');
+        console.log('SEEDING COMPLETE');
+        console.log('========================================');
+        console.log(`Users created: ${users.length}`);
+        console.log(`Transactions created: ${totalTransactions}`);
+        console.log(`Attachments created: ${transactionsResult.rows.length}`);
+        console.log('\nTest Users (Password: Test@123):');
+        users.forEach((u, i) => console.log(`  ${i + 1}. ${u.email}`));
+        console.log('========================================');
 
     } catch (err) {
         console.error('Seeding error:', err);
