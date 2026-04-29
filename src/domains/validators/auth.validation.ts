@@ -18,16 +18,23 @@ export const loginSchema = z.object({
 
 export const verify2faSchema = z.object({
     body: z.object({
-        userId: z.string().uuid(),
+        tempToken: z.string().uuid().optional(),
+        userId: z.string().uuid().optional(),
         code: z.string().length(6),
         method: z.string().optional(),
+        backupCode: z.boolean().optional(),
+    }).refine(data => data.tempToken || data.userId, {
+        message: 'Either tempToken or userId is required',
     }),
 });
 
 export const resend2faSchema = z.object({
     body: z.object({
-        userId: z.string().uuid(),
+        tempToken: z.string().uuid().optional(),
+        userId: z.string().uuid().optional(),
         method: z.string().optional(),
+    }).refine(data => data.tempToken || data.userId, {
+        message: 'Either tempToken or userId is required',
     }),
 });
 

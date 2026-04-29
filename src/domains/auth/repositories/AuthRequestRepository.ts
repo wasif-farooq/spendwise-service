@@ -127,7 +127,8 @@ export class AuthRequestRepository {
     async getMe(userId: string) {
         if (this.getMode() === 'direct') {
             const service = await this.getService();
-            return this.wrap(service.getUserById(userId));
+            const user = await service.getUserById(userId);
+            return this.wrap(Promise.resolve(user.toJSON()));
         }
         throw new Error('RPC mode not implemented in this wrapper');
     }
