@@ -1,25 +1,24 @@
-import { ServiceFactory } from './ServiceFactory';
 import { AccountController } from '@domains/accounts/controllers/AccountController';
-import { AccountService } from '@domains/accounts/services/AccountService';
-import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
-import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { TOKENS } from '@di/tokens';
-import { Container } from '@di/Container';
-import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
-import { ExchangeRateRepository } from '@domains/exchange-rates/repositories/ExchangeRateRepository';
+import { AccountRequestRepository } from '@domains/accounts/repositories/AccountRequestRepository';
+import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
+import { UserPreferencesRequestRepository } from '@domains/users/repositories/UserPreferencesRequestRepository';
 
 export class AccountControllerFactory {
-    private accountService: AccountService;
+    private accountRequestRepository: AccountRequestRepository;
+    private subscriptionRequestRepository: SubscriptionRequestRepository;
+    private userPreferencesRequestRepository: UserPreferencesRequestRepository;
 
-    constructor(private serviceFactory: ServiceFactory) {
-        const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-        const accountRepository = new AccountRepository(db);
-        const exchangeRateRepository = new ExchangeRateRepository(db);
-        const exchangeRateService = new ExchangeRateService(exchangeRateRepository);
-        this.accountService = new AccountService(accountRepository, exchangeRateService);
+    constructor() {
+        this.accountRequestRepository = new AccountRequestRepository();
+        this.subscriptionRequestRepository = new SubscriptionRequestRepository();
+        this.userPreferencesRequestRepository = new UserPreferencesRequestRepository();
     }
 
     create(): AccountController {
-        return new AccountController(this.accountService);
+        return new AccountController(
+            this.accountRequestRepository,
+            this.subscriptionRequestRepository,
+            this.userPreferencesRequestRepository
+        );
     }
 }

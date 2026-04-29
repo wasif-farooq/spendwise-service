@@ -1,31 +1,24 @@
 import { NextFunction, Request, Response } from 'express';
-import { UserRequestRepository } from '@domains/users/repositories/UserRequestRepository';
-import { AuthRequestRepository } from '@domains/auth/repositories/AuthRequestRepository';
-import { UserPreferencesService } from '@domains/users/services/UserPreferencesService';
-import { ServiceFactory } from '@factories/ServiceFactory';
-import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { Container } from '@di/Container';
-import { TOKENS } from '@di/tokens';
-import { RepositoryFactory } from '@factories/RepositoryFactory';
+import { SettingsRequestRepository } from './repositories/SettingsRequestRepository';
 import { AppError } from '@shared/errors/AppError';
 
-// Create service instances directly using singleton
-const dbFacade = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-const repoFactory = new RepositoryFactory(dbFacade);
-const serviceFactory = new ServiceFactory(repoFactory, dbFacade);
-const userPreferencesService = serviceFactory.createUserPreferencesService();
-
 export class SettingsController {
-    constructor(
-        private userRequestRepository: UserRequestRepository,
-        private authRequestRepository: AuthRequestRepository
-    ) { }
+    constructor(private settingsRequestRepository: SettingsRequestRepository) { }
+
+    private getUserId(req: Request): string {
+        return (req as any).user?.userId || (req as any).user?.sub || (req as any).user?.id;
+    }
 
     async getPreferences(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const prefs = await userPreferencesService.getPreferences(userId);
-            res.json({ data: prefs.toDTO() });
+            const userId = this.getUserId(req);
+            const result = await this.settingsRequestRepository.getPreferences(userId);
+
+            if (result.error) {
+                throw new AppError(result.error, result.statusCode || 500);
+            }
+
+            res.json({ data: result.data });
         } catch (error) {
             next(error);
         }
@@ -33,9 +26,14 @@ export class SettingsController {
 
     async updatePreferences(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const prefs = await userPreferencesService.updatePreferences(userId, req.body);
-            res.json({ data: prefs.toDTO() });
+            const userId = this.getUserId(req);
+            const result = await this.settingsRequestRepository.updatePreferences(userId, req.body);
+
+            if (result.error) {
+                throw new AppError(result.error, result.statusCode || 500);
+            }
+
+            res.json({ data: result.data });
         } catch (error) {
             next(error);
         }
@@ -43,16 +41,15 @@ export class SettingsController {
 
     async getSecuritySettings(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.authRequestRepository.getMe(userId);
+            const userId = this.getUserId(req);
+            const result = await this.settingsRequestRepository.getSecuritySettings(userId);
 
             if (result.error) {
                 throw new AppError(result.error, result.statusCode || 400);
             }
 
-            // Map backend methods to frontend format
-            const is2FAEnabled = result.twoFactorEnabled || false;
-            const verifiedMethods = result.twoFactorMethods || [];
+            const is2FAEnabled = result.data?.twoFactorEnabled || false;
+            const verifiedMethods = result.data?.twoFactorMethods || [];
             const availableMethods = [
                 {
                     type: 'authenticator',
@@ -74,7 +71,7 @@ export class SettingsController {
             res.json({
                 data: {
                     twoFactorEnabled: is2FAEnabled,
-                    twoFactorMethod: result.twoFactorMethod === 'app' ? 'authenticator' : result.twoFactorMethod,
+                    twoFactorMethod: result.data?.twoFactorMethod === 'app' ? 'authenticator' : result.data?.twoFactorMethod,
                     availableMethods
                 }
             });
@@ -85,8 +82,8 @@ export class SettingsController {
 
     async changePassword(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.authRequestRepository.changePassword(userId, req.body);
+            const userId = this.getUserId(req);
+            const result = await this.settingsRequestRepository.changePassword(userId, req.body);
 
             if (result.error) {
                 throw new AppError(result.error, result.statusCode || 400);
@@ -100,16 +97,16 @@ export class SettingsController {
 
     async setup2FA(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+            const userId = this.getUserId(req);
             const { method: rawMethod, email } = req.body;
             const method = rawMethod === 'authenticator' ? 'app' : rawMethod;
-            const result = await this.authRequestRepository.generate2FASecret(userId, method, email);
+            const result = await this.settingsRequestRepository.setup2FA(userId, { method, email });
 
             if (result.error) {
                 throw new AppError(result.error, result.statusCode || 400);
             }
 
-            res.json({ data: result });
+            res.json({ data: result.data });
         } catch (error) {
             next(error);
         }
@@ -117,9 +114,9 @@ export class SettingsController {
 
     async enable2FA(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+            const userId = this.getUserId(req);
             const method = req.body.method === 'authenticator' ? 'app' : req.body.method;
-            const result = await this.authRequestRepository.enable2FA(userId, req.body.code, method);
+            const result = await this.settingsRequestRepository.enable2FA(userId, { code: req.body.code, method });
 
             if (result.error) {
                 throw new AppError(result.error, result.statusCode || 400);
@@ -133,8 +130,8 @@ export class SettingsController {
 
     async disable2FA(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.authRequestRepository.disable2FA(userId);
+            const userId = this.getUserId(req);
+            const result = await this.settingsRequestRepository.disable2FA(userId);
 
             if (result.error) {
                 throw new AppError(result.error, result.statusCode || 400);
@@ -148,9 +145,9 @@ export class SettingsController {
 
     async delete2FAMethod(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+            const userId = this.getUserId(req);
             const method = req.params.method === 'authenticator' ? 'app' : req.params.method;
-            const result = await this.authRequestRepository.disable2FAMethod(userId, method);
+            const result = await this.settingsRequestRepository.disable2FA(userId);
 
             if (result.error) {
                 throw new AppError(result.error, result.statusCode || 400);
@@ -164,14 +161,14 @@ export class SettingsController {
 
     async regenerateBackupCodes(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.authRequestRepository.regenerateBackupCodes(userId);
+            const userId = this.getUserId(req);
+            const result = await this.settingsRequestRepository.regenerateBackupCodes(userId);
 
             if (result.error) {
                 throw new AppError(result.error, result.statusCode || 400);
             }
 
-            res.json({ data: result });
+            res.json({ data: result.data });
         } catch (error) {
             next(error);
         }
@@ -179,14 +176,14 @@ export class SettingsController {
 
     async getActiveSessions(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.authRequestRepository.getActiveSessions(userId);
+            const userId = this.getUserId(req);
+            const result = await this.settingsRequestRepository.getActiveSessions(userId);
 
             if (result.error) {
                 throw new AppError(result.error, result.statusCode || 400);
             }
 
-            res.json({ data: result });
+            res.json({ data: result.data });
         } catch (error) {
             next(error);
         }
@@ -194,9 +191,9 @@ export class SettingsController {
 
     async revokeSession(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+            const userId = this.getUserId(req);
             const { sessionId } = req.params;
-            const result = await this.authRequestRepository.revokeSession(userId, sessionId);
+            const result = await this.settingsRequestRepository.revokeSession(userId, sessionId);
 
             if (result.error) {
                 throw new AppError(result.error, result.statusCode || 400);
@@ -210,14 +207,14 @@ export class SettingsController {
 
     async getLoginHistory(req: Request, res: Response, next: NextFunction) {
         try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.authRequestRepository.getLoginHistory(userId);
+            const userId = this.getUserId(req);
+            const result = await this.settingsRequestRepository.getLoginHistory(userId);
 
             if (result.error) {
                 throw new AppError(result.error, result.statusCode || 400);
             }
 
-            res.json({ data: result });
+            res.json({ data: result.data });
         } catch (error) {
             next(error);
         }

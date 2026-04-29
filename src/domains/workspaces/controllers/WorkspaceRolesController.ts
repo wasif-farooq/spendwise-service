@@ -1,26 +1,22 @@
 import { Request, Response } from 'express';
 import { WorkspaceRequestRepository } from '../repositories/WorkspaceRequestRepository';
-import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { Container } from '@di/Container';
-import { TOKENS } from '@di/tokens';
-import { RepositoryFactory } from '@factories/RepositoryFactory';
-import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
+import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
 
 export class WorkspaceRolesController {
-    private subscriptionService: SubscriptionService;
-    private db: DatabaseFacade;
+    constructor(
+        private workspaceRequestRepository: WorkspaceRequestRepository,
+        private subscriptionRequestRepository?: SubscriptionRequestRepository
+    ) { }
 
-    constructor(private workspaceRequestRepository: WorkspaceRequestRepository) {
-        this.subscriptionService = Container.getInstance().resolve<SubscriptionService>('SubscriptionService');
-        this.db = Container.getInstance().resolve<DatabaseFacade>('Database');
+    private getUserId(req: Request): string {
+        return (req as any).user?.userId || (req as any).user?.sub || (req as any).user?.id;
     }
 
     async list(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+        const userId = this.getUserId(req);
         const workspaceId = req.params.id;
         const { page, limit, search, types, minPermissions } = req.query;
 
-        // Handle types - can be array from query string or string
         let typesArray: string[] | undefined;
         if (types) {
             if (Array.isArray(types)) {
@@ -46,7 +42,7 @@ export class WorkspaceRolesController {
     }
 
     async getById(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+        const userId = this.getUserId(req);
         const workspaceId = req.params.id;
         const roleId = req.params.roleId;
 
@@ -60,16 +56,14 @@ export class WorkspaceRolesController {
     }
 
     async create(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+        const userId = this.getUserId(req);
         const workspaceId = req.params.id;
 
-        // Check subscription limits before creating role
-        const countResult = await this.db.query(
-            `SELECT COUNT(*) as count FROM workspace_roles WHERE workspace_id = $1`,
-            [workspaceId]
-        );
-        const currentCount = parseInt(countResult.rows[0]?.count || '0', 10);
-        await this.subscriptionService.checkFeatureLimit(userId, 'customRoles', currentCount);
+        if (this.subscriptionRequestRepository) {
+            const rolesResult = await this.workspaceRequestRepository.getRoles(workspaceId, userId, {});
+            const currentCount = rolesResult.data?.length || 0;
+            await this.subscriptionRequestRepository.checkFeatureLimit(userId, 'customRoles', currentCount);
+        }
 
         const result = await this.workspaceRequestRepository.createRole(workspaceId, userId, req.body);
 
@@ -81,7 +75,7 @@ export class WorkspaceRolesController {
     }
 
     async update(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+        const userId = this.getUserId(req);
         const workspaceId = req.params.id;
         const roleId = req.params.roleId;
         const result = await this.workspaceRequestRepository.updateRole(workspaceId, userId, roleId, req.body);
@@ -94,7 +88,7 @@ export class WorkspaceRolesController {
     }
 
     async delete(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+        const userId = this.getUserId(req);
         const workspaceId = req.params.id;
         const roleId = req.params.roleId;
         const result = await this.workspaceRequestRepository.deleteRole(workspaceId, userId, roleId);
@@ -107,40 +101,23 @@ export class WorkspaceRolesController {
     }
 
     async assign(req: Request, res: Response) {
-        console.log('[assign] ====== START ======');
-        console.log('[assign] req.params:', req.params);
-        console.log('[assign] req.body:', req.body);
-        
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+        const userId = this.getUserId(req);
         const workspaceId = req.params.id;
         const memberId = req.params.memberId;
-        
+
         let roleId = req.body.roleId || req.body.role;
         const accountPermissions = req.body.accountPermissions;
-        
-        console.log('[assign] Extracted - roleId:', roleId, 'accountPermissions:', accountPermissions);
-        
+
         if (roleId && !roleId.includes('-')) {
-            console.log('[assign] Role is a name, looking up by name:', roleId);
-            const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-            const repoFactory = new RepositoryFactory(db);
-            const roleRepo = repoFactory.createWorkspaceRoleRepository();
-            console.log('[assign] Calling findByNameAndWorkspace:', roleId, workspaceId);
-            const role = await roleRepo.findByNameAndWorkspace(roleId, workspaceId);
-            console.log('[assign] Found role:', role);
+            const role = await this.workspaceRequestRepository.findRoleByName(roleId, workspaceId);
             if (role) {
                 roleId = role.id;
-                console.log('[assign] Set roleId to:', roleId);
             } else {
                 res.status(400).json({ message: `Role '${roleId}' not found` });
                 return;
             }
-        } else {
-            console.log('[assign] Role appears to be a UUID already:', roleId);
         }
-        
-        console.log('[assign] Final roleId to use:', roleId);
-        console.log('[assign] Calling repository with:', { roleId, accountPermissions });
+
         const result = await this.workspaceRequestRepository.assignRole(workspaceId, userId, memberId, { roleId, accountPermissions });
 
         if (result.error) {

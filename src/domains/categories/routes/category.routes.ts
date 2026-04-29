@@ -1,13 +1,13 @@
 import { Router } from 'express';
-import { CategoryController } from '../controllers/CategoryController';
+import { CategoryControllerFactory } from '@factories/CategoryControllerFactory';
 import { requireAuth } from '@shared/middleware/auth.middleware';
 import { requirePermission } from '@shared/middleware/permission.middleware';
 import { validateBody, validateParams } from '@shared/middleware/validateBody.middleware';
 import { z } from 'zod';
 
 const router = Router();
-
-const controller = new CategoryController();
+const factory = new CategoryControllerFactory();
+const controller = factory.create();
 
 // Validation schemas
 const WorkspaceIdParamSchema = z.object({

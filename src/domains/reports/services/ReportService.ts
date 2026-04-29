@@ -6,22 +6,16 @@ import { generateExpenseReportXlsx } from './XlsxGenerator';
 import { ExportReportRequest } from '../types';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
-import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { Container } from '@di/Container';
-import { TOKENS } from '@di/tokens';
 
 export class ReportService {
   private emailService: IEmailService;
   private reportGenerator: ExpenseReportGenerator;
 
-  constructor() {
+  constructor(
+    transactionRepo: TransactionRepository,
+    categoryRepo: CategoryRepository
+  ) {
     this.emailService = EmailServiceFactory.create();
-    
-    // Initialize repositories using singleton
-    const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-    const transactionRepo = new TransactionRepository(db);
-    const categoryRepo = new CategoryRepository(db);
-    
     this.reportGenerator = new ExpenseReportGenerator(transactionRepo, categoryRepo);
   }
 
@@ -59,7 +53,7 @@ export class ReportService {
 }
 
 export class ReportServiceFactory {
-  static create(): ReportService {
-    return new ReportService();
+  static create(transactionRepo: TransactionRepository, categoryRepo: CategoryRepository): ReportService {
+    return new ReportService(transactionRepo, categoryRepo);
   }
 }

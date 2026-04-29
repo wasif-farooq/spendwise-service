@@ -1,23 +1,15 @@
 import { Request, Response } from 'express';
-import { Container } from '@di/Container';
-import { TOKENS } from '@di/tokens';
-import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
-import { IUserRepository } from '@domains/auth/repositories/IUserRepository';
-import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
-import { WorkspaceMembersRepository } from '@domains/workspaces/repositories/WorkspaceMembersRepository';
+import { SubscriptionRequestRepository } from '../repositories/SubscriptionRequestRepository';
+import { AccountRequestRepository } from '@domains/accounts/repositories/AccountRequestRepository';
 
 export class SubscriptionController {
+    constructor(
+        private subscriptionRequestRepository: SubscriptionRequestRepository,
+        private accountRequestRepository?: AccountRequestRepository
+    ) { }
 
-    private get subscriptionService(): SubscriptionService {
-        return Container.getInstance().resolve<SubscriptionService>(TOKENS.SubscriptionService);
-    }
-
-    private get accountRepo(): AccountRepository {
-        return Container.getInstance().resolve<AccountRepository>(TOKENS.AccountRepository);
-    }
-
-    private get membersRepo(): WorkspaceMembersRepository {
-        return Container.getInstance().resolve<WorkspaceMembersRepository>(TOKENS.WorkspaceMembersRepository);
+    private getUserId(req: Request): string {
+        return (req as any).user?.userId || (req as any).user?.id || (req as any).user?.sub;
     }
 
     private async calculateFeatureUsage(userId: string): Promise<{
@@ -27,16 +19,15 @@ export class SubscriptionController {
         customRoles: number;
     }> {
         try {
-            // Get account count for this user
-            const accounts = await this.accountRepo.findByUserId(userId);
-            
-            // For now, members and workspaces are mocked as 0
-            // In a full implementation, you'd count workspaces the user belongs to
-            // and members in those workspaces
-            
+            let accounts = 0;
+            if (this.accountRequestRepository) {
+                const result = await this.accountRequestRepository.getAccounts('', userId);
+                accounts = result.data?.length || 0;
+            }
+
             return {
                 members: 0,
-                accounts: accounts.length,
+                accounts,
                 workspaces: 0,
                 customRoles: 0,
             };
@@ -53,23 +44,28 @@ export class SubscriptionController {
 
     async getCurrentSubscription(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.userId;
+            const userId = this.getUserId(req);
 
             if (!userId) {
                 return res.status(401).json({ message: 'User not authenticated' });
             }
 
-            const subscription = await this.subscriptionService.getCurrentSubscription(userId);
+            const subscriptionResult = await this.subscriptionRequestRepository.getCurrentSubscription(userId);
             const featureUsage = await this.calculateFeatureUsage(userId);
 
+            if (subscriptionResult.error) {
+                throw new Error(subscriptionResult.error);
+            }
+
+            const subscription = subscriptionResult.data;
+
             if (!subscription) {
-                // Return default/free plan details if no explicit subscription
-                const plans = await this.subscriptionService.getPlans();
-                const defaultPlan = plans.find(p => p.name.toLowerCase() === 'free') || plans[0];
+                const plansResult = await this.subscriptionRequestRepository.getPlans();
+                const defaultPlan = plansResult.data?.find((p: any) => p.name?.toLowerCase() === 'free') || plansResult.data?.[0];
 
                 return res.json({
                     subscription: {
-                        plan: defaultPlan?.name.toLowerCase() || 'free',
+                        plan: defaultPlan?.name?.toLowerCase() || 'free',
                         status: 'active',
                         startDate: new Date(),
                         features: defaultPlan?.features || [],
@@ -79,13 +75,12 @@ export class SubscriptionController {
                 });
             }
 
-            // Get the plan details for limits
-            const plans = await this.subscriptionService.getPlans();
-            const plan = plans.find(p => p.id === subscription.planId);
+            const plansResult = await this.subscriptionRequestRepository.getPlans();
+            const plan = plansResult.data?.find((p: any) => p.id === subscription.planId);
 
             return res.json({
                 subscription: {
-                    plan: plan?.name.toLowerCase() || 'pro', // Return plan name like 'pro', 'free', etc.
+                    plan: plan?.name?.toLowerCase() || 'pro',
                     status: subscription.status,
                     startDate: subscription.startDate,
                     features: subscription.featuresSnapshot || plan?.features || [],
@@ -101,9 +96,14 @@ export class SubscriptionController {
 
     async getPlans(req: Request, res: Response) {
         try {
-            const plans = await this.subscriptionService.getPlans();
+            const result = await this.subscriptionRequestRepository.getPlans();
+
+            if (result.error) {
+                throw new Error(result.error);
+            }
+
             return res.json({
-                plans: plans.map(p => ({
+                plans: result.data?.map((p: any) => ({
                     id: p.id,
                     name: p.name,
                     price: {
@@ -113,10 +113,10 @@ export class SubscriptionController {
                     currency: p.currency,
                     billingPeriod: p.billingPeriod,
                     description: p.description,
-                    features: p.featuresDisplay.length > 0 ? p.featuresDisplay : p.features,
+                    features: p.featuresDisplay?.length > 0 ? p.featuresDisplay : p.features,
                     limits: p.limits,
                     popular: p.isFeatured
-                }))
+                })) || []
             });
         } catch (error: any) {
             return res.status(500).json({ message: error.message });
@@ -125,25 +125,28 @@ export class SubscriptionController {
 
     async subscribe(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.userId;
+            const userId = this.getUserId(req);
             const { planId, paymentMethod } = req.body;
 
             if (!userId) {
                 return res.status(401).json({ message: 'User not authenticated' });
             }
 
-            const subscription = await this.subscriptionService.subscribe(
-                userId, 
-                planId, 
-                { provider: paymentMethod || '2checkout', subscriptionId: `sub_${Date.now()}` }
+            const result = await this.subscriptionRequestRepository.subscribe(
+                userId,
+                { planId, paymentMethodId: paymentMethod || '2checkout' }
             );
+
+            if (result.error) {
+                throw new Error(result.error);
+            }
 
             return res.status(201).json({
                 message: 'Subscription created successfully',
                 subscription: {
-                    plan: subscription.planId,
-                    status: subscription.status,
-                    startDate: subscription.startDate,
+                    plan: result.data?.planId,
+                    status: result.data?.status,
+                    startDate: result.data?.startDate,
                 }
             });
 
@@ -154,21 +157,25 @@ export class SubscriptionController {
 
     async upgrade(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.userId;
+            const userId = this.getUserId(req);
             const { planId, paymentMethod } = req.body;
 
             if (!userId) {
                 return res.status(401).json({ message: 'User not authenticated' });
             }
 
-            const subscription = await this.subscriptionService.upgrade(userId, planId);
+            const result = await this.subscriptionRequestRepository.upgrade(userId, planId);
+
+            if (result.error) {
+                throw new Error(result.error);
+            }
 
             return res.json({
                 message: 'Subscription upgraded successfully',
                 subscription: {
-                    plan: subscription.planId,
-                    status: subscription.status,
-                    startDate: subscription.startDate,
+                    plan: result.data?.planId,
+                    status: result.data?.status,
+                    startDate: result.data?.startDate,
                 }
             });
 
@@ -179,21 +186,25 @@ export class SubscriptionController {
 
     async downgrade(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.userId;
+            const userId = this.getUserId(req);
             const { planId } = req.body;
 
             if (!userId) {
                 return res.status(401).json({ message: 'User not authenticated' });
             }
 
-            const subscription = await this.subscriptionService.downgrade(userId, planId);
+            const result = await this.subscriptionRequestRepository.downgrade(userId, planId);
+
+            if (result.error) {
+                throw new Error(result.error);
+            }
 
             return res.json({
                 message: 'Subscription downgraded successfully',
                 subscription: {
-                    plan: subscription.planId,
-                    status: subscription.status,
-                    startDate: subscription.startDate,
+                    plan: result.data?.planId,
+                    status: result.data?.status,
+                    startDate: result.data?.startDate,
                 }
             });
 
@@ -204,7 +215,7 @@ export class SubscriptionController {
 
     async getFeatureUsage(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.userId;
+            const userId = this.getUserId(req);
             if (!userId) {
                 return res.status(401).json({ message: 'User not authenticated' });
             }
@@ -218,20 +229,24 @@ export class SubscriptionController {
 
     async cancel(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.userId;
+            const userId = this.getUserId(req);
 
             if (!userId) {
                 return res.status(401).json({ message: 'User not authenticated' });
             }
 
-            const subscription = await this.subscriptionService.cancelSubscription(userId);
+            const result = await this.subscriptionRequestRepository.cancel(userId);
+
+            if (result.error) {
+                throw new Error(result.error);
+            }
 
             return res.json({
                 message: 'Subscription cancelled successfully',
                 subscription: {
-                    plan: subscription.planId,
-                    status: subscription.status,
-                    cancelledAt: subscription.cancelledAt,
+                    plan: result.data?.planId,
+                    status: result.data?.status,
+                    cancelledAt: result.data?.cancelledAt,
                 }
             });
 

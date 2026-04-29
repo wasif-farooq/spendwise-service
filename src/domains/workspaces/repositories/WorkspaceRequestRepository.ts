@@ -27,7 +27,7 @@ export class WorkspaceRequestRepository {
                 if (Array.isArray(data)) {
                     return { data, error: null, statusCode: 200 };
                 }
-                return { ...data, error: null, statusCode: 200 };
+                return { data, error: null, statusCode: 200 };
             })
             .catch(error => ({ 
                 error: error.message || 'An error occurred', 
@@ -62,6 +62,28 @@ export class WorkspaceRequestRepository {
             return this.wrap(this.service.delete(workspaceId, userId));
         }
         throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async countByOwnerId(userId: string) {
+        if (this.getMode() === 'direct') {
+            const workspaces = await this.service.getUserWorkspaces(userId);
+            return this.wrap(Promise.resolve({ count: workspaces.length }));
+        }
+        throw new Error('RPC mode not implemented');
+    }
+
+    async getAll(userId: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getUserWorkspaces(userId));
+        }
+        throw new Error('RPC mode not implemented');
+    }
+
+    async getById(workspaceId: string, userId: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getWorkspaceById(workspaceId, userId));
+        }
+        throw new Error('RPC mode not implemented');
     }
 
     async list(userId: string) {
@@ -141,13 +163,6 @@ export class WorkspaceRequestRepository {
         throw new Error('RPC mode not implemented in this wrapper');
     }
 
-    async getById(workspaceId: string, userId: string) {
-        if (this.getMode() === 'direct') {
-            return this.wrap(this.service.getById(workspaceId, userId));
-        }
-        throw new Error('RPC mode not implemented in this wrapper');
-    }
-
     async getMember(workspaceId: string, userId: string, memberId: string) {
         if (this.getMode() === 'direct') {
             return this.wrap(this.service.getMember(workspaceId, userId, memberId));
@@ -197,6 +212,23 @@ export class WorkspaceRequestRepository {
         throw new Error('RPC mode not implemented in this wrapper');
     }
 
+    async updateMemberRole(workspaceId: string, userId: string, memberId: string, data: any) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.updateMemberRole(workspaceId, userId, memberId, data));
+        }
+        throw new Error('RPC mode not implemented');
+    }
+
+    async findRoleByName(name: string, workspaceId: string) {
+        if (this.getMode() === 'direct') {
+            const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
+            const repoFactory = new RepositoryFactory(db);
+            const roleRepo = repoFactory.createWorkspaceRoleRepository();
+            return roleRepo.findByNameAndWorkspace(name, workspaceId);
+        }
+        throw new Error('RPC mode not implemented');
+    }
+
     async acceptInvitation(token: string, registrationData?: { firstName: string; lastName: string; password: string }) {
         if (this.getMode() === 'direct') {
             return this.wrap(this.service.acceptInvitation(token, registrationData));
@@ -221,6 +253,20 @@ export class WorkspaceRequestRepository {
     async getMyInvitations(userId: string) {
         if (this.getMode() === 'direct') {
             return this.wrap(this.service.getMyInvitations(userId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async getMemberById(workspaceId: string, userId: string, memberId: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.getMember(workspaceId, userId, memberId));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
+    async leaveWorkspace(workspaceId: string, userId: string) {
+        if (this.getMode() === 'direct') {
+            return this.wrap(this.service.removeMember(workspaceId, userId, userId).then(() => ({ message: 'Successfully left workspace' })));
         }
         throw new Error('RPC mode not implemented in this wrapper');
     }

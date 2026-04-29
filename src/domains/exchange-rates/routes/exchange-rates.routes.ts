@@ -1,9 +1,10 @@
 import { Router } from 'express';
-import { ExchangeRateController } from '../controllers/ExchangeRateController';
+import { ExchangeRateControllerFactory } from '@factories/ExchangeRateControllerFactory';
 import { requireAuth } from '@shared/middleware/auth.middleware';
 
 const router = Router();
-const controller = new ExchangeRateController();
+const factory = new ExchangeRateControllerFactory();
+const controller = factory.create();
 
 // All routes require authentication
 router.use(requireAuth);

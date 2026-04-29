@@ -38,7 +38,7 @@ const startWorker = async () => {
     const userService = serviceFactory.createUserService() as UserService;
     const workspaceService = serviceFactory.createWorkspaceService() as WorkspaceService;
     const featureFlagService = serviceFactory.createFeatureFlagService() as FeatureFlagService;
-    const reportService = new ReportService();
+    const reportService = serviceFactory.createReportService() as ReportService;
 
     console.log('Unified Worker Listening...');
 

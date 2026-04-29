@@ -1,17 +1,12 @@
 import { Router } from 'express';
 import { requirePermission } from '@shared/middleware/permission.middleware';
 import { requireAuth } from '@shared/middleware/auth.middleware';
-import { KafkaClient } from '@messaging/implementations/kafka/KafkaClient';
-import { ConfigLoader } from '@config/ConfigLoader';
-import { ReportController } from '../controllers/ReportController';
+import { ReportControllerFactory } from '@factories/ReportControllerFactory';
 
 const router = Router();
 
-// Initialize Kafka client and controller
-const config = ConfigLoader.getInstance();
-const kafkaConfig = config.get('messaging.kafka');
-const kafkaClient = new KafkaClient();
-const controller = new ReportController(kafkaClient);
+const factory = new ReportControllerFactory();
+const controller = factory.create();
 
 // All routes require authentication
 router.use(requireAuth);

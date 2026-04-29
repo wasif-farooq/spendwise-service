@@ -5,12 +5,13 @@ import { SubscriptionPlanRepository, UserSubscriptionRepository } from '../repos
 import { SubscriptionPlan } from '../models/SubscriptionPlan';
 import { UserSubscription } from '../models/UserSubscription';
 import { PaymentService, getPaymentGateway } from '@domains/payment/services/PaymentService';
-import { Container } from '@di/Container';
+import { IUserRepository } from '@domains/auth/repositories/IUserRepository';
 
 export class SubscriptionService {
     constructor(
         @Inject(TOKENS.SubscriptionPlanRepository) private planRepo: SubscriptionPlanRepository,
-        @Inject(TOKENS.UserSubscriptionRepository) private subRepo: UserSubscriptionRepository
+        @Inject(TOKENS.UserSubscriptionRepository) private subRepo: UserSubscriptionRepository,
+        @Inject('UserRepository') private userRepo: IUserRepository
     ) { }
 
     async getPlans(): Promise<SubscriptionPlan[]> {
@@ -260,8 +261,7 @@ export class SubscriptionService {
 
         // Get the user's current subscription to get their email
         const userSub = await this.subRepo.findByUserId(userId);
-        const userRepo = Container.getInstance().resolve<any>('UserRepository');
-        const user = await userRepo.findById(userId);
+        const user = await this.userRepo.findById(userId);
         
         if (!user) throw new AppError('User not found', 404);
 

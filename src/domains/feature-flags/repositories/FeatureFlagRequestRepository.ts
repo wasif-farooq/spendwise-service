@@ -22,7 +22,7 @@ export class FeatureFlagRequestRepository {
     // Helper to wrap responses in RPC-style format
     private wrap(promise: Promise<any>): Promise<any> {
         return promise
-            .then(data => ({ ...data, error: null, statusCode: 200 }))
+            .then(data => ({ data, error: null, statusCode: 200 }))
             .catch(error => ({ 
                 error: error.message || 'An error occurred', 
                 statusCode: error.statusCode || 500,

@@ -1,22 +1,21 @@
 import { Request, Response } from 'express';
 import { WorkspaceRequestRepository } from '../repositories/WorkspaceRequestRepository';
-import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { Container } from '@di/Container';
-import { TOKENS } from '@di/tokens';
-import { RepositoryFactory } from '@factories/RepositoryFactory';
-import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
+import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
+import { AuthRequestRepository } from '@domains/auth/repositories/AuthRequestRepository';
 
 export class WorkspaceController {
-    private subscriptionService: SubscriptionService;
-    private db: DatabaseFacade;
+    constructor(
+        private workspaceRequestRepository: WorkspaceRequestRepository,
+        private subscriptionRequestRepository?: SubscriptionRequestRepository,
+        private authRequestRepository?: AuthRequestRepository
+    ) { }
 
-    constructor(private workspaceRequestRepository: WorkspaceRequestRepository) {
-        this.subscriptionService = Container.getInstance().resolve<SubscriptionService>('SubscriptionService');
-        this.db = Container.getInstance().resolve<DatabaseFacade>('Database');
+    private getUserId(req: Request): string {
+        return (req as any).user?.userId || (req as any).user?.sub || (req as any).user?.id;
     }
 
     async getMe(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+        const userId = this.getUserId(req);
         const workspaceId = req.params.workspaceId;
         const result = await this.workspaceRequestRepository.getUserWorkspaceContext(workspaceId, userId);
 
@@ -28,15 +27,13 @@ export class WorkspaceController {
     }
 
     async create(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+        const userId = this.getUserId(req);
 
-        // Check subscription limits before creating workspace
-        const countResult = await this.db.query(
-            `SELECT COUNT(*) as count FROM workspaces WHERE owner_id = $1`,
-            [userId]
-        );
-        const currentCount = parseInt(countResult.rows[0]?.count || '0', 10);
-        await this.subscriptionService.checkFeatureLimit(userId, 'workspaces', currentCount);
+        if (this.subscriptionRequestRepository) {
+            const workspaceCountResult = await this.workspaceRequestRepository.countByOwnerId(userId);
+            const currentCount = workspaceCountResult.data?.count || 0;
+            await this.subscriptionRequestRepository.checkFeatureLimit(userId, 'workspaces', currentCount);
+        }
 
         const result = await this.workspaceRequestRepository.create(userId, req.body);
 
@@ -48,9 +45,9 @@ export class WorkspaceController {
     }
 
     async update(req: Request, res: Response) {
-        // userId from token (middleware)
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
+        const userId = this.getUserId(req);
+        const workspaceId = req.params.workspaceId;
+
         const result = await this.workspaceRequestRepository.update(workspaceId, userId, req.body);
 
         if (result.error) {
@@ -61,89 +58,52 @@ export class WorkspaceController {
     }
 
     async delete(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
+        const userId = this.getUserId(req);
+        const workspaceId = req.params.workspaceId;
+
         const result = await this.workspaceRequestRepository.delete(workspaceId, userId);
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });
             return;
         }
-        res.json({ message: 'Workspace deleted successfully' });
+        res.status(204).send();
     }
 
-    async list(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const result = await this.workspaceRequestRepository.list(userId);
+    async getAll(req: Request, res: Response) {
+        const userId = this.getUserId(req);
+
+        const result = await this.workspaceRequestRepository.getAll(userId);
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });
             return;
         }
-        // Handle both array and object responses
-        res.json(result.data || result);
+        res.json(result);
     }
 
-    async getMembers(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const { page, limit, search, roles, statuses, startDate, endDate } = req.query;
+    async getById(req: Request, res: Response) {
+        const userId = this.getUserId(req);
+        const workspaceId = req.params.workspaceId;
 
-        // Handle roles - can be array or string
-        let rolesArray: string[] | undefined;
-        if (roles) {
-            if (Array.isArray(roles)) {
-                rolesArray = roles as string[];
-            } else if (typeof roles === 'string') {
-                rolesArray = roles.split(',');
-            }
-        }
-
-        // Handle statuses - can be array or string
-        let statusesArray: string[] | undefined;
-        if (statuses) {
-            if (Array.isArray(statuses)) {
-                statusesArray = statuses as string[];
-            } else if (typeof statuses === 'string') {
-                statusesArray = statuses.split(',');
-            }
-        }
-
-        const result = await this.workspaceRequestRepository.getMembers(workspaceId, userId, {
-            page: page ? parseInt(page as string) : undefined,
-            limit: limit ? parseInt(limit as string) : undefined,
-            search: search as string,
-            roles: rolesArray,
-            statuses: statusesArray,
-            startDate: startDate as string,
-            endDate: endDate as string
-        });
+        const result = await this.workspaceRequestRepository.getById(workspaceId, userId);
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });
             return;
         }
-        // Handle both array and object responses
-        res.json(result.data || result);
+        res.json(result);
     }
 
     async inviteMember(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
+        const userId = this.getUserId(req);
+        const workspaceId = req.params.workspaceId;
 
-        // Check subscription limits before inviting member
-        const memberCountResult = await this.db.query(
-            `SELECT COUNT(*) as count FROM workspace_members WHERE workspace_id = $1`,
-            [workspaceId]
-        );
-        const invitationCountResult = await this.db.query(
-            `SELECT COUNT(*) as count FROM workspace_invitations WHERE workspace_id = $1 AND status = 'pending'`,
-            [workspaceId]
-        );
-        const memberCount = parseInt(memberCountResult.rows[0]?.count || '0', 10);
-        const invitationCount = parseInt(invitationCountResult.rows[0]?.count || '0', 10);
-        const totalCount = memberCount + invitationCount;
-        await this.subscriptionService.checkFeatureLimit(userId, 'members', totalCount);
+        if (this.subscriptionRequestRepository) {
+            const membersResult = await this.workspaceRequestRepository.getMembers(workspaceId, userId, {});
+            const currentCount = membersResult.data?.length || 0;
+            await this.subscriptionRequestRepository.checkFeatureLimit(userId, 'members', currentCount);
+        }
 
         const result = await this.workspaceRequestRepository.inviteMember(workspaceId, userId, req.body);
 
@@ -151,39 +111,83 @@ export class WorkspaceController {
             res.status(result.statusCode || 400).json({ message: result.error });
             return;
         }
-        res.json({ message: 'Member invited successfully' });
+        res.status(201).json(result);
     }
 
     async removeMember(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const memberId = req.params.memberId;
+        const userId = this.getUserId(req);
+        const workspaceId = req.params.workspaceId;
+        const { memberId } = req.params;
+
         const result = await this.workspaceRequestRepository.removeMember(workspaceId, userId, memberId);
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });
             return;
         }
-        res.json({ message: 'Member removed successfully' });
+        res.json(result);
     }
 
-    async leave(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        
-        const result = await this.workspaceRequestRepository.removeMember(workspaceId, userId, userId);
+    async updateMemberRole(req: Request, res: Response) {
+        const userId = this.getUserId(req);
+        const workspaceId = req.params.workspaceId;
+        const { memberId } = req.params;
+
+        const result = await this.workspaceRequestRepository.updateMemberRole(workspaceId, userId, memberId, req.body);
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });
             return;
         }
-        res.json({ message: 'You have left the workspace successfully' });
+        res.json(result);
     }
 
-    async getById(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const result = await this.workspaceRequestRepository.getById(workspaceId, userId);
+    async getMembers(req: Request, res: Response) {
+        const workspaceId = req.params.workspaceId;
+        const userId = this.getUserId(req);
+
+        const result = await this.workspaceRequestRepository.getMembers(workspaceId, userId, {});
+
+        if (result.error) {
+            res.status(result.statusCode || 400).json({ message: result.error });
+            return;
+        }
+        res.json(result);
+    }
+
+    async getInvitations(req: Request, res: Response) {
+        const workspaceId = req.params.workspaceId;
+        const userId = this.getUserId(req);
+
+        const result = await this.workspaceRequestRepository.getInvitations(workspaceId, userId, {});
+
+        if (result.error) {
+            res.status(result.statusCode || 400).json({ message: result.error });
+            return;
+        }
+        res.json(result);
+    }
+
+    async cancelInvitation(req: Request, res: Response) {
+        const userId = this.getUserId(req);
+        const workspaceId = req.params.workspaceId;
+        const { invitationId } = req.params;
+
+        const result = await this.workspaceRequestRepository.cancelInvitation(workspaceId, userId, invitationId);
+
+        if (result.error) {
+            res.status(result.statusCode || 400).json({ message: result.error });
+            return;
+        }
+        res.json(result);
+    }
+
+    async resendInvitation(req: Request, res: Response) {
+        const userId = this.getUserId(req);
+        const workspaceId = req.params.workspaceId;
+        const { invitationId } = req.params;
+
+        const result = await this.workspaceRequestRepository.resendInvitation(workspaceId, userId, invitationId);
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });
@@ -193,51 +197,11 @@ export class WorkspaceController {
     }
 
     async getMember(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
         const workspaceId = req.params.id;
-        const memberId = req.params.memberId;
-        const result = await this.workspaceRequestRepository.getMember(workspaceId, userId, memberId);
+        const { memberId } = req.params;
+        const userId = this.getUserId(req);
 
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-
-        // Ensure member is serialized if it's an entity
-        const memberData = (result.data && typeof result.data.toJSON === 'function') 
-            ? result.data.toJSON() 
-            : result.data;
-
-        res.json({ ...result, data: memberData });
-    }
-
-    async updateMember(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const memberId = req.params.memberId;
-        const result = await this.workspaceRequestRepository.updateMember(workspaceId, userId, memberId, req.body);
-
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-        res.json({ message: 'Member updated successfully' });
-    }
-
-    async uploadLogo(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-
-        if (!req.file) {
-            res.status(400).json({ message: 'No file uploaded' });
-            return;
-        }
-
-        const file = req.file.buffer;
-        const filename = req.file.originalname;
-        const contentType = req.file.mimetype;
-
-        const result = await this.workspaceRequestRepository.uploadLogo(workspaceId, userId, file, filename, contentType);
+        const result = await this.workspaceRequestRepository.getMemberById(workspaceId, userId, memberId);
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });
@@ -246,237 +210,35 @@ export class WorkspaceController {
         res.json(result);
     }
 
-    async getLogo(req: Request, res: Response) {
-        const userId = (req as any).user?.userId || (req as any).user?.sub || (req as any).user?.id || '';
+    async updateMember(req: Request, res: Response) {
+        const workspaceId = req.params.id;
+        const { memberId } = req.params;
+        const userId = this.getUserId(req);
+
+        const result = await this.workspaceRequestRepository.updateMemberRole(workspaceId, userId, memberId, req.body);
+
+        if (result.error) {
+            res.status(result.statusCode || 400).json({ message: result.error });
+            return;
+        }
+        res.json(result);
+    }
+
+    async leave(req: Request, res: Response) {
+        const userId = this.getUserId(req);
         const workspaceId = req.params.id;
 
-        const result = await this.workspaceRequestRepository.getById(workspaceId, userId);
-
-        if (result.error || !result.data) {
-            res.status(404).json({ message: 'Workspace not found' });
-            return;
-        }
-
-        const logoUrl = result.data.logo;
-        if (!logoUrl) {
-            res.status(404).json({ message: 'Logo not found' });
-            return;
-        }
-
-        res.redirect(logoUrl);
-    }
-
-    // Role methods
-    async listRoles(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const { page, limit, search, types, minPermissions } = req.query;
-
-        const result = await this.workspaceRequestRepository.getRoles(workspaceId, userId, {
-            page: page ? parseInt(page as string) : undefined,
-            limit: limit ? parseInt(limit as string) : undefined,
-            search: search as string,
-            types: types ? (types as string).split(',') : undefined,
-            minPermissions: minPermissions ? parseInt(minPermissions as string) : undefined
-        });
+        const result = await this.workspaceRequestRepository.leaveWorkspace(workspaceId, userId);
 
         if (result.error) {
             res.status(result.statusCode || 400).json({ message: result.error });
             return;
         }
-        res.json(result.data || result);
-    }
-
-    async getRole(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const roleId = req.params.roleId;
-
-        const result = await this.workspaceRequestRepository.getRole(workspaceId, userId, roleId);
-
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-        res.json(result.data || result);
-    }
-
-    async createRole(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-
-        const result = await this.workspaceRequestRepository.createRole(workspaceId, userId, req.body);
-
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-        res.status(201).json(result.data || result);
-    }
-
-    async updateRole(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const roleId = req.params.roleId;
-        const { permissions } = req.body;
-
-        const result = await this.workspaceRequestRepository.updateRole(workspaceId, userId, roleId, permissions);
-
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-        res.json({ message: 'Role updated successfully' });
-    }
-
-    async deleteRole(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const roleId = req.params.roleId;
-
-        const result = await this.workspaceRequestRepository.deleteRole(workspaceId, userId, roleId);
-
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-        res.json({ message: 'Role deleted successfully' });
-    }
-
-    async assignRole(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const memberId = req.params.memberId;
-        
-        let roleId = req.body.roleId || req.body.role;
-        
-        if (roleId && !roleId.includes('-')) {
-            const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-            const repoFactory = new RepositoryFactory(db);
-            const roleRepo = repoFactory.createWorkspaceRoleRepository();
-            const role = await roleRepo.findByNameAndWorkspace(roleId, workspaceId);
-            if (role) {
-                roleId = role.id;
-            } else {
-                res.status(400).json({ message: `Role '${roleId}' not found` });
-                return;
-            }
-        }
-        
-        const result = await this.workspaceRequestRepository.assignRole(workspaceId, userId, memberId, roleId);
-
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-        res.json({ message: 'Role assigned successfully' });
-    }
-
-    async duplicateRole(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const roleId = req.params.roleId;
-
-        const result = await this.workspaceRequestRepository.duplicateRole(workspaceId, userId, roleId);
-
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-        res.status(201).json(result.data || result);
-    }
-
-    async getInvitations(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const { page, limit, status } = req.query;
-
-        const params = {
-            page: page ? parseInt(page as string) : undefined,
-            limit: limit ? parseInt(limit as string) : undefined,
-            status: status as string
-        };
-
-        const result = await this.workspaceRequestRepository.getInvitations(workspaceId, userId, params);
-
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-        res.json(result.data || result);
-    }
-
-    async resendInvitation(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const invitationId = req.params.invitationId;
-
-        const result = await this.workspaceRequestRepository.resendInvitation(workspaceId, userId, invitationId);
-
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-        res.json({ message: 'Invitation resent successfully' });
-    }
-
-    async cancelInvitation(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-        const workspaceId = req.params.id;
-        const invitationId = req.params.invitationId;
-
-        const result = await this.workspaceRequestRepository.cancelInvitation(workspaceId, userId, invitationId);
-
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-        res.json({ message: 'Invitation cancelled successfully' });
-    }
-
-    async getInvitationByToken(req: Request, res: Response) {
-        const { token } = req.query;
-
-        if (!token) {
-            res.status(400).json({ message: 'Token is required' });
-            return;
-        }
-
-        const result = await this.workspaceRequestRepository.getInvitationByToken(token as string);
-
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-        res.json(result.data || result);
-    }
-
-    async acceptInvitation(req: Request, res: Response) {
-        const token = req.body?.token || req.query?.token as string;
-        const firstName = req.body.firstName;
-        const lastName = req.body.lastName;
-        const password = req.body.password;
-
-        if (!token) {
-            res.status(400).json({ message: 'Token is required' });
-            return;
-        }
-
-        const registrationData = firstName || lastName || password
-            ? { firstName, lastName, password }
-            : undefined;
-
-        const result = await this.workspaceRequestRepository.acceptInvitation(token, registrationData);
-
-        if (result.error) {
-            res.status(result.statusCode || 400).json({ message: result.error });
-            return;
-        }
-        res.json(result.data || result);
+        res.json(result);
     }
 
     async getMyInvitations(req: Request, res: Response) {
-        const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
+        const userId = this.getUserId(req);
 
         const result = await this.workspaceRequestRepository.getMyInvitations(userId);
 
@@ -484,16 +246,35 @@ export class WorkspaceController {
             res.status(result.statusCode || 400).json({ message: result.error });
             return;
         }
-        res.json(result.data || result);
+        res.json(result);
+    }
+
+    async getInvitationByToken(req: Request, res: Response) {
+        const { token } = req.query;
+
+        const result = await this.workspaceRequestRepository.getInvitationByToken(token as string);
+
+        if (result.error) {
+            res.status(result.statusCode || 400).json({ message: result.error });
+            return;
+        }
+        res.json(result);
+    }
+
+    async acceptInvitation(req: Request, res: Response) {
+        const { token, registrationData } = req.body;
+
+        const result = await this.workspaceRequestRepository.acceptInvitation(token, registrationData);
+
+        if (result.error) {
+            res.status(result.statusCode || 400).json({ message: result.error });
+            return;
+        }
+        res.json(result);
     }
 
     async declineInvitation(req: Request, res: Response) {
-        const token = req.body?.token || req.query?.token as string;
-
-        if (!token) {
-            res.status(400).json({ message: 'Token is required' });
-            return;
-        }
+        const { token } = req.body;
 
         const result = await this.workspaceRequestRepository.declineInvitation(token);
 
@@ -501,6 +282,6 @@ export class WorkspaceController {
             res.status(result.statusCode || 400).json({ message: result.error });
             return;
         }
-        res.json(result.data || result);
+        res.json(result);
     }
 }

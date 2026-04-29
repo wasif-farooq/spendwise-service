@@ -26,16 +26,11 @@ const controller = factory.create();
 router.use(requireAuth); // Protect all routes
 
 router.post('/', controller.create.bind(controller));
-router.get('/', controller.list.bind(controller));
+router.get('/', controller.getAll.bind(controller));
 router.get('/:workspaceId/me', controller.getMe.bind(controller));
 router.get('/:id', controller.getById.bind(controller));
 router.put('/:id', requirePermission('workspace:update'), controller.update.bind(controller));
 router.delete('/:id', requirePermission('workspace:delete'), controller.delete.bind(controller));
-
-// Logo upload
-router.post('/:id/logo', requirePermission('workspace:update'), upload.single('logo'), controller.uploadLogo.bind(controller));
-// Logo download - redirect to public URL
-router.get('/:id/logo', controller.getLogo.bind(controller));
 
 // FIRST: Roles routes (must come BEFORE members routes to avoid route conflicts)
 // Remove duplicate - keep only this one

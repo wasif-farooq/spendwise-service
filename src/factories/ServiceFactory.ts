@@ -4,6 +4,8 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
 import { CategoryService } from '@domains/categories/services/CategoryService';
 import { AuthService } from '@domains/auth/services/AuthService';
+import { TransactionService } from '@domains/transactions/services/TransactionService';
+import { AnalyticsService } from '@domains/analytics/services/AnalyticsService';
 import { RedisClientType } from 'redis';
 
 export class ServiceFactory {
@@ -130,7 +132,62 @@ export class ServiceFactory {
         const { SubscriptionService } = require('@domains/subscription/services/SubscriptionService');
         return new SubscriptionService(
             this.repositoryFactory.createSubscriptionPlanRepository(),
-            this.repositoryFactory.createUserSubscriptionRepository()
+            this.repositoryFactory.createUserSubscriptionRepository(),
+            this.repositoryFactory.createUserRepository()
+        );
+    }
+
+    createAccountService() {
+        const { AccountService } = require('@domains/accounts/services/AccountService');
+        return new AccountService(
+            this.repositoryFactory.createAccountRepository(),
+            this.createExchangeRateService()
+        );
+    }
+
+    async createTransactionService(): Promise<TransactionService> {
+        const { TransactionService } = require('@domains/transactions/services/TransactionService');
+        const exchangeRateService = this.createExchangeRateService();
+        return new TransactionService(
+            this.repositoryFactory.createTransactionRepository(),
+            this.repositoryFactory.createAccountRepository(),
+            this.db,
+            exchangeRateService
+        );
+    }
+
+    createCategoryService() {
+        const { CategoryService } = require('@domains/categories/services/CategoryService');
+        const categoryRepo = new CategoryRepository(this.db);
+        return new CategoryService(categoryRepo, this.repositoryFactory.createTransactionRepository());
+    }
+
+    createExchangeRateService() {
+        const { ExchangeRateService } = require('@domains/exchange-rates/services/ExchangeRateService');
+        return new ExchangeRateService(this.repositoryFactory.createExchangeRateRepository());
+    }
+
+    createPaymentService() {
+        const { PaymentService } = require('@domains/payment/services/PaymentService');
+        return PaymentService.getInstance();
+    }
+
+    async createAnalyticsService(): Promise<AnalyticsService> {
+        const { AnalyticsService } = require('@domains/analytics/services/AnalyticsService');
+        const exchangeRateService = this.createExchangeRateService();
+        return new AnalyticsService(
+            this.db,
+            this.repositoryFactory.createTransactionRepository(),
+            this.repositoryFactory.createAccountRepository(),
+            exchangeRateService
+        );
+    }
+
+    createReportService() {
+        const { ReportService } = require('@domains/reports/services/ReportService');
+        return new ReportService(
+            this.repositoryFactory.createTransactionRepository(),
+            this.repositoryFactory.createCategoryRepository()
         );
     }
 }

@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '@shared/middleware/auth.middleware';
-import { SubscriptionController } from  '@domains/subscription/controllers/SubscriptionController';
+import { SubscriptionControllerFactory } from '@factories/SubscriptionControllerFactory';
 
 const router = Router();
-const controller = new SubscriptionController();
+const factory = new SubscriptionControllerFactory();
+const controller = factory.create();
 
 // All routes require authentication
 router.use(requireAuth);

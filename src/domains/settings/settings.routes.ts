@@ -1,19 +1,11 @@
 import { Router } from 'express';
 import { requireAuth } from '@shared/middleware/auth.middleware';
-import { SettingsController } from './SettingsController';
-import { UserRequestRepository } from '@domains/users/repositories/UserRequestRepository';
-import { AuthRequestRepository } from '@domains/auth/repositories/AuthRequestRepository';
-import { Container } from '@di/Container';
-import { TOKENS } from '@di/tokens';
+import { SettingsControllerFactory } from '@factories/SettingsControllerFactory';
 
 const router = Router();
 
-// Resolve dependencies
-const container = Container.getInstance();
-const userRequestRepository = new UserRequestRepository();
-const authRequestRepository = new AuthRequestRepository();
-
-const controller = new SettingsController(userRequestRepository, authRequestRepository);
+const factory = new SettingsControllerFactory();
+const controller = factory.create();
 
 router.use(requireAuth);
 

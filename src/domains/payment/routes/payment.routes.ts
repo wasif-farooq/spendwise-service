@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { PaymentController } from '../controllers/PaymentController';
+import { PaymentControllerFactory } from '@factories/PaymentControllerFactory';
 
 const router = Router();
-const controller = new PaymentController();
+const factory = new PaymentControllerFactory();
+const controller = factory.create();
 
 // Public routes
 router.get('/gateways', controller.getGateways.bind(controller));

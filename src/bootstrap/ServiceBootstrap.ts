@@ -15,6 +15,14 @@ import { TOKENS } from '@di/tokens';
 import { FeatureFlagControllerFactory } from '@factories/FeatureFlagControllerFactory';
 import { AccountControllerFactory } from '@factories/AccountControllerFactory';
 import { StorageControllerFactory } from '@factories/StorageControllerFactory';
+import { TransactionControllerFactory } from '@factories/TransactionControllerFactory';
+import { CategoryControllerFactory } from '@factories/CategoryControllerFactory';
+import { ExchangeRateControllerFactory } from '@factories/ExchangeRateControllerFactory';
+import { SubscriptionControllerFactory } from '@factories/SubscriptionControllerFactory';
+import { PaymentControllerFactory } from '@factories/PaymentControllerFactory';
+import { AnalyticsControllerFactory } from '@factories/AnalyticsControllerFactory';
+import { ReportControllerFactory } from '@factories/ReportControllerFactory';
+import { SettingsControllerFactory } from '@factories/SettingsControllerFactory';
 import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
 import { AccountService } from '@domains/accounts/services/AccountService';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
@@ -79,13 +87,13 @@ export class ServiceBootstrap {
             const userControllerFactory = new UserControllerFactory(serviceFactory);
             this.container.registerInstance(TOKENS.UserControllerFactory, userControllerFactory);
 
-            const workspaceControllerFactory = new WorkspaceControllerFactory(serviceFactory);
+            const workspaceControllerFactory = new WorkspaceControllerFactory();
             this.container.registerInstance(TOKENS.WorkspaceControllerFactory, workspaceControllerFactory);
 
             const featureFlagControllerFactory = new FeatureFlagControllerFactory(serviceFactory);
             this.container.registerInstance(TOKENS.FeatureFlagControllerFactory, featureFlagControllerFactory);
 
-            const workspaceRolesControllerFactory = new WorkspaceRolesControllerFactory(serviceFactory);
+            const workspaceRolesControllerFactory = new WorkspaceRolesControllerFactory();
             this.container.registerInstance(TOKENS.WorkspaceRolesControllerFactory, workspaceRolesControllerFactory);
 
             const userPreferencesService = serviceFactory.createUserPreferencesService();
@@ -135,14 +143,14 @@ export class ServiceBootstrap {
             const accountService = new AccountService(accountRepo, exchangeRateService);
             this.container.registerInstance(TOKENS.AccountService, accountService);
 
-            const accountControllerFactory = new AccountControllerFactory(serviceFactory);
+            const accountControllerFactory = new AccountControllerFactory();
             this.container.registerInstance(TOKENS.AccountController, accountControllerFactory.create());
 
-            const transactionController = new TransactionController(transactionService);
-            this.container.registerInstance(TOKENS.TransactionController, transactionController);
+            const transactionControllerFactory = new TransactionControllerFactory();
+            this.container.registerInstance(TOKENS.TransactionController, transactionControllerFactory.create());
 
             // Analytics domain
-            const analyticsService = new AnalyticsService();
+            const analyticsService = await serviceFactory.createAnalyticsService();
             this.container.registerInstance(TOKENS.AnalyticsService, analyticsService);
 
             // Category domain registrations (required by WorkspaceService for default categories)

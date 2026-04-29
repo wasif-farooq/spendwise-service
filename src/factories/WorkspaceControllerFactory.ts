@@ -1,11 +1,20 @@
-import { ServiceFactory } from './ServiceFactory';
 import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
 import { WorkspaceController } from '@domains/workspaces/controllers/WorkspaceController';
+import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
 
 export class WorkspaceControllerFactory {
-    constructor(private serviceFactory: ServiceFactory) { }
+    private workspaceRequestRepository: WorkspaceRequestRepository;
+    private subscriptionRequestRepository: SubscriptionRequestRepository;
 
-    create(repository?: WorkspaceRequestRepository): WorkspaceController {
-        return new WorkspaceController(repository || new WorkspaceRequestRepository());
+    constructor() {
+        this.workspaceRequestRepository = new WorkspaceRequestRepository();
+        this.subscriptionRequestRepository = new SubscriptionRequestRepository();
+    }
+
+    create(): WorkspaceController {
+        return new WorkspaceController(
+            this.workspaceRequestRepository,
+            this.subscriptionRequestRepository
+        );
     }
 }

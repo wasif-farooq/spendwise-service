@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { AnalyticsController } from '../controllers/AnalyticsController';
+import { AnalyticsControllerFactory } from '@factories/AnalyticsControllerFactory';
 import { requirePermission } from '@shared/middleware/permission.middleware';
 
 const router = Router();
-const controller = new AnalyticsController();
+const factory = new AnalyticsControllerFactory();
+const controller = factory.create();
 
 // Validation schemas
 const WorkspaceIdParamSchema = z.object({

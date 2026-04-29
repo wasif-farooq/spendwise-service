@@ -1,47 +1,41 @@
 import { Request, Response } from 'express';
-import { AccountService } from '../services/AccountService';
+import { AccountRequestRepository } from '../repositories/AccountRequestRepository';
 import { AccountValidators } from '../validators';
 import { AppError } from '@shared/errors/AppError';
-import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
-import { Container } from '@di/Container';
-import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { AccountRepository } from '../repositories/AccountRepository';
-import { TransactionService } from '@domains/transactions/services/TransactionService';
-import { TOKENS } from '@di/tokens';
-import { UserPreferencesService } from '@domains/users/services/UserPreferencesService';
-import { ServiceFactory } from '@factories/ServiceFactory';
-import { RepositoryFactory } from '@factories/RepositoryFactory';
+import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
+import { UserPreferencesRequestRepository } from '@domains/users/repositories/UserPreferencesRequestRepository';
 
 export class AccountController {
-    private subscriptionService: SubscriptionService;
-    private accountRepo: AccountRepository;
-    private transactionService: TransactionService;
-    private db: DatabaseFacade;
-    private userPreferencesService: UserPreferencesService;
-
-    constructor(private accountService: AccountService) {
-        this.db = Container.getInstance().resolve<DatabaseFacade>('Database');
-        this.subscriptionService = Container.getInstance().resolve<SubscriptionService>('SubscriptionService');
-        this.accountRepo = new AccountRepository(this.db);
-        this.transactionService = Container.getInstance().resolve<TransactionService>(TOKENS.TransactionService);
-        this.userPreferencesService = Container.getInstance().resolve<UserPreferencesService>(TOKENS.UserPreferencesService);
-    }
+    constructor(
+        private accountRequestRepository: AccountRequestRepository,
+        private subscriptionRequestRepository?: SubscriptionRequestRepository,
+        private userPreferencesRequestRepository?: UserPreferencesRequestRepository
+    ) { }
 
     private getWorkspaceId(req: Request): string {
         return req.params.workspaceId;
     }
 
+    private getUserId(req: Request): string {
+        return (req as any).user?.userId || (req as any).user?.id || (req as any).user?.sub;
+    }
+
     async getAccounts(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
+            const userId = this.getUserId(req);
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
-            // Membership & permission checked by middleware
-            const accounts = await this.accountService.getAccountsByWorkspace(workspaceId);
-            res.json(accounts.map(a => a.toJSON()));
+            const result = await this.accountRequestRepository.getAccounts(workspaceId, userId);
+
+            if (result.error) {
+                throw new AppError(result.error, result.statusCode);
+            }
+
+            res.json(result.data?.map((a: any) => a.toJSON ? a.toJSON() : a) || []);
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
         }
@@ -51,14 +45,20 @@ export class AccountController {
         try {
             const { id } = AccountValidators.validateId(req.params);
             const workspaceId = this.getWorkspaceId(req);
+            const userId = this.getUserId(req);
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
-            // Membership & permission checked by middleware
-            const account = await this.accountService.getAccountById(id, workspaceId);
-            res.json(account.toJSON());
+            const result = await this.accountRequestRepository.getAccountById(workspaceId, id, userId);
+
+            if (result.error) {
+                throw new AppError(result.error, result.statusCode);
+            }
+
+            const account = result.data;
+            res.json(account?.toJSON ? account.toJSON() : account);
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
         }
@@ -68,46 +68,25 @@ export class AccountController {
         try {
             const data = AccountValidators.validateCreate(req.body);
             const workspaceId = this.getWorkspaceId(req);
-            const userId = (req as any).user?.userId || (req as any).user?.id;
+            const userId = this.getUserId(req);
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
-            // Check subscription limits before creating
-            const currentCount = await this.accountRepo.countByWorkspaceId(workspaceId);
-            await this.subscriptionService.checkFeatureLimit(userId, 'accounts', currentCount);
+            if (this.subscriptionRequestRepository) {
+                const countResult = await this.accountRequestRepository.countByWorkspace(workspaceId);
+                const currentCount = countResult.data?.count || 0;
+                await this.subscriptionRequestRepository.checkFeatureLimit(userId, 'accounts', currentCount);
+            }
 
-            // Store initial balance
-            const initialBalance = data.balance;
+            const result = await this.accountRequestRepository.createWithOpeningBalance(workspaceId, userId, data);
 
-            // Use database transaction for atomic operation
-            const account = await this.db.transaction(async (trxDb) => {
-                // Create account within transaction
-                const trxAccountRepo = this.accountRepo.withDb(trxDb);
-                const account = await this.accountService.createAccountWithRepo(data, userId, workspaceId, trxAccountRepo);
+            if (result.error) {
+                throw new AppError(result.error, result.statusCode);
+            }
 
-                // Create opening balance transaction if balance > 0
-                if (initialBalance > 0) {
-                    const trxTransactionService = new TransactionService(
-                        new (await import('@domains/transactions/repositories/TransactionRepository')).TransactionRepository(trxDb),
-                        this.accountRepo.withDb(trxDb),
-                        trxDb
-                    );
-                    await trxTransactionService.createTransaction({
-                        accountId: account.id,
-                        type: 'income',
-                        amount: initialBalance,
-                        currency: data.currency,
-                        description: 'Opening Balance',
-                        date: new Date().toISOString(),
-                    }, userId, workspaceId);
-                }
-
-                return account;
-            });
-
-            res.status(201).json(account.toJSON());
+            res.status(201).json(result.data?.toJSON ? result.data.toJSON() : result.data);
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
         }
@@ -118,17 +97,19 @@ export class AccountController {
             const { id } = AccountValidators.validateId(req.params);
             const data = AccountValidators.validateUpdate(req.body);
             const workspaceId = this.getWorkspaceId(req);
-
-            console.log('[DEBUG] Update account request:', { id, data, workspaceId });
+            const userId = this.getUserId(req);
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
-            // Permission checked by middleware
-            const account = await this.accountService.updateAccount(id, data, workspaceId);
-            console.log('[DEBUG] Account after update:', account.toJSON());
-            res.json(account.toJSON());
+            const result = await this.accountRequestRepository.update(workspaceId, id, userId, data);
+
+            if (result.error) {
+                throw new AppError(result.error, result.statusCode);
+            }
+
+            res.json(result.data?.toJSON ? result.data.toJSON() : result.data);
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
         }
@@ -138,13 +119,18 @@ export class AccountController {
         try {
             const { id } = AccountValidators.validateId(req.params);
             const workspaceId = this.getWorkspaceId(req);
+            const userId = this.getUserId(req);
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
-            // Permission checked by middleware
-            await this.accountService.deleteAccount(id, workspaceId);
+            const result = await this.accountRequestRepository.delete(workspaceId, id, userId);
+
+            if (result.error) {
+                throw new AppError(result.error, result.statusCode);
+            }
+
             res.status(204).send();
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
@@ -154,17 +140,27 @@ export class AccountController {
     async getTotalBalance(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
+            const userId = this.getUserId(req);
 
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const userPrefs = await this.userPreferencesService.getPreferences(userId);
-            const targetCurrency = userPrefs.currency || 'USD';
+            let targetCurrency = 'USD';
+            if (this.userPreferencesRequestRepository) {
+                const prefsResult = await this.userPreferencesRequestRepository.getPreferences(userId);
+                if (prefsResult.data) {
+                    targetCurrency = prefsResult.data.currency || 'USD';
+                }
+            }
 
-            const result = await this.accountService.getTotalBalance(workspaceId, targetCurrency);
-            res.json(result);
+            const result = await this.accountRequestRepository.getTotalBalance(workspaceId, targetCurrency, userId);
+
+            if (result.error) {
+                throw new AppError(result.error, result.statusCode);
+            }
+
+            res.json(result.data);
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });
         }

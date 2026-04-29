@@ -6,21 +6,30 @@ import { TransactionRepository } from '@domains/transactions/repositories/Transa
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
+import { ServiceFactory } from '@factories/ServiceFactory';
+import { RepositoryFactory } from '@factories/RepositoryFactory';
 
 const WorkspaceIdParamSchema = z.object({
     workspaceId: z.string().uuid(),
 });
 
 class AIController {
-    private analyticsService: AnalyticsService;
+    private analyticsService: AnalyticsService | null = null;
     private accountRepo: AccountRepository;
     private transactionRepo: TransactionRepository;
 
     constructor() {
         const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-        this.analyticsService = new AnalyticsService();
         this.accountRepo = new AccountRepository(db);
         this.transactionRepo = new TransactionRepository(db);
+    }
+
+    private async getAnalyticsService(): Promise<AnalyticsService> {
+        if (!this.analyticsService) {
+            const serviceFactory = Container.getInstance().resolve<ServiceFactory>(TOKENS.ServiceFactory);
+            this.analyticsService = await serviceFactory.createAnalyticsService();
+        }
+        return this.analyticsService;
     }
 
     private getWorkspaceId(req: Request): string {
@@ -34,9 +43,11 @@ class AIController {
                 return res.status(404).json({ message: 'Workspace not found' });
             }
 
+            const analyticsService = await this.getAnalyticsService();
+
             const accounts = await this.accountRepo.findByWorkspaceId(workspaceId);
-            const overview = await this.analyticsService.getOverview(workspaceId, 'month');
-            const categoryTrends = await this.analyticsService.getCategoryTrends(workspaceId, 1);
+            const overview = await analyticsService.getOverview(workspaceId, 'month');
+            const categoryTrends = await analyticsService.getCategoryTrends(workspaceId, 1);
 
             const insights: Array<{ type: string; title: string; description: string; severity: string }> = [];
 
@@ -100,8 +111,9 @@ class AIController {
                 return res.status(404).json({ message: 'Workspace not found' });
             }
 
-            const overview = await this.analyticsService.getOverview(workspaceId, 'month');
-            const categoryTrends = await this.analyticsService.getCategoryTrends(workspaceId, 1);
+            const analyticsService = await this.getAnalyticsService();
+            const overview = await analyticsService.getOverview(workspaceId, 'month');
+            const categoryTrends = await analyticsService.getCategoryTrends(workspaceId, 1);
 
             const recommendations: Array<{ category: string; current: number; recommended: number; tip: string }> = [];
 
@@ -144,8 +156,9 @@ class AIController {
                 return res.status(404).json({ message: 'Workspace not found' });
             }
 
-            const overview = await this.analyticsService.getOverview(workspaceId, 'month');
-            const categoryTrends = await this.analyticsService.getCategoryTrends(workspaceId, 1);
+            const analyticsService = await this.getAnalyticsService();
+            const overview = await analyticsService.getOverview(workspaceId, 'month');
+            const categoryTrends = await analyticsService.getCategoryTrends(workspaceId, 1);
 
             const analysis = {
                 monthOverview: {

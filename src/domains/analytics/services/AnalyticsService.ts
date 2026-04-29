@@ -1,7 +1,7 @@
-import { Container } from '@di/Container';
-import { TOKENS } from '@di/tokens';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
+import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
+import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
 
 export interface AnalyticsOverview {
     monthlyIncome: number;
@@ -61,11 +61,19 @@ export interface AnalyticsFilters {
 export class AnalyticsService {
     private db: DatabaseFacade;
     private exchangeRateService: ExchangeRateService;
+    private transactionRepo: TransactionRepository;
+    private accountRepo: AccountRepository;
 
-    constructor() {
-        this.db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-        const exchangeRateRepo = Container.getInstance().resolve<any>(TOKENS.ExchangeRateRepository);
-        this.exchangeRateService = new ExchangeRateService(exchangeRateRepo);
+    constructor(
+        db: DatabaseFacade,
+        transactionRepo: TransactionRepository,
+        accountRepo: AccountRepository,
+        exchangeRateService: ExchangeRateService
+    ) {
+        this.db = db;
+        this.transactionRepo = transactionRepo;
+        this.accountRepo = accountRepo;
+        this.exchangeRateService = exchangeRateService;
     }
 
     private async getUserPreferredCurrency(userId?: string, workspaceId?: string): Promise<string> {

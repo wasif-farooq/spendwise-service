@@ -1,28 +1,21 @@
 import { Request, Response } from 'express';
-import { ExchangeRateService } from '../services/ExchangeRateService';
-import { ExchangeRateRepository } from '../repositories/ExchangeRateRepository';
-import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { Container } from '@di/Container';
-import { TOKENS } from '@di/tokens';
+import { ExchangeRateRequestRepository } from '../repositories/ExchangeRateRequestRepository';
 
 export class ExchangeRateController {
-    private service: ExchangeRateService;
+    constructor(private exchangeRateRequestRepository: ExchangeRateRequestRepository) { }
 
-    constructor() {
-        const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-        const repository = new ExchangeRateRepository(db);
-        this.service = new ExchangeRateService(repository);
-    }
-
-    // Get all exchange rates
     async getRates(req: Request, res: Response) {
         try {
             const { base } = req.query;
-            const rates = await this.service.getRates(base as string);
-            
+            const result = await this.exchangeRateRequestRepository.getRates(base as string);
+
+            if (result.error) {
+                throw new Error(result.error);
+            }
+
             res.json({
-                rates: rates.map(r => r.toJSON()),
-                count: rates.length,
+                rates: result.data?.map((r: any) => r.toJSON ? r.toJSON() : r) || [],
+                count: result.data?.length || 0,
                 baseCurrency: base || 'USD'
             });
         } catch (error: any) {
@@ -30,7 +23,6 @@ export class ExchangeRateController {
         }
     }
 
-    // Convert currency
     async convert(req: Request, res: Response) {
         try {
             const { amount, from, to } = req.query;
@@ -40,34 +32,41 @@ export class ExchangeRateController {
                 return;
             }
 
-            const result = await this.service.convert(
+            const result = await this.exchangeRateRequestRepository.convert(
                 parseFloat(amount as string),
                 from as string,
-                to as string
+                to as string,
+                ''
             );
 
-            res.json(result);
+            if (result.error) {
+                throw new Error(result.error);
+            }
+
+            res.json(result.data);
         } catch (error: any) {
             res.status(400).json({ message: error.message });
         }
     }
 
-    // Manually fetch latest rates
     async fetchRates(req: Request, res: Response) {
         try {
             const { base } = req.query;
-            const result = await this.service.fetchAndStoreRates(base as string || 'USD');
-            
-            res.json(result);
+            const result = await this.exchangeRateRequestRepository.fetchRates(base as string || 'USD');
+
+            if (result.error) {
+                throw new Error(result.error);
+            }
+
+            res.json(result.data);
         } catch (error: any) {
             res.status(500).json({ message: error.message });
         }
     }
 
-    // Get supported currencies
     async getSupportedCurrencies(req: Request, res: Response) {
         try {
-            const currencies = this.service.getSupportedCurrencies();
+            const currencies = this.exchangeRateRequestRepository.getSupportedCurrencies();
             res.json({ currencies });
         } catch (error: any) {
             res.status(500).json({ message: error.message });

@@ -15,6 +15,7 @@ import { TransactionRepository } from '@domains/transactions/repositories/Transa
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
 import { StorageRepository } from '@domains/storage/repositories/StorageRepository';
 import { PaymentRepository } from '@domains/payment/repositories/PaymentRepository';
+import { ExchangeRateRepository } from '@domains/exchange-rates/repositories/ExchangeRateRepository';
 
 
 export class RepositoryFactory {
@@ -78,5 +79,9 @@ export class RepositoryFactory {
 
     createPaymentRepository(): PaymentRepository {
         return new PaymentRepository(this.db);
+    }
+
+    createExchangeRateRepository(): ExchangeRateRepository {
+        return new ExchangeRateRepository(this.db);
     }
 }
