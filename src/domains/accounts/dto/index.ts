@@ -10,7 +10,9 @@ export const CreateAccountSchema = z.object({
 
 export const UpdateAccountSchema = z.object({
     name: z.string().min(1).max(100).optional(),
+    type: z.enum(['bank', 'savings', 'cash', 'credit_card', 'investment']).optional(),
     balance: z.number().min(0).optional(),
+    currency: z.string().length(3).optional(),
     color: z.string().optional(),
 });
 

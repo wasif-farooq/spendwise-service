@@ -119,12 +119,15 @@ export class AccountController {
             const data = AccountValidators.validateUpdate(req.body);
             const workspaceId = this.getWorkspaceId(req);
 
+            console.log('[DEBUG] Update account request:', { id, data, workspaceId });
+
             if (!workspaceId) {
                 throw new AppError('Workspace not found', 404);
             }
 
             // Permission checked by middleware
             const account = await this.accountService.updateAccount(id, data, workspaceId);
+            console.log('[DEBUG] Account after update:', account.toJSON());
             res.json(account.toJSON());
         } catch (error: any) {
             res.status(error.statusCode || 500).json({ message: error.message });

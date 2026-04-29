@@ -69,6 +69,20 @@ export class Account extends Entity<AccountProps> {
         this.props.updatedAt = new Date();
     }
 
+    public updateType(type: AccountType): void {
+        this.props.type = type;
+        this.props.updatedAt = new Date();
+    }
+
+    public updateCurrency(currency: string): void {
+        this.props.currency = currency;
+        this.props.updatedAt = new Date();
+    }
+
+    public hasTransactions(): boolean {
+        return this.props.totalIncome > 0 || this.props.totalExpense > 0;
+    }
+
     // Getters
     get name(): string { return this.props.name; }
     get type(): AccountType { return this.props.type; }

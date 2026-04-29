@@ -51,9 +51,11 @@ export class AccountService {
     }
 
     async updateAccount(id: string, data: UpdateAccountDto, workspaceId: string): Promise<Account> {
+        console.log('[DEBUG AccountService] updateAccount called with data:', data);
         const account = await this.getAccountById(id, workspaceId);
         
         if (data.name !== undefined) {
+            console.log('[DEBUG] Updating name to:', data.name);
             account.updateDetails(data.name, account.color);
         }
         if (data.balance !== undefined) {
@@ -62,8 +64,22 @@ export class AccountService {
         if (data.color !== undefined) {
             account.updateDetails(account.name, data.color);
         }
+        if (data.type !== undefined) {
+            console.log('[DEBUG] Updating type to:', data.type);
+            account.updateType(data.type);
+        }
+        if (data.currency !== undefined) {
+            // Check if trying to change currency for account with transactions
+            if (account.currency !== data.currency && account.hasTransactions()) {
+                throw new AppError('Cannot change currency for account with existing transactions', 400);
+            }
+            console.log('[DEBUG] Updating currency to:', data.currency);
+            account.updateCurrency(data.currency);
+        }
         
-        return this.accountRepository.update(account);
+        const updated = await this.accountRepository.update(account);
+        console.log('[DEBUG] Repository returned:', updated.toJSON());
+        return updated;
     }
 
     async deleteAccount(id: string, workspaceId: string): Promise<void> {
