@@ -139,6 +139,48 @@ export class SubscriptionService {
     }
 
     /**
+     * Check if user can access transaction history beyond their plan's limit
+     * @param userId - The user ID
+     * @param startDate - Optional start date to check (ISO string or date string)
+     * @throws AppError if start date is beyond allowed history period
+     */
+    async checkTransactionHistoryLimit(userId: string, startDate: string | undefined): Promise<void> {
+        const subscription = await this.subRepo.findByUserId(userId);
+        
+        if (!subscription) {
+            const defaultLimit = 3;
+            if (startDate) {
+                const requestedDate = new Date(startDate);
+                const cutoffDate = new Date();
+                cutoffDate.setMonth(cutoffDate.getMonth() - defaultLimit);
+                if (requestedDate < cutoffDate) {
+                    throw new AppError(`Transaction history is limited to ${defaultLimit} months on the Free plan. Please upgrade your plan to access older transactions.`, 403);
+                }
+            }
+            return;
+        }
+
+        const limits = subscription.limitsSnapshot;
+        const limit = limits['transactionHistoryMonths'];
+
+        if (limit === undefined || limit === -1) {
+            return;
+        }
+
+        if (startDate) {
+            const requestedDate = new Date(startDate);
+            const cutoffDate = new Date();
+            cutoffDate.setMonth(cutoffDate.getMonth() - limit);
+            
+            if (requestedDate < cutoffDate) {
+                const planName = subscription.featuresSnapshot.includes('pro') ? 'Pro' : 
+                                 subscription.featuresSnapshot.includes('business') ? 'Business' : 'your plan';
+                throw new AppError(`Transaction history is limited to ${limit} months on ${planName}. Please upgrade your plan to access older transactions.`, 403);
+            }
+        }
+    }
+
+    /**
      * Create a free subscription for a user upon registration
      * Looks up the 'free' plan from subscription_plans table and creates user_subscriptions record
      * @param userId - The user ID

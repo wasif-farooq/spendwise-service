@@ -45,6 +45,14 @@ export class TransactionController {
                 throw new AppError('Workspace not found', 404);
             }
 
+            // Get userId for subscription check
+            const userId = (req as any).user?.userId || (req as any).user?.id;
+
+            // Check subscription limits for transaction history
+            if (startDate) {
+                await this.subscriptionService.checkTransactionHistoryLimit(userId, startDate as string);
+            }
+
             // Determine which pagination method to use
             const useCursorPagination = cursor !== undefined || page === undefined;
             
