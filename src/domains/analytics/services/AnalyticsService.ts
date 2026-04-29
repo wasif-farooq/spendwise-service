@@ -201,8 +201,7 @@ export class AnalyticsService {
         const startDate = new Date();
         startDate.setMonth(startDate.getMonth() - months);
         
-        // Use preferredCurrency from filters if provided
-        const preferredCurrency = filters?.preferredCurrency || 'USD';
+        const preferredCurrency = filters?.preferredCurrency || await this.getUserPreferredCurrency(undefined, workspaceId);
         
         const params: any[] = [workspaceId, startDate.toISOString()];
         let query = `SELECT COALESCE(c.name, 'Uncategorized') as category, c.id as category_id, t.amount, t.currency FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.workspace_id = $1 AND t.type = 'expense' AND t.date >= $2 AND t.date <= NOW()`;
@@ -237,6 +236,8 @@ export class AnalyticsService {
         const startDate = new Date();
         startDate.setMonth(startDate.getMonth() - months);
 
+        const preferredCurrency = filters?.preferredCurrency || await this.getUserPreferredCurrency(undefined, workspaceId);
+
         const params: any[] = [workspaceId, startDate.toISOString()];
         let query = `SELECT TO_CHAR(date, 'YYYY-MM') as month, TO_CHAR(date, 'MMM YYYY') as month_label, amount, type, currency FROM transactions WHERE workspace_id = $1 AND date >= $2`;
 
@@ -254,7 +255,7 @@ export class AnalyticsService {
         const monthlyData: Record<string, { income: number; expense: number; label: string }> = {};
         for (const tx of result.rows) {
             if (!monthlyData[tx.month]) monthlyData[tx.month] = { income: 0, expense: 0, label: tx.month_label };
-            const converted = await this.convertAmount(parseFloat(tx.amount || '0'), tx.currency || 'USD', 'USD');
+            const converted = await this.convertAmount(parseFloat(tx.amount || '0'), tx.currency || 'USD', preferredCurrency);
             if (tx.type === 'income') monthlyData[tx.month].income += converted;
             else monthlyData[tx.month].expense += converted;
         }
@@ -271,6 +272,8 @@ export class AnalyticsService {
     async getSpendingTrend(workspaceId: string, period: string, filters?: AnalyticsFilters): Promise<SpendingTrend[]> {
         const startDate = new Date();
         startDate.setFullYear(startDate.getFullYear() - 1);
+
+        const preferredCurrency = filters?.preferredCurrency || await this.getUserPreferredCurrency(undefined, workspaceId);
 
         const params: any[] = [workspaceId, startDate.toISOString()];
         let query = `SELECT DATE_TRUNC('month', date) as period, amount, type, currency FROM transactions WHERE workspace_id = $1 AND date >= $2`;
@@ -291,7 +294,7 @@ export class AnalyticsService {
         for (const tx of result.rows) {
             const periodKey = tx.period?.toISOString()?.split('T')[0] || '';
             if (!periodData[periodKey]) periodData[periodKey] = { income: 0, expense: 0 };
-            const converted = await this.convertAmount(parseFloat(tx.amount || '0'), tx.currency || 'USD', 'USD');
+            const converted = await this.convertAmount(parseFloat(tx.amount || '0'), tx.currency || 'USD', preferredCurrency);
             if (tx.type === 'income') periodData[periodKey].income += converted;
             else periodData[periodKey].expense += converted;
         }
@@ -308,6 +311,8 @@ export class AnalyticsService {
         const startDate = new Date();
         startDate.setMonth(startDate.getMonth() - 1);
 
+        const preferredCurrency = filters?.preferredCurrency || await this.getUserPreferredCurrency(undefined, workspaceId);
+
         const params: any[] = [workspaceId, startDate.toISOString(), limit];
         let query = `SELECT COALESCE(description, 'Unknown') as merchant, SUM(amount) as total, COUNT(id) as transaction_count, MAX(date) as last_transaction FROM transactions WHERE workspace_id = $1 AND type = 'expense' AND date >= $2 AND date <= NOW() AND description IS NOT NULL`;
 
@@ -323,13 +328,17 @@ export class AnalyticsService {
 
         const result = await this.db.query(query, params);
 
-        return result.rows.map((row: any) => ({
-            merchant: row.merchant,
-            amount: parseFloat(row.total || '0'),
-            transactionCount: parseInt(row.transaction_count || '0'),
-            category: 'Uncategorized',
-            lastTransaction: row.last_transaction,
+        const returnData = await Promise.all(result.rows.map(async (row: any) => {
+            const convertedAmount = await this.convertAmount(parseFloat(row.total || '0'), 'USD', preferredCurrency);
+            return {
+                merchant: row.merchant,
+                amount: convertedAmount,
+                transactionCount: parseInt(row.transaction_count || '0'),
+                category: 'Uncategorized',
+                lastTransaction: row.last_transaction,
+            };
         }));
+        return returnData;
     }
 
     private getDateRange(period: string, filters?: AnalyticsFilters): { startDate: string; prevStartDate: string } {
