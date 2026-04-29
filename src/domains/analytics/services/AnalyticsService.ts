@@ -4,10 +4,12 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
 
 export interface AnalyticsOverview {
-    totalIncome: number;
-    totalExpense: number;
-    netCashFlow: number;
+    monthlyIncome: number;
+    monthlyExpenses: number;
+    totalBalance: number;
     savingsRate: number;
+    accountsCount: number;
+    transactionsCount: number;
     topCategory: string | null;
     biggestExpense: number;
     periodComparison: {
@@ -67,6 +69,36 @@ export class AnalyticsService {
     }
 
     private async getUserPreferredCurrency(userId?: string, workspaceId?: string): Promise<string> {
+        try {
+            // First try to get from workspace owner
+            if (workspaceId) {
+                const workspaceResult = await this.db.query(
+                    `SELECT owner_id FROM workspaces WHERE id = $1`,
+                    [workspaceId]
+                );
+                if (workspaceResult.rows[0]?.owner_id) {
+                    const prefsResult = await this.db.query(
+                        `SELECT currency FROM user_preferences WHERE user_id = $1`,
+                        [workspaceResult.rows[0].owner_id]
+                    );
+                    if (prefsResult.rows[0]?.currency) {
+                        return prefsResult.rows[0].currency;
+                    }
+                }
+            }
+            // Fallback to user_id
+            if (userId) {
+                const prefsResult = await this.db.query(
+                    `SELECT currency FROM user_preferences WHERE user_id = $1`,
+                    [userId]
+                );
+                if (prefsResult.rows[0]?.currency) {
+                    return prefsResult.rows[0].currency;
+                }
+            }
+        } catch (error) {
+            console.error('[AnalyticsService] Error getting user preferred currency:', error);
+        }
         return 'USD';
     }
 
@@ -139,11 +171,23 @@ export class AnalyticsService {
         const incomeChange = prevIncome > 0 ? ((currIncome - prevIncome) / prevIncome) * 100 : 0;
         const expenseChange = prevExpense > 0 ? ((currExpense - prevExpense) / prevExpense) * 100 : 0;
 
+        // Get accounts and transactions count
+        const accountsResult = await this.db.query(
+            `SELECT COUNT(*) as count FROM accounts WHERE workspace_id = $1 AND is_active = true`,
+            [workspaceId]
+        );
+        const transactionsResult = await this.db.query(
+            `SELECT COUNT(*) as count FROM transactions WHERE workspace_id = $1 AND date >= $2 AND date <= NOW()`,
+            [workspaceId, dateRange.startDate]
+        );
+
         return {
-            totalIncome: Math.round(currIncome * 100) / 100,
-            totalExpense: Math.round(currExpense * 100) / 100,
-            netCashFlow: Math.round((currIncome - currExpense) * 100) / 100,
+            monthlyIncome: Math.round(currIncome * 100) / 100,
+            monthlyExpenses: Math.round(currExpense * 100) / 100,
+            totalBalance: Math.round((currIncome - currExpense) * 100) / 100,
             savingsRate: Math.max(0, Math.round(savingsRate * 100) / 100),
+            accountsCount: parseInt(accountsResult.rows[0]?.count || '0'),
+            transactionsCount: parseInt(transactionsResult.rows[0]?.count || '0'),
             topCategory: null,
             biggestExpense: Math.round(currExpense * 100) / 100,
             periodComparison: {

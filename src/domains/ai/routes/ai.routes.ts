@@ -50,18 +50,18 @@ class AIController {
                 });
             }
 
-            if (overview.netCashFlow < 0) {
+            if (overview.totalBalance < 0) {
                 insights.push({
                     type: 'cashflow',
                     title: 'Negative Cash Flow',
-                    description: `You spent ${Math.abs(overview.netCashFlow).toFixed(2)} more than you earned this month.`,
+                    description: `You spent ${Math.abs(overview.totalBalance).toFixed(2)} more than you earned this month.`,
                     severity: 'alert'
                 });
-            } else if (overview.netCashFlow > 0) {
+            } else if (overview.totalBalance > 0) {
                 insights.push({
                     type: 'savings',
                     title: 'Great Savings Rate!',
-                    description: `You saved ${overview.netCashFlow.toFixed(2)} this month.`,
+                    description: `You saved ${overview.totalBalance.toFixed(2)} this month.`,
                     severity: 'success'
                 });
             }
@@ -78,7 +78,7 @@ class AIController {
                 }
             }
 
-            if (overview.totalExpense === 0 && overview.totalIncome > 0) {
+            if (overview.monthlyExpenses === 0 && overview.monthlyIncome > 0) {
                 insights.push({
                     type: 'activity',
                     title: 'No Expenses Recorded',
@@ -105,8 +105,8 @@ class AIController {
 
             const recommendations: Array<{ category: string; current: number; recommended: number; tip: string }> = [];
 
-            const totalExpense = overview.totalExpense || 0;
-            const totalIncome = overview.totalIncome || 1;
+            const totalExpense = overview.monthlyExpenses || 0;
+            const totalIncome = overview.monthlyIncome || 1;
 
             for (const cat of categoryTrends.slice(0, 3)) {
                 const percentage = (cat.amount / totalExpense) * 100;
@@ -149,18 +149,18 @@ class AIController {
 
             const analysis = {
                 monthOverview: {
-                    totalIncome: overview.totalIncome,
-                    totalExpense: overview.totalExpense,
-                    netCashFlow: overview.netCashFlow,
-                    savingsRate: overview.totalIncome > 0 
-                        ? ((overview.netCashFlow / overview.totalIncome) * 100).toFixed(1) + '%'
+                    totalIncome: overview.monthlyIncome,
+                    totalExpense: overview.monthlyExpenses,
+                    totalBalance: overview.totalBalance,
+                    savingsRate: overview.monthlyIncome > 0 
+                        ? ((overview.totalBalance / overview.monthlyIncome) * 100).toFixed(1) + '%'
                         : '0%'
                 },
                 topCategories: categoryTrends.slice(0, 5).map((c: any) => ({
                     name: c.category,
                     amount: c.amount,
-                    percentage: overview.totalExpense > 0 
-                        ? ((c.amount / overview.totalExpense) * 100).toFixed(1) + '%'
+                    percentage: overview.monthlyExpenses > 0 
+                        ? ((c.amount / overview.monthlyExpenses) * 100).toFixed(1) + '%'
                         : '0%'
                 })),
                 advice: this.generateAdvice(overview, categoryTrends)
@@ -175,8 +175,8 @@ class AIController {
     private generateAdvice(overview: any, categoryTrends: any[]): string[] {
         const advice: string[] = [];
 
-        if (overview.netCashFlow > 0) {
-            const savingsRate = (overview.netCashFlow / overview.totalIncome) * 100;
+        if (overview.totalBalance > 0) {
+            const savingsRate = (overview.totalBalance / overview.monthlyIncome) * 100;
             if (savingsRate >= 20) {
                 advice.push('Excellent! You\'re saving more than 20% of your income.');
             } else if (savingsRate >= 10) {
