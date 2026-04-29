@@ -1,0 +1,5 @@
+module.exports = {
+  dir: 'migrations',
+  direction: 'up',
+  migrationsTable: 'pgmigrations',
+}

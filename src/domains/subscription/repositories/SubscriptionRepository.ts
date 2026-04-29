@@ -13,15 +13,16 @@ export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan>
     protected mapToEntity(row: any): SubscriptionPlan {
         return SubscriptionPlan.restore({
             name: row.name,
-            price: parseFloat(row.price),
-            yearlyPrice: parseFloat(row.yearly_price) || 0,
+            price: parseFloat(row.price_monthly),
+            yearlyPrice: parseFloat(row.price_yearly) || 0,
             currency: row.currency,
-            billingPeriod: row.billing_period,
+            billingPeriod: 'monthly',
             description: row.description,
             features: row.features || [], // JSONB auto-parsed
             featuresDisplay: row.features_display || row.features || [], // Use display names if available
             limits: row.limits || {}, // JSONB auto-parsed
             isActive: row.is_active,
+            isFeatured: row.is_featured || false,
             createdAt: row.created_at,
             updatedAt: row.updated_at
         }, row.id);

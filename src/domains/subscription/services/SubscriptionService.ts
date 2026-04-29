@@ -151,8 +151,9 @@ export class SubscriptionService {
             throw new AppError('User already has a subscription', 400);
         }
 
-        // Get the free plan from database
-        const freePlan = await this.planRepo.findById('free');
+        // Get the free plan from database (find by name since we use UUIDs now)
+        const allPlans = await this.planRepo.findAll();
+        const freePlan = allPlans.find(p => p.name.toLowerCase() === 'free');
         if (!freePlan) {
             throw new AppError('Free plan not found in database. Please seed subscription plans.', 404);
         }

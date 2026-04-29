@@ -114,7 +114,8 @@ export class SubscriptionController {
                     billingPeriod: p.billingPeriod,
                     description: p.description,
                     features: p.featuresDisplay.length > 0 ? p.featuresDisplay : p.features,
-                    limits: p.limits
+                    limits: p.limits,
+                    popular: p.isFeatured
                 }))
             });
         } catch (error: any) {

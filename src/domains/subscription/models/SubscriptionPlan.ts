@@ -11,6 +11,7 @@ export interface SubscriptionPlanProps {
     featuresDisplay: string[];
     limits: Record<string, number>;
     isActive: boolean;
+    isFeatured: boolean;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -34,4 +35,5 @@ export class SubscriptionPlan extends Entity<SubscriptionPlanProps> {
     get featuresDisplay(): string[] { return this.props.featuresDisplay; }
     get limits(): Record<string, number> { return this.props.limits; }
     get isActive(): boolean { return this.props.isActive; }
+    get isFeatured(): boolean { return this.props.isFeatured; }
 }
