@@ -52,21 +52,22 @@ export class SettingsController {
 
             // Map backend methods to frontend format
             const is2FAEnabled = result.twoFactorEnabled || false;
+            const verifiedMethods = result.twoFactorMethods || [];
             const availableMethods = [
                 {
                     type: 'authenticator',
-                    enabled: is2FAEnabled && result.twoFactorMethod === 'app',
-                    verified: (result.twoFactorMethods || []).some((m: any) => m.type === 'app' && m.verified)
+                    enabled: verifiedMethods.some((m: any) => m.type === 'app' && m.verified),
+                    verified: verifiedMethods.some((m: any) => m.type === 'app' && m.verified)
                 },
                 {
                     type: 'sms',
-                    enabled: is2FAEnabled && result.twoFactorMethod === 'sms',
-                    verified: (result.twoFactorMethods || []).some((m: any) => m.type === 'sms' && m.verified)
+                    enabled: verifiedMethods.some((m: any) => m.type === 'sms' && m.verified),
+                    verified: verifiedMethods.some((m: any) => m.type === 'sms' && m.verified)
                 },
                 {
                     type: 'email',
-                    enabled: is2FAEnabled && result.twoFactorMethod === 'email',
-                    verified: (result.twoFactorMethods || []).some((m: any) => m.type === 'email' && m.verified)
+                    enabled: verifiedMethods.some((m: any) => m.type === 'email' && m.verified),
+                    verified: verifiedMethods.some((m: any) => m.type === 'email' && m.verified)
                 }
             ];
 
