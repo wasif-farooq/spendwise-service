@@ -60,6 +60,14 @@ export class AuthRequestRepository {
         throw new Error('RPC mode not implemented in this wrapper');
     }
 
+    async loginWithGoogle(code: string) {
+        if (this.getMode() === 'direct') {
+            const service = await this.getService();
+            return this.wrap(service.loginWithGoogle(code));
+        }
+        throw new Error('RPC mode not implemented in this wrapper');
+    }
+
     async register(dto: any) {
         if (this.getMode() === 'direct') {
             const service = await this.getService();

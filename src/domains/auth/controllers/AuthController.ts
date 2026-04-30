@@ -134,4 +134,22 @@ export class AuthController {
         }
         res.json(result);
     }
+
+    async googleLogin(req: Request, res: Response) {
+        const { code } = req.body;
+        
+        if (!code) {
+            res.status(400).json({ message: 'Authorization code required' });
+            return;
+        }
+
+        const result = await this.authRequestRepository.loginWithGoogle(code);
+
+        if (result.error) {
+            res.status(result.statusCode || 400).json({ message: result.error });
+            return;
+        }
+
+        res.json(result);
+    }
 }

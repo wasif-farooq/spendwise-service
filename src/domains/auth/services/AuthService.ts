@@ -180,6 +180,172 @@ export class AuthService {
         return { token, refreshToken, user };
     }
 
+    async loginWithGoogle(code: string): Promise<{
+        token?: string;
+        refreshToken?: string;
+        user?: User;
+        requiresTwoFactor?: boolean;
+        availableMethods?: any[];
+        tempToken?: string;
+    }> {
+        const config = ConfigLoader.getInstance();
+        const googleConfig = config.get('auth.social.google') as any;
+        
+        if (!googleConfig?.clientId || !googleConfig?.clientSecret) {
+            throw new AppError('Google OAuth not configured', 500);
+        }
+
+        // Step 1: Exchange authorization code for tokens
+        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                client_id: googleConfig.clientId,
+                client_secret: googleConfig.clientSecret,
+                code,
+                grant_type: 'authorization_code',
+                redirect_uri: googleConfig.redirectUri
+            }).toString()
+        });
+
+        if (!tokenResponse.ok) {
+            const errorText = await tokenResponse.text();
+            console.error('[AuthService] Google token exchange failed:', errorText);
+            throw new AppError('Invalid Google authorization code', 400);
+        }
+
+        const tokens = await tokenResponse.json() as { access_token: string; id_token?: string };
+
+        // Step 2: Get user info from Google
+        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+            headers: { 'Authorization': `Bearer ${tokens.access_token}` }
+        });
+
+        if (!userInfoResponse.ok) {
+            throw new AppError('Failed to get user info from Google', 500);
+        }
+
+        const googleUser = await userInfoResponse.json() as {
+            id: string;
+            email: string;
+            name?: string;
+            given_name?: string;
+            family_name?: string;
+            picture?: string;
+        };
+
+        // Step 3: Find existing auth identity by provider + sub
+        let user = await this.userRepo.findByEmail(googleUser.email);
+        let isNewUser = false;
+
+        if (user) {
+            // Check if user has Google auth identity linked
+            const authIdentity = await this.authRepo.findByUserIdAndProvider(user.id, 'google');
+            if (!authIdentity) {
+                // User exists but no Google identity - link it
+                const newIdentity = AuthIdentity.create({
+                    userId: user.id,
+                    provider: 'google',
+                    sub: googleUser.id
+                });
+                await this.authRepo.save(newIdentity);
+            }
+
+            // Mark email as verified if not already (Google verified the email)
+            if (!user.emailVerified) {
+                user.verifyEmail();
+                await this.userRepo.save(user);
+            }
+
+            // Create resources if they don't exist (for existing users who linked Google)
+            try {
+                const existingSub = await this.subscriptionService.getCurrentSubscription(user.id);
+                if (!existingSub) {
+                    await this.subscriptionService.createFreeSubscription(user.id);
+                }
+                
+                // Check if user has any workspaces (by checking workspace members)
+                const memberCheck = await this.workspaceMembersRepository.findByUserId(user.id);
+                if (memberCheck.length === 0) {
+                    await this.workspaceService.create(user.id, {
+                        name: "My Account",
+                        slug: `my-account-${user.id.substring(0, 8)}`
+                    });
+                }
+            } catch (resourceError) {
+                console.error('[AuthService] Post-Google-login resource creation failed:', resourceError);
+            }
+        } else {
+            // Step 4: Create new user
+            isNewUser = true;
+            user = User.create({
+                email: googleUser.email,
+                firstName: googleUser.given_name || googleUser.name?.split(' ')[0] || 'User',
+                lastName: googleUser.family_name || googleUser.name?.split(' ').slice(1).join(' ') || ''
+            });
+            await this.userRepo.save(user);
+
+            // Create auth identity with provider 'google'
+            const identity = AuthIdentity.create({
+                userId: user.id,
+                provider: 'google',
+                sub: googleUser.id
+            });
+            await this.authRepo.save(identity);
+
+            // Mark email as verified (Google already verified)
+            user.verifyEmail();
+            await this.userRepo.save(user);
+
+            // Create free subscription, workspace, and default categories
+            try {
+                await this.subscriptionService.createFreeSubscription(user.id);
+                await this.workspaceService.create(user.id, {
+                    name: "My Account",
+                    slug: `my-account-${user.id.substring(0, 8)}`
+                });
+            } catch (resourceError) {
+                console.error('[AuthService] Post-Google-login resource creation failed:', resourceError);
+                // Don't throw - user can still login, just workspace might be missing
+            }
+        }
+
+        if (!user) {
+            throw new AppError('Failed to create or find user', 500);
+        }
+
+        // Step 5: Update last login
+        const authIdentity = await this.authRepo.findByUserIdAndProvider(user.id, 'google');
+        if (authIdentity) {
+            authIdentity.updateLastLogin();
+            await this.authRepo.save(authIdentity);
+        }
+
+        // Step 6: Check 2FA
+        if (user.twoFactorEnabled) {
+            return {
+                user,
+                requiresTwoFactor: true,
+                availableMethods: user.twoFactorMethods.map(m => ({
+                    type: m.type === 'app' ? 'authenticator' : m.type,
+                    enabled: true,
+                    verified: m.verified
+                })),
+                tempToken: user.id
+            };
+        }
+
+        // Step 7: Generate tokens
+        const token = this.generateAccessToken(user);
+        const refreshToken = this.generateRefreshToken(user);
+
+        return { 
+            token, 
+            refreshToken, 
+            user
+        };
+    }
+
     async verify2FA(tempToken: string, code: string, method?: string): Promise<{ token: string; refreshToken: string; user: User }> {
         const user = await this.userRepo.findById(tempToken);
         if (!user) throw new AppError('User not found', 404);
