@@ -47,7 +47,9 @@
         "archive:run-older": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts run-older",
         "archive:dry-run": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts dry-run",
         "archive:stats": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts stats",
-        "minio:avatars:public": "docker exec spendwise-service-minio-1 mc policy set-download local/spendwise-avatars || docker exec minio mc policy set-download local/spendwise-avatars"
+        "minio:avatars:public": "docker exec spendwise-service-minio-1 mc policy set-download local/spendwise-avatars || docker exec minio mc policy set-download local/spendwise-avatars",
+        "stripe:listen": "stripe listen --forward-to localhost:3000/api/v1/payment/webhook/stripe",
+        "stripe:listen:verbose": "stripe listen --forward-to localhost:3000/api/v1/payment/webhook/stripe --verbose"
     },
     "keywords": [
         "nodejs",

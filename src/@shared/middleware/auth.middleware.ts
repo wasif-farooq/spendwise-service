@@ -5,8 +5,25 @@ import { StructuredLogger } from '@monitoring/logging/StructuredLogger';
 
 const logger = new StructuredLogger();
 
+const publicPaths = [
+  '/health',
+  '/auth/',
+  '/payment/webhook',
+  '/payment/webhooks',
+  '/metrics',
+  '/favicon.ico'
+];
+
+const isPublicPath = (path: string) => {
+  return publicPaths.some(publicPath => path.startsWith(publicPath));
+};
+
 export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
+
+  if (isPublicPath(req.path)) {
+    return next();
+  }
 
   logger.info(`[AuthMiddleware] URL: ${req.method} ${req.url}`);
   logger.info(`[AuthMiddleware] All Headers: ${JSON.stringify(req.headers)}`);

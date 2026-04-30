@@ -62,7 +62,7 @@ export class SmtpEmailService implements IEmailService {
 
     this.transporter = nodemailer.createTransport({
       host: mailConfig.host || 'smtp.mailtrap.io',
-      port: parseInt(mailConfig.port) || 25,
+      port: parseInt(mailConfig.port) || 2525,
       secure: mailConfig.secure === true || mailConfig.secure === 'true',
       auth: {
         user: mailConfig.username || '',

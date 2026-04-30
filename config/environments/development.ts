@@ -188,5 +188,11 @@ export default {
         password: process.env.MAIL_PASSWORD,
         fromAddress: process.env.MAIL_FROM_ADDRESS || 'noreply@spendwise.app',
         fromName: process.env.MAIL_FROM_NAME || 'SpendWise'
+    },
+
+    // Stripe Configuration
+    stripe: {
+        secretKey: process.env.STRIPE_SECRET_KEY,
+        webhookSecret: process.env.STRIPE_WEBHOOK_SECRET
     }
 };

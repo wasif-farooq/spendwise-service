@@ -91,7 +91,8 @@ export class PaymentRequestRepository {
                 },
                 successUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/checkout/success?session_id={sessionId}`,
                 cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/checkout/cancel?planId=${data.planId}`,
-                provider: data.paymentGateway as any
+                provider: data.paymentGateway as any,
+                userId: userId
             });
 
             return this.wrap(Promise.resolve({

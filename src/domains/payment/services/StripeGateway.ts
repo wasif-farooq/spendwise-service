@@ -24,8 +24,9 @@ export class StripeGateway implements IPaymentGateway {
         customer: PaymentCustomer;
         successUrl: string;
         cancelUrl: string;
+        userId?: string;
     }): Promise<CheckoutSession> {
-        const { planId, planPrice, planName, billingPeriod, customer, successUrl, cancelUrl } = params;
+        const { planId, planPrice, planName, billingPeriod, customer, successUrl, cancelUrl, userId } = params;
 
         let customerId: string;
         
@@ -41,7 +42,7 @@ export class StripeGateway implements IPaymentGateway {
 
         const priceId = await this.createOrGetPrice(planId, planPrice, planName, billingPeriod);
 
-        const session = await this.stripe.checkout.sessions.create({
+        const sessionParams: any = {
             customer: customerId,
             mode: 'subscription',
             payment_method_types: ['card'],
@@ -57,7 +58,14 @@ export class StripeGateway implements IPaymentGateway {
                 planId,
                 billingPeriod,
             },
-        });
+        };
+
+        if (userId) {
+            sessionParams.client_reference_id = userId;
+            sessionParams.metadata.userId = userId;
+        }
+
+        const session = await this.stripe.checkout.sessions.create(sessionParams);
 
         return {
             url: session.url!,

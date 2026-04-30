@@ -80,7 +80,7 @@ export class SubscriptionController {
 
             return res.json({
                 subscription: {
-                    plan: plan?.name?.toLowerCase() || 'pro',
+                    plan: plan?.name?.toLowerCase() || 'free',
                     status: subscription.status,
                     startDate: subscription.startDate,
                     features: subscription.featuresSnapshot || plan?.features || [],

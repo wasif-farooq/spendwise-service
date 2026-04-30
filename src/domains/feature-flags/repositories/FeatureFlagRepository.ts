@@ -14,7 +14,7 @@ export class FeatureFlagRepository extends BaseRepository<FeatureFlag> {
             id: row.id,
             key: row.key,
             description: row.description,
-            isEnabled: row.is_enabled,
+            isEnabled: row.enabled,
             createdAt: row.created_at,
             updatedAt: row.updated_at
         });

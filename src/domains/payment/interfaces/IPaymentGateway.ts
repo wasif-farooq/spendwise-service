@@ -29,6 +29,7 @@ export interface IPaymentGateway {
         customer: PaymentCustomer;
         successUrl: string;
         cancelUrl: string;
+        userId?: string;
     }): Promise<CheckoutSession>;
 
     /**

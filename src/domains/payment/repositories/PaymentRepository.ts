@@ -1,120 +1,148 @@
-import { BaseRepository } from '@shared/repositories/BaseRepository';
-import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { Inject } from '@di/decorators/inject.decorator';
 import { TOKENS } from '@di/tokens';
+import { DatabaseFacade } from '@facades/DatabaseFacade';
 
-export interface PaymentSessionProps {
-    id?: string;
+export interface PaymentRecord {
+    id: string;
     userId: string;
-    planId: string;
-    provider: string;
-    sessionId: string;
-    status: 'pending' | 'completed' | 'failed' | 'cancelled';
+    subscriptionId?: string;
+    stripePaymentIntentId?: string;
+    stripeInvoiceId?: string;
+    stripeChargeId?: string;
     amount: number;
-    currency?: string;
-    billingPeriod: 'monthly' | 'yearly';
-    createdAt?: Date;
-    updatedAt?: Date;
+    currency: string;
+    status: string;
+    type: string;
+    invoiceUrl?: string;
+    invoicePdf?: string;
+    description?: string;
+    createdAt: Date;
+    updatedAt: Date;
 }
 
-export class PaymentSession {
-    private props: PaymentSessionProps;
+export class PaymentRepository {
+    constructor(@Inject(TOKENS.Database) private db: DatabaseFacade) {}
 
-    constructor(props: PaymentSessionProps) {
-        this.props = { ...props };
+    async create(data: Omit<PaymentRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<PaymentRecord> {
+        const result = await this.db.query(
+            `INSERT INTO payments (
+                user_id, subscription_id, stripe_payment_intent_id, stripe_invoice_id,
+                stripe_charge_id, amount, currency, status, type, invoice_url,
+                invoice_pdf, description
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING *`,
+            [
+                data.userId,
+                data.subscriptionId,
+                data.stripePaymentIntentId,
+                data.stripeInvoiceId,
+                data.stripeChargeId,
+                data.amount,
+                data.currency,
+                data.status,
+                data.type,
+                data.invoiceUrl,
+                data.invoicePdf,
+                data.description,
+            ]
+        );
+        return this.mapToPaymentRecord(result.rows[0]);
     }
 
-    static create(props: PaymentSessionProps): PaymentSession {
-        return new PaymentSession({
-            ...props,
-            status: 'pending',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        });
+    async findByUserId(userId: string, limit = 20, offset = 0): Promise<PaymentRecord[]> {
+        const result = await this.db.query(
+            `SELECT * FROM payments 
+            WHERE user_id = $1 
+            ORDER BY created_at DESC 
+            LIMIT $2 OFFSET $3`,
+            [userId, limit, offset]
+        );
+        return result.rows.map(this.mapToPaymentRecord);
     }
 
-    static restore(props: PaymentSessionProps, id: string): PaymentSession {
-        return new PaymentSession({ ...props, id });
+    async findById(id: string): Promise<PaymentRecord | null> {
+        const result = await this.db.query(
+            'SELECT * FROM payments WHERE id = $1',
+            [id]
+        );
+        return result.rows[0] ? this.mapToPaymentRecord(result.rows[0]) : null;
     }
 
-    get id(): string | undefined { return this.props.id; }
-    get userId(): string { return this.props.userId; }
-    get planId(): string { return this.props.planId; }
-    get provider(): string { return this.props.provider; }
-    get sessionId(): string { return this.props.sessionId; }
-    get status(): string { return this.props.status; }
-    get amount(): number { return this.props.amount; }
-    get billingPeriod(): string { return this.props.billingPeriod; }
-    get createdAt(): Date | undefined { return this.props.createdAt; }
-    get updatedAt(): Date | undefined { return this.props.updatedAt; }
-
-    complete(): void {
-        this.props.status = 'completed';
-        this.props.updatedAt = new Date();
+    async findByStripeInvoiceId(invoiceId: string): Promise<PaymentRecord | null> {
+        const result = await this.db.query(
+            'SELECT * FROM payments WHERE stripe_invoice_id = $1',
+            [invoiceId]
+        );
+        return result.rows[0] ? this.mapToPaymentRecord(result.rows[0]) : null;
     }
 
-    fail(): void {
-        this.props.status = 'failed';
-        this.props.updatedAt = new Date();
+    async findBySubscriptionId(subscriptionId: string): Promise<PaymentRecord[]> {
+        const result = await this.db.query(
+            `SELECT * FROM payments 
+            WHERE subscription_id = $1 
+            ORDER BY created_at DESC`,
+            [subscriptionId]
+        );
+        return result.rows.map(this.mapToPaymentRecord);
     }
 
-    cancel(): void {
-        this.props.status = 'cancelled';
-        this.props.updatedAt = new Date();
+    async countByUserId(userId: string): Promise<number> {
+        const result = await this.db.query(
+            'SELECT COUNT(*) FROM payments WHERE user_id = $1',
+            [userId]
+        );
+        return parseInt(result.rows[0].count);
     }
 
-    getProps(): PaymentSessionProps {
-        return { ...this.props };
-    }
-}
+    async update(id: string, data: Partial<PaymentRecord>): Promise<PaymentRecord | null> {
+        const updates: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
 
-export class PaymentRepository extends BaseRepository<PaymentSession> {
-    constructor(@Inject(TOKENS.Database) db: DatabaseFacade) {
-        super(db, 'payment_sessions');
+        if (data.status !== undefined) {
+            updates.push(`status = $${paramIndex++}`);
+            values.push(data.status);
+        }
+        if (data.invoicePdf !== undefined) {
+            updates.push(`invoice_pdf = $${paramIndex++}`);
+            values.push(data.invoicePdf);
+        }
+        if (data.invoiceUrl !== undefined) {
+            updates.push(`invoice_url = $${paramIndex++}`);
+            values.push(data.invoiceUrl);
+        }
+
+        if (updates.length === 0) {
+            return this.findById(id);
+        }
+
+        updates.push(`updated_at = NOW()`);
+        values.push(id);
+
+        const result = await this.db.query(
+            `UPDATE payments SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+            values
+        );
+        return result.rows[0] ? this.mapToPaymentRecord(result.rows[0]) : null;
     }
 
-    protected mapToEntity(row: any): PaymentSession {
-        return PaymentSession.restore({
+    private mapToPaymentRecord(row: any): PaymentRecord {
+        return {
             id: row.id,
             userId: row.user_id,
-            planId: row.plan_id,
-            provider: row.provider,
-            sessionId: row.session_id,
-            status: row.status,
-            amount: parseFloat(row.amount),
+            subscriptionId: row.subscription_id,
+            stripePaymentIntentId: row.stripe_payment_intent_id,
+            stripeInvoiceId: row.stripe_invoice_id,
+            stripeChargeId: row.stripe_charge_id,
+            amount: row.amount,
             currency: row.currency,
-            billingPeriod: row.billing_period,
+            status: row.status,
+            type: row.type,
+            invoiceUrl: row.invoice_url,
+            invoicePdf: row.invoice_pdf,
+            description: row.description,
             createdAt: row.created_at,
-            updatedAt: row.updated_at
-        }, row.id);
-    }
-
-    protected mapToDb(data: any): any {
-        const mapped = super.mapToDb(data);
-        return mapped;
-    }
-
-    async findByUserId(userId: string): Promise<PaymentSession[]> {
-        const result = await this.db.query(
-            `SELECT * FROM ${this.tableName} WHERE user_id = $1 ORDER BY created_at DESC`,
-            [userId]
-        );
-        return result.rows.map((row: any) => this.mapToEntity(row));
-    }
-
-    async findBySessionId(sessionId: string): Promise<PaymentSession | null> {
-        const result = await this.db.query(
-            `SELECT * FROM ${this.tableName} WHERE session_id = $1`,
-            [sessionId]
-        );
-        return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
-    }
-
-    async findPendingByUserId(userId: string): Promise<PaymentSession | null> {
-        const result = await this.db.query(
-            `SELECT * FROM ${this.tableName} WHERE user_id = $1 AND status = 'pending' ORDER BY created_at DESC LIMIT 1`,
-            [userId]
-        );
-        return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
+            updatedAt: row.updated_at,
+        };
     }
 }

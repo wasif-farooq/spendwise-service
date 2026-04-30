@@ -24,10 +24,14 @@ export class PaymentService {
     private initializeGateways(): void {
         if (this.initialized) return;
 
+        console.log('[PaymentService] Initializing payment gateways...');
+
         try {
-            this.gateways.set('stripe', new StripeGateway());
+            const stripe = new StripeGateway();
+            this.gateways.set('stripe', stripe);
+            console.log('[PaymentService] Stripe gateway initialized successfully');
         } catch (error) {
-            console.log('[PaymentService] Stripe gateway not available:', (error as Error).message);
+            console.log('[PaymentService] Stripe gateway not available:', (error as Error).message, (error as Error).stack);
         }
 
         try {
@@ -42,11 +46,27 @@ export class PaymentService {
             console.log('[PaymentService] 2Checkout gateway not available:', (error as Error).message);
         }
 
+        console.log('[PaymentService] Available gateways:', Array.from(this.gateways.keys()));
         this.initialized = true;
     }
 
     getGateway(provider: PaymentProvider): IPaymentGateway {
-        const gateway = this.gateways.get(provider);
+        let gateway = this.gateways.get(provider);
+        
+        if (!gateway) {
+            console.log(`[PaymentService] Gateway '${provider}' not in cache, attempting to initialize...`);
+            
+            if (provider === 'stripe') {
+                try {
+                    gateway = new StripeGateway();
+                    this.gateways.set('stripe', gateway);
+                    console.log(`[PaymentService] Stripe gateway initialized on-demand`);
+                } catch (error) {
+                    console.log(`[PaymentService] On-demand Stripe initialization failed:`, (error as Error).message);
+                }
+            }
+        }
+        
         if (!gateway) {
             throw new Error(`Payment gateway '${provider}' is not available`);
         }
@@ -84,6 +104,7 @@ export class PaymentService {
         successUrl: string;
         cancelUrl: string;
         provider?: PaymentProvider;
+        userId?: string;
     }): Promise<CheckoutSession> {
         const gateway = params.provider 
             ? this.getGateway(params.provider)
@@ -97,6 +118,7 @@ export class PaymentService {
             customer: params.customer,
             successUrl: params.successUrl,
             cancelUrl: params.cancelUrl,
+            userId: params.userId,
         });
     }
 

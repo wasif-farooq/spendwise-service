@@ -14,6 +14,7 @@ import analyticsRoutesV1 from '@domains/analytics/routes/analytics.routes';
 import aiRoutesV1 from '@domains/ai/routes/ai.routes';
 import storageRoutesV1 from '@domains/storage/routes/storage.routes';
 import paymentRoutesV1 from '@domains/payment/routes/payment.routes';
+import billingRoutesV1 from '@domains/billing/routes/billing.routes';
 import reportRoutes from '@domains/reports/routes/report.routes';
 
 export class ApiRouter {
@@ -49,6 +50,8 @@ private configureRoutes() {
     this.router.use('/v1', aiRoutesV1);
     // Payment (at /v1/payment)
     this.router.use('/v1/payment', paymentRoutesV1);
+    // Billing (at /v1/billing)
+    this.router.use('/v1/billing', billingRoutesV1);
     // Reports (at /v1/:workspaceId/reports)
     this.router.use('/v1/workspaces', reportRoutes);
 
