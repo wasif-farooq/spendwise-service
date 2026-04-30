@@ -1,14 +1,22 @@
+import { Container } from '@di/Container';
 import { PaymentController } from '@domains/payment/controllers/PaymentController';
-import { PaymentRequestRepository } from '@domains/payment/repositories/PaymentRequestRepository';
+import { PaymentRequestRepositoryFactory } from '@domains/payment/repositories/PaymentRequestRepositoryFactory';
 
 export class PaymentControllerFactory {
-    private paymentRequestRepository: PaymentRequestRepository;
-
-    constructor() {
-        this.paymentRequestRepository = new PaymentRequestRepository();
-    }
+    private static instance: PaymentController | null = null;
 
     create(): PaymentController {
-        return new PaymentController(this.paymentRequestRepository);
+        if (PaymentControllerFactory.instance) {
+            return PaymentControllerFactory.instance;
+        }
+
+        const paymentRequestRepoFactory = Container.getInstance()
+            .resolve<PaymentRequestRepositoryFactory>('PaymentRequestRepositoryFactory');
+
+        const paymentRequestRepository = paymentRequestRepoFactory.create();
+
+        PaymentControllerFactory.instance = new PaymentController(paymentRequestRepository);
+
+        return PaymentControllerFactory.instance;
     }
 }

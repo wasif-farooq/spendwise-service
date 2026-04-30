@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { UserControllerFactory } from '@factories/UserControllerFactory';
-import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
+import { controllerMiddleware } from '@shared/middlewares/controller.middleware';
 import { authMiddleware } from '@shared/middleware/auth.middleware';
 
 const router = Router();
@@ -14,12 +13,10 @@ const upload = multer({
     },
 });
 
-const container = Container.getInstance();
-const factory = container.resolve<UserControllerFactory>(TOKENS.UserControllerFactory);
-const controller = factory.create();
+router.use(controllerMiddleware(TOKENS.UserControllerFactory));
 
-router.get('/profile', authMiddleware, controller.getProfile.bind(controller));
-router.put('/profile', authMiddleware, controller.updateProfile.bind(controller));
-router.post('/avatar', authMiddleware, upload.single('avatar'), controller.uploadAvatar.bind(controller));
+router.get('/profile', authMiddleware, (req, res) => req.controller.getProfile(req, res));
+router.put('/profile', authMiddleware, (req, res) => req.controller.updateProfile(req, res));
+router.post('/avatar', authMiddleware, upload.single('avatar'), (req, res) => req.controller.uploadAvatar(req, res));
 
 export default router;

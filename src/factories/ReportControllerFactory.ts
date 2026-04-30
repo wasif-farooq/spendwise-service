@@ -1,14 +1,22 @@
+import { Container } from '@di/Container';
 import { ReportController } from '@domains/reports/controllers/ReportController';
-import { ReportRequestRepository } from '@domains/repositories/ReportRequestRepository';
+import { ReportRequestRepositoryFactory } from '@domains/repositories/ReportRequestRepositoryFactory';
 
 export class ReportControllerFactory {
-    private reportRequestRepository: ReportRequestRepository;
-
-    constructor() {
-        this.reportRequestRepository = new ReportRequestRepository();
-    }
+    private static instance: ReportController | null = null;
 
     create(): ReportController {
-        return new ReportController(this.reportRequestRepository);
+        if (ReportControllerFactory.instance) {
+            return ReportControllerFactory.instance;
+        }
+
+        const reportRequestRepoFactory = Container.getInstance()
+            .resolve<ReportRequestRepositoryFactory>('ReportRequestRepositoryFactory');
+
+        const reportRequestRepository = reportRequestRepoFactory.create();
+
+        ReportControllerFactory.instance = new ReportController(reportRequestRepository);
+
+        return ReportControllerFactory.instance;
     }
 }

@@ -1,19 +1,15 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { StorageController } from '../controllers/StorageController';
-import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
+import { controllerMiddleware } from '@shared/middlewares/controller.middleware';
 import { ConfigLoader } from '@config/ConfigLoader';
 import { requireAuth } from '@shared/middleware/auth.middleware';
 import { requirePermission } from '@shared/middleware/permission.middleware';
 
 const router = Router();
 
-// Get controller from container
 const config = ConfigLoader.getInstance();
-const controller = Container.getInstance().resolve<StorageController>(TOKENS.StorageController);
 
-// Configure multer for memory storage
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
@@ -21,85 +17,51 @@ const upload = multer({
     },
 });
 
-// All storage routes require authentication
+router.use(controllerMiddleware(TOKENS.StorageControllerFactory));
 router.use(requireAuth);
 
-/**
- * POST /v1/storage/upload
- * Upload a file
- * Body: multipart/form-data
- * - file: File (required)
- * - bucket: string (optional, defaults to attachments bucket)
- * - workspaceId: string (required)
- */
 router.post(
     '/upload',
     upload.single('file'),
     requirePermission('storage:create'),
-    controller.upload.bind(controller)
+    (req, res) => req.controller.upload(req, res)
 );
 
-/**
- * GET /v1/storage/:id
- * Get file metadata and presigned URL
- */
 router.get(
     '/:id',
     requirePermission('storage:view'),
-    controller.get.bind(controller)
+    (req, res) => req.controller.get(req, res)
 );
 
-/**
- * DELETE /v1/storage/:id
- * Delete a file
- */
 router.delete(
     '/:id',
     requirePermission('storage:delete'),
-    controller.delete.bind(controller)
+    (req, res) => req.controller.delete(req, res)
 );
 
-/**
- * GET /v1/storage/:id/download
- * Redirect to presigned URL for download
- */
 router.get(
     '/:id/download',
     requirePermission('storage:view'),
-    controller.download.bind(controller)
+    (req, res) => req.controller.download(req, res)
 );
 
-/**
- * POST /v1/storage/refresh-url/:id
- * Refresh presigned URL
- */
 router.post(
     '/refresh-url/:id',
     requirePermission('storage:view'),
-    controller.refreshUrl.bind(controller)
+    (req, res) => req.controller.refreshUrl(req, res)
 );
 
-/**
- * GET /v1/storage/workspace/:workspaceId
- * List files for a workspace
- */
 router.get(
     '/workspace/:workspaceId',
     requirePermission('storage:view'),
-    controller.listByWorkspace.bind(controller)
+    (req, res) => req.controller.listByWorkspace(req, res)
 );
 
-/**
- * POST /v1/storage/:workspaceId/transactions/receipt
- * Upload a transaction receipt
- * Body: multipart/form-data
- * - file: File (required)
- */
 router.post(
     '/:workspaceId/transactions/receipt',
     upload.single('file'),
     requirePermission('storage:create'),
-    controller.uploadTransactionReceipt.bind(controller)
+    (req, res) => req.controller.uploadTransactionReceipt(req, res)
 );
 
 export default router;

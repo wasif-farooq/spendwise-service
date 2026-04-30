@@ -1,20 +1,29 @@
+import { Container } from '@di/Container';
 import { SubscriptionController } from '@domains/subscription/controllers/SubscriptionController';
-import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
-import { AccountRequestRepository } from '@domains/accounts/repositories/AccountRequestRepository';
+import { SubscriptionRequestRepositoryFactory } from '@domains/subscription/repositories/SubscriptionRequestRepositoryFactory';
+import { AccountRequestRepositoryFactory } from '@domains/accounts/repositories/AccountRequestRepositoryFactory';
 
 export class SubscriptionControllerFactory {
-    private subscriptionRequestRepository: SubscriptionRequestRepository;
-    private accountRequestRepository: AccountRequestRepository;
-
-    constructor() {
-        this.subscriptionRequestRepository = new SubscriptionRequestRepository();
-        this.accountRequestRepository = new AccountRequestRepository();
-    }
+    private static instance: SubscriptionController | null = null;
 
     create(): SubscriptionController {
-        return new SubscriptionController(
-            this.subscriptionRequestRepository,
-            this.accountRequestRepository
+        if (SubscriptionControllerFactory.instance) {
+            return SubscriptionControllerFactory.instance;
+        }
+
+        const subscriptionRequestRepoFactory = Container.getInstance()
+            .resolve<SubscriptionRequestRepositoryFactory>('SubscriptionRequestRepositoryFactory');
+        const accountRequestRepoFactory = Container.getInstance()
+            .resolve<AccountRequestRepositoryFactory>('AccountRequestRepositoryFactory');
+
+        const subscriptionRequestRepository = subscriptionRequestRepoFactory.create();
+        const accountRequestRepository = accountRequestRepoFactory.create();
+
+        SubscriptionControllerFactory.instance = new SubscriptionController(
+            subscriptionRequestRepository,
+            accountRequestRepository
         );
+
+        return SubscriptionControllerFactory.instance;
     }
 }

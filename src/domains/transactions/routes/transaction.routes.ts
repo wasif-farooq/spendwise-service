@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import { TransactionController } from '../controllers/TransactionController';
-import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
+import { controllerMiddleware } from '@shared/middlewares/controller.middleware';
 import { requireAuth } from '@shared/middleware/auth.middleware';
 import { requirePermission } from '@shared/middleware/permission.middleware';
 import { validateBody, validateParams } from '@shared/middleware/validateBody.middleware';
@@ -9,25 +8,20 @@ import { z } from 'zod';
 
 const router = Router();
 
-// Get controller from container
-const controller = Container.getInstance().resolve<TransactionController>(TOKENS.TransactionController);
+router.use(controllerMiddleware(TOKENS.TransactionControllerFactory));
 
-// Workspace ID param validation
 const WorkspaceIdParamSchema = z.object({
     workspaceId: z.string().uuid('Invalid workspace ID'),
 });
 
-// Account ID param validation
 const AccountIdParamSchema = z.object({
     accountId: z.string().uuid('Invalid account ID'),
 });
 
-// Transaction ID param validation
 const TransactionIdParamSchema = z.object({
     id: z.string().uuid('Invalid transaction ID'),
 });
 
-// Create transaction schema (no transfer type)
 const CreateTransactionSchema = z.object({
     type: z.enum(['income', 'expense']),
     amount: z.number().positive('Amount must be positive'),
@@ -39,7 +33,6 @@ const CreateTransactionSchema = z.object({
     exchangeRate: z.number().optional(),
 });
 
-// Update transaction schema
 const UpdateTransactionSchema = z.object({
     type: z.enum(['income', 'expense']).optional(),
     amount: z.number().positive().optional(),
@@ -51,17 +44,14 @@ const UpdateTransactionSchema = z.object({
     exchangeRate: z.number().optional(),
 });
 
-// Link transaction schema (add single)
 const LinkTransactionSchema = z.object({
     linkedTransactionId: z.string().uuid('Invalid linked transaction ID'),
 });
 
-// Unlink transaction schema (remove single)
 const UnlinkTransactionSchema = z.object({
     linkedId: z.string().uuid('Invalid linked transaction ID'),
 });
 
-// Transfer schema
 const TransferSchema = z.object({
     fromAccountId: z.string().uuid('Invalid source account ID'),
     toAccountId: z.string().uuid('Invalid destination account ID'),
@@ -72,117 +62,96 @@ const TransferSchema = z.object({
     description: z.string().optional(),
 });
 
-// All routes require authentication
 router.use(requireAuth);
 
-// ====================
-// Transaction Routes - /v1/:workspaceId/accounts/:accountId/transactions
-// ====================
-
-// List transactions for an account
 router.get('/:workspaceId/accounts/:accountId/transactions', 
     validateParams(WorkspaceIdParamSchema), 
     validateParams(AccountIdParamSchema),
     requirePermission('transactions:view'), 
-    controller.getTransactions.bind(controller)
+    (req, res) => req.controller.getTransactions(req, res)
 );
 
-// Get single transaction
 router.get('/:workspaceId/accounts/:accountId/transactions/:id', 
     validateParams(WorkspaceIdParamSchema), 
     validateParams(AccountIdParamSchema),
     validateParams(TransactionIdParamSchema), 
     requirePermission('transactions:view'), 
-    controller.getTransactionById.bind(controller)
+    (req, res) => req.controller.getTransactionById(req, res)
 );
 
-// Create transaction
 router.post('/:workspaceId/accounts/:accountId/transactions', 
     validateParams(WorkspaceIdParamSchema), 
     validateParams(AccountIdParamSchema),
     validateBody(CreateTransactionSchema), 
     requirePermission('transaction:create'), 
-    controller.createTransaction.bind(controller)
+    (req, res) => req.controller.createTransaction(req, res)
 );
 
-// Update transaction
 router.put('/:workspaceId/accounts/:accountId/transactions/:id', 
     validateParams(WorkspaceIdParamSchema), 
     validateParams(AccountIdParamSchema),
     validateParams(TransactionIdParamSchema), 
     validateBody(UpdateTransactionSchema), 
     requirePermission('transaction:edit'), 
-    controller.updateTransaction.bind(controller)
+    (req, res) => req.controller.updateTransaction(req, res)
 );
 
-// Delete transaction
 router.delete('/:workspaceId/accounts/:accountId/transactions/:id', 
     validateParams(WorkspaceIdParamSchema), 
     validateParams(AccountIdParamSchema),
     validateParams(TransactionIdParamSchema), 
     requirePermission('transaction:delete'), 
-    controller.deleteTransaction.bind(controller)
+    (req, res) => req.controller.deleteTransaction(req, res)
 );
 
-// Link transaction to another
 router.post('/:workspaceId/accounts/:accountId/transactions/:id/link', 
     validateParams(WorkspaceIdParamSchema), 
     validateParams(AccountIdParamSchema),
     validateParams(TransactionIdParamSchema), 
     validateBody(LinkTransactionSchema), 
     requirePermission('transaction:edit'), 
-    controller.linkTransaction.bind(controller)
+    (req, res) => req.controller.linkTransaction(req, res)
 );
 
-// Unlink transaction (remove single link by linkedId in body)
 router.delete('/:workspaceId/accounts/:accountId/transactions/:id/link', 
     validateParams(WorkspaceIdParamSchema), 
     validateParams(AccountIdParamSchema),
     validateParams(TransactionIdParamSchema), 
     validateBody(UnlinkTransactionSchema), 
     requirePermission('transaction:edit'), 
-    controller.unlinkTransaction.bind(controller)
+    (req, res) => req.controller.unlinkTransaction(req, res)
 );
 
-// ====================
-// Stats Routes
-// ====================
-
-// Get account stats
 router.get('/:workspaceId/accounts/:accountId/transactions/stats', 
     validateParams(WorkspaceIdParamSchema), 
     validateParams(AccountIdParamSchema),
     requirePermission('transactions:view'), 
-    controller.getAccountStats.bind(controller)
+    (req, res) => req.controller.getAccountStats(req, res)
 );
 
-// Get all accounts stats for workspace
 router.get('/:workspaceId/transactions/accounts/stats', 
     validateParams(WorkspaceIdParamSchema), 
     requirePermission('transactions:view'), 
-    controller.getWorkspaceAccountStats.bind(controller)
+    (req, res) => req.controller.getWorkspaceAccountStats(req, res)
 );
 
-// Get workspace-wide stats
 router.get('/:workspaceId/transactions/stats', 
     validateParams(WorkspaceIdParamSchema), 
     requirePermission('transactions:view'), 
-    controller.getWorkspaceStats.bind(controller)
+    (req, res) => req.controller.getWorkspaceStats(req, res)
 );
 
-// Transfer funds between accounts
 router.post('/:workspaceId/transactions/transfer', 
     validateParams(WorkspaceIdParamSchema), 
     validateBody(TransferSchema),
     requirePermission('transaction:create'), 
-    controller.transfer.bind(controller)
+    (req, res) => req.controller.transfer(req, res)
 );
 
-// Get all transactions for workspace (for dashboard)
 router.get('/:workspaceId/transactions/all',
     validateParams(WorkspaceIdParamSchema),
     requirePermission('transactions:view'),
-    controller.getAllTransactions.bind(controller)
+    (req, res) => req.controller.getAllTransactions(req, res)
 );
 
 export default router;

@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import { AuthControllerFactory } from '@factories/AuthControllerFactory';
-import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
+import { controllerMiddleware } from '@shared/middlewares/controller.middleware';
 import { validate } from '@shared/middleware/validate.middleware';
 import { requireAuth } from '@shared/middleware/auth.middleware';
 import {
@@ -17,23 +16,22 @@ import {
 } from '../validators/auth.validation';
 
 const router = Router();
-const container = Container.getInstance();
-const factory = container.resolve<AuthControllerFactory>(TOKENS.AuthControllerFactory);
-const controller = factory.create();
 
-router.get('/me', requireAuth, controller.getMe.bind(controller));
-router.post('/login', validate(loginSchema), controller.login.bind(controller));
-router.post('/register', validate(registerSchema), controller.register.bind(controller));
-router.post('/refresh', controller.refresh.bind(controller));
+router.use(controllerMiddleware(TOKENS.AuthControllerFactory));
 
-router.post('/verify-2fa', validate(verify2faSchema), controller.verify2FA.bind(controller));
-router.post('/resend-2fa', validate(resend2faSchema), controller.resend2FA.bind(controller));
-router.post('/verify-backup-code', validate(verifyBackupCodeSchema), controller.verifyBackupCode.bind(controller));
+router.get('/me', requireAuth, (req, res, next) => req.controller.getMe(req, res).catch(next));
+router.post('/login', validate(loginSchema), (req, res, next) => req.controller.login(req, res).catch(next));
+router.post('/register', validate(registerSchema), (req, res, next) => req.controller.register(req, res).catch(next));
+router.post('/refresh', (req, res, next) => req.controller.refresh(req, res).catch(next));
 
-router.post('/forgot-password', validate(forgotPasswordSchema), controller.forgotPassword.bind(controller));
-router.post('/verify-reset-code', validate(verifyResetCodeSchema), controller.verifyResetCode.bind(controller));
-router.post('/reset-password', validate(resetPasswordSchema), controller.resetPassword.bind(controller));
-router.post('/verify-email', validate(verifyEmailSchema), controller.verifyEmail.bind(controller));
-router.put('/change-password', requireAuth, controller.changePassword.bind(controller));
+router.post('/verify-2fa', validate(verify2faSchema), (req, res, next) => req.controller.verify2FA(req, res).catch(next));
+router.post('/resend-2fa', validate(resend2faSchema), (req, res, next) => req.controller.resend2FA(req, res).catch(next));
+router.post('/verify-backup-code', validate(verifyBackupCodeSchema), (req, res, next) => req.controller.verifyBackupCode(req, res).catch(next));
+
+router.post('/forgot-password', validate(forgotPasswordSchema), (req, res, next) => req.controller.forgotPassword(req, res).catch(next));
+router.post('/verify-reset-code', validate(verifyResetCodeSchema), (req, res, next) => req.controller.verifyResetCode(req, res).catch(next));
+router.post('/reset-password', validate(resetPasswordSchema), (req, res, next) => req.controller.resetPassword(req, res).catch(next));
+router.post('/verify-email', validate(verifyEmailSchema), (req, res, next) => req.controller.verifyEmail(req, res).catch(next));
+router.put('/change-password', requireAuth, (req, res, next) => req.controller.changePassword(req, res).catch(next));
 
 export default router;

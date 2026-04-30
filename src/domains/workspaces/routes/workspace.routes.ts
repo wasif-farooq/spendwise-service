@@ -1,17 +1,14 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
+import { controllerMiddleware } from '@shared/middlewares/controller.middleware';
 import { requireAuth } from '@shared/middleware/auth.middleware';
 import { requirePermission } from '@shared/middleware/permission.middleware';
-import { WorkspaceRequestRepository } from  '@domains/workspaces/repositories/WorkspaceRequestRepository';
-import { WorkspaceController } from  '@domains/workspaces/controllers/WorkspaceController';
 
 import workspaceRolesRoutes from './workspace-roles.routes';
 
 const router = Router();
 
-// Configure multer for memory storage
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
@@ -19,43 +16,32 @@ const upload = multer({
     },
 });
 
-const container = Container.getInstance();
-const factory = container.resolve<any>(TOKENS.WorkspaceControllerFactory);
-const controller = factory.create();
-
+router.use(controllerMiddleware(TOKENS.WorkspaceControllerFactory));
 router.use(requireAuth); // Protect all routes
 
-router.post('/', controller.create.bind(controller));
-router.get('/', controller.getAll.bind(controller));
-router.get('/:workspaceId/me', controller.getMe.bind(controller));
-router.get('/:id', controller.getById.bind(controller));
-router.put('/:id', requirePermission('workspace:update'), controller.update.bind(controller));
-router.delete('/:id', requirePermission('workspace:delete'), controller.delete.bind(controller));
+router.post('/', (req, res) => req.controller.create(req, res));
+router.get('/', (req, res) => req.controller.getAll(req, res));
+router.get('/:workspaceId/me', (req, res) => req.controller.getMe(req, res));
+router.get('/:id', (req, res) => req.controller.getById(req, res));
+router.put('/:id', requirePermission('workspace:update'), (req, res) => req.controller.update(req, res));
+router.delete('/:id', requirePermission('workspace:delete'), (req, res) => req.controller.delete(req, res));
 
-// FIRST: Roles routes (must come BEFORE members routes to avoid route conflicts)
-// Remove duplicate - keep only this one
 router.use('/:id/roles', workspaceRolesRoutes);
 
-// Members - come AFTER roles routes
-// Invite members (specific routes before parameterized)
-router.post('/:id/members/invite', requirePermission('members:create'), controller.inviteMember.bind(controller));
-router.get('/:id/members/invitations', controller.getInvitations.bind(controller));
-router.post('/:id/members/resend/:invitationId', requirePermission('members:create'), controller.resendInvitation.bind(controller));
-router.delete('/:id/members/invitations/:invitationId', requirePermission('members:delete'), controller.cancelInvitation.bind(controller));
-router.post('/:id/members/invitations/:invitationId/cancel', requirePermission('members:delete'), controller.cancelInvitation.bind(controller));
+router.post('/:id/members/invite', requirePermission('members:create'), (req, res) => req.controller.inviteMember(req, res));
+router.get('/:id/members/invitations', (req, res) => req.controller.getInvitations(req, res));
+router.post('/:id/members/resend/:invitationId', requirePermission('members:create'), (req, res) => req.controller.resendInvitation(req, res));
+router.delete('/:id/members/invitations/:invitationId', requirePermission('members:delete'), (req, res) => req.controller.cancelInvitation(req, res));
+router.post('/:id/members/invitations/:invitationId/cancel', requirePermission('members:delete'), (req, res) => req.controller.cancelInvitation(req, res));
 
-// Members list/details
-router.get('/:id/members', controller.getMembers.bind(controller));
-router.get('/:id/members/:memberId', controller.getMember.bind(controller));
+router.get('/:id/members', (req, res) => req.controller.getMembers(req, res));
+router.get('/:id/members/:memberId', (req, res) => req.controller.getMember(req, res));
 
-// Member actions
-router.put('/:id/members/:memberId', requirePermission('members:edit'), controller.updateMember.bind(controller));
-router.delete('/:id/members/:memberId', requirePermission('members:delete'), controller.removeMember.bind(controller));
+router.put('/:id/members/:memberId', requirePermission('members:edit'), (req, res) => req.controller.updateMember(req, res));
+router.delete('/:id/members/:memberId', requirePermission('members:delete'), (req, res) => req.controller.removeMember(req, res));
 
-// Leave workspace
-router.post('/:id/leave', controller.leave.bind(controller));
+router.post('/:id/leave', (req, res) => req.controller.leave(req, res));
 
-// My invitations (authenticated)
-router.get('/invitations/me', controller.getMyInvitations.bind(controller));
+router.get('/invitations/me', (req, res) => req.controller.getMyInvitations(req, res));
 
 export default router;

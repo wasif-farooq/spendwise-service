@@ -1,14 +1,22 @@
+import { Container } from '@di/Container';
 import { AnalyticsController } from '@domains/analytics/controllers/AnalyticsController';
-import { AnalyticsRequestRepository } from '@domains/analytics/repositories/AnalyticsRequestRepository';
+import { AnalyticsRequestRepositoryFactory } from '@domains/analytics/repositories/AnalyticsRequestRepositoryFactory';
 
 export class AnalyticsControllerFactory {
-    private analyticsRequestRepository: AnalyticsRequestRepository;
-
-    constructor() {
-        this.analyticsRequestRepository = new AnalyticsRequestRepository();
-    }
+    private static instance: AnalyticsController | null = null;
 
     create(): AnalyticsController {
-        return new AnalyticsController(this.analyticsRequestRepository);
+        if (AnalyticsControllerFactory.instance) {
+            return AnalyticsControllerFactory.instance;
+        }
+
+        const analyticsRequestRepoFactory = Container.getInstance()
+            .resolve<AnalyticsRequestRepositoryFactory>('AnalyticsRequestRepositoryFactory');
+
+        const analyticsRequestRepository = analyticsRequestRepoFactory.create();
+
+        AnalyticsControllerFactory.instance = new AnalyticsController(analyticsRequestRepository);
+
+        return AnalyticsControllerFactory.instance;
     }
 }

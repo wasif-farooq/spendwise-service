@@ -29,19 +29,24 @@ export const TOKENS = {
     AccountRepository: 'AccountRepository',
     AccountService: 'AccountService',
     AccountController: 'AccountController',
+    AccountControllerFactory: 'AccountControllerFactory',
     // Transaction domain
     TransactionRepository: 'TransactionRepository',
     TransactionService: 'TransactionService',
     TransactionController: 'TransactionController',
+    TransactionControllerFactory: 'TransactionControllerFactory',
     // Exchange rate domain
     ExchangeRateRepository: 'ExchangeRateRepository',
     ExchangeRateService: 'ExchangeRateService',
+    ExchangeRateControllerFactory: 'ExchangeRateControllerFactory',
     // Category domain
     CategoryRepository: 'CategoryRepository',
     CategoryService: 'CategoryService',
+    CategoryControllerFactory: 'CategoryControllerFactory',
     // Analytics domain
     AnalyticsService: 'AnalyticsService',
     AnalyticsController: 'AnalyticsController',
+    AnalyticsControllerFactory: 'AnalyticsControllerFactory',
     // Storage domain
     StorageRepository: 'StorageRepository',
     StorageService: 'StorageService',
@@ -51,6 +56,11 @@ export const TOKENS = {
     // Payment domain
     PaymentRepository: 'PaymentRepository',
     PaymentService: 'PaymentService',
+    PaymentControllerFactory: 'PaymentControllerFactory',
     // User domain
     UserRepository: 'UserRepository',
+    // Additional controller factories
+    SubscriptionControllerFactory: 'SubscriptionControllerFactory',
+    ReportControllerFactory: 'ReportControllerFactory',
+    SettingsControllerFactory: 'SettingsControllerFactory',
 };

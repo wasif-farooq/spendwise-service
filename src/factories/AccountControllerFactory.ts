@@ -1,24 +1,34 @@
+import { Container } from '@di/Container';
 import { AccountController } from '@domains/accounts/controllers/AccountController';
-import { AccountRequestRepository } from '@domains/accounts/repositories/AccountRequestRepository';
-import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
-import { UserPreferencesRequestRepository } from '@domains/users/repositories/UserPreferencesRequestRepository';
+import { AccountRequestRepositoryFactory } from '@domains/accounts/repositories/AccountRequestRepositoryFactory';
+import { SubscriptionRequestRepositoryFactory } from '@domains/subscription/repositories/SubscriptionRequestRepositoryFactory';
+import { UserPreferencesRequestRepositoryFactory } from '@domains/users/repositories/UserPreferencesRequestRepositoryFactory';
 
 export class AccountControllerFactory {
-    private accountRequestRepository: AccountRequestRepository;
-    private subscriptionRequestRepository: SubscriptionRequestRepository;
-    private userPreferencesRequestRepository: UserPreferencesRequestRepository;
-
-    constructor() {
-        this.accountRequestRepository = new AccountRequestRepository();
-        this.subscriptionRequestRepository = new SubscriptionRequestRepository();
-        this.userPreferencesRequestRepository = new UserPreferencesRequestRepository();
-    }
+    private static instance: AccountController | null = null;
 
     create(): AccountController {
-        return new AccountController(
-            this.accountRequestRepository,
-            this.subscriptionRequestRepository,
-            this.userPreferencesRequestRepository
+        if (AccountControllerFactory.instance) {
+            return AccountControllerFactory.instance;
+        }
+
+        const accountRequestRepoFactory = Container.getInstance()
+            .resolve<AccountRequestRepositoryFactory>('AccountRequestRepositoryFactory');
+        const subscriptionRequestRepoFactory = Container.getInstance()
+            .resolve<SubscriptionRequestRepositoryFactory>('SubscriptionRequestRepositoryFactory');
+        const userPreferencesRequestRepoFactory = Container.getInstance()
+            .resolve<UserPreferencesRequestRepositoryFactory>('UserPreferencesRequestRepositoryFactory');
+
+        const accountRequestRepository = accountRequestRepoFactory.create();
+        const subscriptionRequestRepository = subscriptionRequestRepoFactory.create();
+        const userPreferencesRequestRepository = userPreferencesRequestRepoFactory.create();
+
+        AccountControllerFactory.instance = new AccountController(
+            accountRequestRepository,
+            subscriptionRequestRepository,
+            userPreferencesRequestRepository
         );
+
+        return AccountControllerFactory.instance;
     }
 }

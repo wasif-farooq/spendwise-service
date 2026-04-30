@@ -1,15 +1,11 @@
 import { Router } from 'express';
-import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
-import { FeatureFlagControllerFactory } from '@factories/FeatureFlagControllerFactory';
+import { controllerMiddleware } from '@shared/middlewares/controller.middleware';
 
 const router = Router();
 
-router.get('/', (req, res) => {
-    const container = Container.getInstance();
-    const factory = container.resolve<FeatureFlagControllerFactory>(TOKENS.FeatureFlagControllerFactory);
-    const controller = factory.create();
-    return controller.getAll(req, res);
-});
+router.use(controllerMiddleware(TOKENS.FeatureFlagControllerFactory));
+
+router.get('/', (req, res) => req.controller.getAll(req, res));
 
 export default router;

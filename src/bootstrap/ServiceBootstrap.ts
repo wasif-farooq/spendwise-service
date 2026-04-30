@@ -23,6 +23,21 @@ import { PaymentControllerFactory } from '@factories/PaymentControllerFactory';
 import { AnalyticsControllerFactory } from '@factories/AnalyticsControllerFactory';
 import { ReportControllerFactory } from '@factories/ReportControllerFactory';
 import { SettingsControllerFactory } from '@factories/SettingsControllerFactory';
+import { ControllerRegistry } from '@shared/ControllerRegistry';
+import { AccountRequestRepositoryFactory } from '@domains/accounts/repositories/AccountRequestRepositoryFactory';
+import { TransactionRequestRepositoryFactory } from '@domains/transactions/repositories/TransactionRequestRepositoryFactory';
+import { CategoryRequestRepositoryFactory } from '@domains/categories/repositories/CategoryRequestRepositoryFactory';
+import { WorkspaceRequestRepositoryFactory } from '@domains/workspaces/repositories/WorkspaceRequestRepositoryFactory';
+import { SubscriptionRequestRepositoryFactory } from '@domains/subscription/repositories/SubscriptionRequestRepositoryFactory';
+import { PaymentRequestRepositoryFactory } from '@domains/payment/repositories/PaymentRequestRepositoryFactory';
+import { AnalyticsRequestRepositoryFactory } from '@domains/analytics/repositories/AnalyticsRequestRepositoryFactory';
+import { ReportRequestRepositoryFactory } from '@domains/repositories/ReportRequestRepositoryFactory';
+import { SettingsRequestRepositoryFactory } from '@domains/settings/repositories/SettingsRequestRepositoryFactory';
+import { ExchangeRateRequestRepositoryFactory } from '@domains/exchange-rates/repositories/ExchangeRateRequestRepositoryFactory';
+import { AuthRequestRepositoryFactory } from '@domains/auth/repositories/AuthRequestRepositoryFactory';
+import { FeatureFlagRequestRepositoryFactory } from '@domains/feature-flags/repositories/FeatureFlagRequestRepositoryFactory';
+import { UserRequestRepositoryFactory } from '@domains/users/repositories/UserRequestRepositoryFactory';
+import { UserPreferencesRequestRepositoryFactory } from '@domains/users/repositories/UserPreferencesRequestRepositoryFactory';
 import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
 import { AccountService } from '@domains/accounts/services/AccountService';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
@@ -80,6 +95,22 @@ export class ServiceBootstrap {
 
             const serviceFactory = new ServiceFactory(repoFactory, dbFacade);
             this.container.registerInstance(TOKENS.ServiceFactory, serviceFactory);
+
+            // Register RequestRepositoryFactories
+            this.container.registerInstance('AccountRequestRepositoryFactory', new AccountRequestRepositoryFactory());
+            this.container.registerInstance('TransactionRequestRepositoryFactory', new TransactionRequestRepositoryFactory());
+            this.container.registerInstance('CategoryRequestRepositoryFactory', new CategoryRequestRepositoryFactory());
+            this.container.registerInstance('WorkspaceRequestRepositoryFactory', new WorkspaceRequestRepositoryFactory());
+            this.container.registerInstance('SubscriptionRequestRepositoryFactory', new SubscriptionRequestRepositoryFactory());
+            this.container.registerInstance('PaymentRequestRepositoryFactory', new PaymentRequestRepositoryFactory());
+            this.container.registerInstance('AnalyticsRequestRepositoryFactory', new AnalyticsRequestRepositoryFactory());
+            this.container.registerInstance('ReportRequestRepositoryFactory', new ReportRequestRepositoryFactory());
+            this.container.registerInstance('SettingsRequestRepositoryFactory', new SettingsRequestRepositoryFactory());
+            this.container.registerInstance('ExchangeRateRequestRepositoryFactory', new ExchangeRateRequestRepositoryFactory());
+            this.container.registerInstance('AuthRequestRepositoryFactory', new AuthRequestRepositoryFactory());
+            this.container.registerInstance('FeatureFlagRequestRepositoryFactory', new FeatureFlagRequestRepositoryFactory());
+            this.container.registerInstance('UserRequestRepositoryFactory', new UserRequestRepositoryFactory());
+            this.container.registerInstance('UserPreferencesRequestRepositoryFactory', new UserPreferencesRequestRepositoryFactory());
 
             const authControllerFactory = new AuthControllerFactory(serviceFactory);
             this.container.registerInstance(TOKENS.AuthControllerFactory, authControllerFactory);
@@ -185,6 +216,26 @@ export class ServiceBootstrap {
             // PaymentService is a singleton, get instance directly
             const { PaymentService } = require('@domains/payment/services/PaymentService');
             this.container.registerInstance(TOKENS.PaymentService, PaymentService.getInstance());
+
+            // Register ControllerFactories in ControllerRegistry
+            const registry = ControllerRegistry.getInstance();
+            registry.registerFactory(TOKENS.AuthControllerFactory, authControllerFactory);
+            registry.registerFactory(TOKENS.UserControllerFactory, userControllerFactory);
+            registry.registerFactory(TOKENS.WorkspaceControllerFactory, workspaceControllerFactory);
+            registry.registerFactory(TOKENS.FeatureFlagControllerFactory, featureFlagControllerFactory);
+            registry.registerFactory(TOKENS.WorkspaceRolesControllerFactory, workspaceRolesControllerFactory);
+            registry.registerFactory(TOKENS.AccountControllerFactory, new AccountControllerFactory());
+            registry.registerFactory(TOKENS.TransactionControllerFactory, new TransactionControllerFactory());
+            registry.registerFactory(TOKENS.CategoryControllerFactory, new CategoryControllerFactory());
+            registry.registerFactory(TOKENS.ExchangeRateControllerFactory, new ExchangeRateControllerFactory());
+            registry.registerFactory(TOKENS.SubscriptionControllerFactory, new SubscriptionControllerFactory());
+            registry.registerFactory(TOKENS.PaymentControllerFactory, new PaymentControllerFactory());
+            registry.registerFactory(TOKENS.AnalyticsControllerFactory, new AnalyticsControllerFactory());
+            registry.registerFactory(TOKENS.ReportControllerFactory, new ReportControllerFactory());
+            registry.registerFactory(TOKENS.SettingsControllerFactory, new SettingsControllerFactory());
+            registry.registerFactory(TOKENS.StorageControllerFactory, storageControllerFactory);
+
+            console.log('[ControllerRegistry] All factories registered');
 
             // Connect Infrastructure
             // await dbFacade.connect(); // Optional based on service
