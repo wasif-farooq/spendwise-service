@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { CategoryRequestRepository } from '../repositories/CategoryRequestRepository';
 import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
+import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
@@ -8,7 +9,8 @@ import { TOKENS } from '@di/tokens';
 export class CategoryController {
     constructor(
         private categoryRequestRepository: CategoryRequestRepository,
-        private subscriptionRequestRepository?: SubscriptionRequestRepository
+        private subscriptionRequestRepository?: SubscriptionRequestRepository,
+        private workspaceRequestRepository?: WorkspaceRequestRepository
     ) { }
 
     private getUserId(req: Request): string {
@@ -62,7 +64,16 @@ export class CategoryController {
         try {
             if (userId && this.subscriptionRequestRepository) {
                 const currentCount = await this.categoryRequestRepository.countByWorkspace(workspaceId);
-                await this.subscriptionRequestRepository.checkFeatureLimit(userId, 'categories_per_workspace', currentCount);
+
+                let ownerId = userId;
+                if (this.workspaceRequestRepository) {
+                    const workspaceResult = await this.workspaceRequestRepository.getById(workspaceId, userId);
+                    if (!workspaceResult.error && workspaceResult.data) {
+                        ownerId = workspaceResult.data.ownerId;
+                    }
+                }
+
+                await this.subscriptionRequestRepository.checkFeatureLimit(ownerId, 'categories_per_workspace', currentCount);
             }
 
             const result = await this.categoryRequestRepository.create(workspaceId, userId, {

@@ -3,6 +3,7 @@ import { AccountController } from '@domains/accounts/controllers/AccountControll
 import { AccountRequestRepositoryFactory } from '@domains/accounts/repositories/AccountRequestRepositoryFactory';
 import { SubscriptionRequestRepositoryFactory } from '@domains/subscription/repositories/SubscriptionRequestRepositoryFactory';
 import { UserPreferencesRequestRepositoryFactory } from '@domains/users/repositories/UserPreferencesRequestRepositoryFactory';
+import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
 
 export class AccountControllerFactory {
     private static instance: AccountController | null = null;
@@ -22,11 +23,13 @@ export class AccountControllerFactory {
         const accountRequestRepository = accountRequestRepoFactory.create();
         const subscriptionRequestRepository = subscriptionRequestRepoFactory.create();
         const userPreferencesRequestRepository = userPreferencesRequestRepoFactory.create();
+        const workspaceRequestRepository = new WorkspaceRequestRepository();
 
         AccountControllerFactory.instance = new AccountController(
             accountRequestRepository,
             subscriptionRequestRepository,
-            userPreferencesRequestRepository
+            userPreferencesRequestRepository,
+            workspaceRequestRepository
         );
 
         return AccountControllerFactory.instance;

@@ -72,6 +72,26 @@ export class WorkspaceRequestRepository {
         throw new Error('RPC mode not implemented');
     }
 
+    async getWorkspacesByOwner(ownerId: string) {
+        if (this.getMode() === 'direct') {
+            const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
+            const result = await db.query(
+                'SELECT id, name, slug, owner_id, description, created_at, updated_at FROM workspaces WHERE owner_id = $1',
+                [ownerId]
+            );
+            return this.wrap(Promise.resolve(result.rows.map((row: any) => ({
+                id: row.id,
+                name: row.name,
+                slug: row.slug,
+                ownerId: row.owner_id,
+                description: row.description,
+                createdAt: row.created_at,
+                updatedAt: row.updated_at,
+            }))));
+        }
+        throw new Error('RPC mode not implemented');
+    }
+
     async getAll(userId: string) {
         if (this.getMode() === 'direct') {
             return this.wrap(this.service.getUserWorkspaces(userId));

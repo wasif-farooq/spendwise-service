@@ -62,7 +62,11 @@ export class WorkspaceRolesController {
         if (this.subscriptionRequestRepository) {
             const rolesResult = await this.workspaceRequestRepository.getRoles(workspaceId, userId, {});
             const currentCount = rolesResult.data?.length || 0;
-            await this.subscriptionRequestRepository.checkFeatureLimit(userId, 'customRoles', currentCount);
+
+            const workspaceResult = await this.workspaceRequestRepository.getById(workspaceId, userId);
+            const ownerId = workspaceResult.data?.ownerId || userId;
+
+            await this.subscriptionRequestRepository.checkFeatureLimit(ownerId, 'customRoles', currentCount);
         }
 
         const result = await this.workspaceRequestRepository.createRole(workspaceId, userId, req.body);

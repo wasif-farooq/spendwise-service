@@ -1,11 +1,13 @@
 import { Request, Response } from 'express';
 import { SubscriptionRequestRepository } from '../repositories/SubscriptionRequestRepository';
 import { AccountRequestRepository } from '@domains/accounts/repositories/AccountRequestRepository';
+import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
 
 export class SubscriptionController {
     constructor(
         private subscriptionRequestRepository: SubscriptionRequestRepository,
-        private accountRequestRepository?: AccountRequestRepository
+        private accountRequestRepository?: AccountRequestRepository,
+        private workspaceRequestRepository?: WorkspaceRequestRepository
     ) { }
 
     private getUserId(req: Request): string {
@@ -252,6 +254,115 @@ export class SubscriptionController {
 
         } catch (error: any) {
             return res.status(400).json({ message: error.message });
+        }
+    }
+
+    async getWorkspaceSubscription(req: Request, res: Response) {
+        try {
+            const { workspaceId } = req.params;
+
+            if (!workspaceId) {
+                return res.status(400).json({ message: 'Workspace ID is required' });
+            }
+
+            if (!this.workspaceRequestRepository) {
+                return res.status(500).json({ message: 'Workspace repository not configured' });
+            }
+
+            const workspaceResult = await this.workspaceRequestRepository.getById(workspaceId, '');
+
+            if (workspaceResult.error || !workspaceResult.data) {
+                return res.status(404).json({ message: 'Workspace not found' });
+            }
+
+            const workspace = workspaceResult.data;
+            const ownerId = workspace.ownerId;
+
+            const subscriptionResult = await this.subscriptionRequestRepository.getCurrentSubscription(ownerId);
+            const featureUsage = await this.calculateOwnerUsage(ownerId);
+
+            if (subscriptionResult.error) {
+                throw new Error(subscriptionResult.error);
+            }
+
+            const subscription = subscriptionResult.data;
+            let ownerPlanName = 'free';
+
+            if (!subscription) {
+                const plansResult = await this.subscriptionRequestRepository.getPlans();
+                const defaultPlan = plansResult.data?.find((p: any) => p.name?.toLowerCase() === 'free') || plansResult.data?.[0];
+
+                return res.json({
+                    ownerId,
+                    workspaceOwnerPlan: defaultPlan?.name || 'Free',
+                    subscription: {
+                        plan: defaultPlan?.name?.toLowerCase() || 'free',
+                        status: 'active',
+                        startDate: new Date(),
+                        features: defaultPlan?.features || [],
+                        limits: defaultPlan?.limits || {}
+                    },
+                    usage: featureUsage
+                });
+            }
+
+            const plansResult = await this.subscriptionRequestRepository.getPlans();
+            const plan = plansResult.data?.find((p: any) => p.id === subscription.planId);
+            ownerPlanName = plan?.name || 'Free';
+
+            return res.json({
+                ownerId,
+                workspaceOwnerPlan: ownerPlanName,
+                subscription: {
+                    plan: plan?.name?.toLowerCase() || 'free',
+                    status: subscription.status,
+                    startDate: subscription.startDate,
+                    features: subscription.featuresSnapshot || plan?.features || [],
+                    limits: subscription.limitsSnapshot || plan?.limits || {},
+                    paymentProvider: subscription.paymentProvider,
+                },
+                usage: featureUsage
+            });
+        } catch (error: any) {
+            return res.status(500).json({ message: error.message });
+        }
+    }
+
+    private async calculateOwnerUsage(ownerId: string): Promise<{
+        members: number;
+        accounts: number;
+        workspaces: number;
+        customRoles: number;
+    }> {
+        try {
+            let accounts = 0;
+
+            if (this.workspaceRequestRepository && this.accountRequestRepository) {
+                const workspacesResult = await this.workspaceRequestRepository.getWorkspacesByOwner(ownerId);
+
+                if (!workspacesResult.error && workspacesResult.data) {
+                    const ownedWorkspaces = workspacesResult.data;
+                    for (const workspace of ownedWorkspaces) {
+                        const countResult = await this.accountRequestRepository.countByWorkspace(workspace.id);
+                        accounts += countResult.data?.count || 0;
+                    }
+                }
+            }
+
+            return {
+                members: 0,
+                accounts,
+                workspaces: 0,
+                customRoles: 0,
+            };
+        } catch (error) {
+            console.error('Error calculating owner usage:', error);
+            return {
+                members: 0,
+                accounts: 0,
+                workspaces: 0,
+                customRoles: 0,
+            };
         }
     }
 }

@@ -102,7 +102,15 @@ export class WorkspaceController {
         if (this.subscriptionRequestRepository) {
             const membersResult = await this.workspaceRequestRepository.getMembers(workspaceId, userId, {});
             const currentCount = membersResult.data?.length || 0;
-            await this.subscriptionRequestRepository.checkFeatureLimit(userId, 'members', currentCount);
+
+            const workspaceResult = await this.workspaceRequestRepository.getById(workspaceId, userId);
+            const ownerId = workspaceResult.data?.ownerId || userId;
+
+            await this.subscriptionRequestRepository.checkFeatureLimit(ownerId, 'members', currentCount);
+
+            const invitationsResult = await this.workspaceRequestRepository.getInvitations(workspaceId, userId, { status: 'Pending' });
+            const pendingInvitations = invitationsResult.data?.length || 0;
+            await this.subscriptionRequestRepository.checkFeatureLimit(ownerId, 'invitations', pendingInvitations);
         }
 
         const result = await this.workspaceRequestRepository.inviteMember(workspaceId, userId, req.body);

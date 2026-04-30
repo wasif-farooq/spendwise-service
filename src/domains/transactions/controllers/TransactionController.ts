@@ -1,13 +1,15 @@
 import { Request, Response } from 'express';
 import { TransactionRequestRepository } from '../repositories/TransactionRequestRepository';
 import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
+import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
 import { AppError } from '@shared/errors/AppError';
 import { CreateTransactionDTO, UpdateTransactionDTO, TransferDTO } from '../services/TransactionService';
 
 export class TransactionController {
     constructor(
         private transactionRequestRepository: TransactionRequestRepository,
-        private subscriptionRequestRepository?: SubscriptionRequestRepository
+        private subscriptionRequestRepository?: SubscriptionRequestRepository,
+        private workspaceRequestRepository?: WorkspaceRequestRepository
     ) { }
 
     private getWorkspaceId(req: Request): string {
@@ -42,7 +44,14 @@ export class TransactionController {
             const userId = this.getUserId(req);
 
             if (startDate && this.subscriptionRequestRepository) {
-                await this.subscriptionRequestRepository.checkTransactionHistoryLimit(userId, startDate as string);
+                let ownerId = userId;
+                if (this.workspaceRequestRepository) {
+                    const workspaceResult = await this.workspaceRequestRepository.getById(workspaceId, userId);
+                    if (!workspaceResult.error && workspaceResult.data) {
+                        ownerId = workspaceResult.data.ownerId;
+                    }
+                }
+                await this.subscriptionRequestRepository.checkTransactionHistoryLimit(ownerId, startDate as string);
             }
 
             const useCursorPagination = cursor !== undefined || page === undefined;
@@ -207,7 +216,16 @@ export class TransactionController {
 
             if (this.subscriptionRequestRepository) {
                 const currentMonthCount = await this.transactionRequestRepository.countByAccountThisMonth(data.accountId);
-                await this.subscriptionRequestRepository.checkAccountTransactionLimit(userId, data.accountId, currentMonthCount);
+
+                let ownerId = userId;
+                if (this.workspaceRequestRepository) {
+                    const workspaceResult = await this.workspaceRequestRepository.getById(workspaceId, userId);
+                    if (!workspaceResult.error && workspaceResult.data) {
+                        ownerId = workspaceResult.data.ownerId;
+                    }
+                }
+
+                await this.subscriptionRequestRepository.checkAccountTransactionLimit(ownerId, data.accountId, currentMonthCount);
             }
 
             const result = await this.transactionRequestRepository.create(workspaceId, userId, data);

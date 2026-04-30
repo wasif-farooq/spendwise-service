@@ -4,12 +4,14 @@ import { AccountValidators } from '../validators';
 import { AppError } from '@shared/errors/AppError';
 import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
 import { UserPreferencesRequestRepository } from '@domains/users/repositories/UserPreferencesRequestRepository';
+import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
 
 export class AccountController {
     constructor(
         private accountRequestRepository: AccountRequestRepository,
         private subscriptionRequestRepository?: SubscriptionRequestRepository,
-        private userPreferencesRequestRepository?: UserPreferencesRequestRepository
+        private userPreferencesRequestRepository?: UserPreferencesRequestRepository,
+        private workspaceRequestRepository?: WorkspaceRequestRepository
     ) { }
 
     private getWorkspaceId(req: Request): string {
@@ -77,7 +79,16 @@ export class AccountController {
             if (this.subscriptionRequestRepository) {
                 const countResult = await this.accountRequestRepository.countByWorkspace(workspaceId);
                 const currentCount = countResult.data?.count || 0;
-                await this.subscriptionRequestRepository.checkFeatureLimit(userId, 'accounts', currentCount);
+
+                let ownerId = userId;
+                if (this.workspaceRequestRepository) {
+                    const workspaceResult = await this.workspaceRequestRepository.getById(workspaceId, userId);
+                    if (!workspaceResult.error && workspaceResult.data) {
+                        ownerId = workspaceResult.data.ownerId;
+                    }
+                }
+
+                await this.subscriptionRequestRepository.checkFeatureLimit(ownerId, 'accounts', currentCount);
             }
 
             const result = await this.accountRequestRepository.createWithOpeningBalance(workspaceId, userId, data);
