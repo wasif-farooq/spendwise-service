@@ -2,11 +2,11 @@
     "name": "spendwise-backend",
     "version": "1.0.0",
     "description": "A scalable, versioned Node.js backend with independent services",
-    "main": "dist/index.js",
+    "main": "dist/src/index.js",
     "scripts": {
         "dev": "nodemon --exec ts-node -r tsconfig-paths/register src/index.ts",
         "build": "tsc -p tsconfig.build.json",
-        "start": "node -r tsconfig-paths/register dist/index.js",
+        "start": "node -r tsconfig-paths/register dist/src/index.js",
         "start:api": "npm run start -- --process=api",
         "start:auth": "npm run start -- --process=auth",
         "start:user": "npm run start -- --process=user",

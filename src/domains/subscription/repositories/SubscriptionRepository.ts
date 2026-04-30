@@ -74,4 +74,42 @@ export class UserSubscriptionRepository extends BaseRepository<UserSubscription>
         );
         return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
     }
+
+    async findByMerchantSubscriptionId(merchantSubscriptionId: string): Promise<UserSubscription | null> {
+        const result = await this.db.query(
+            `SELECT * FROM ${this.tableName} WHERE merchant_subscription_id = $1 LIMIT 1`,
+            [merchantSubscriptionId]
+        );
+        return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
+    }
+
+    async updateStatusAndPeriod(
+        id: string,
+        status: string,
+        currentPeriodEnd?: Date,
+        cancelAtPeriodEnd?: boolean
+    ): Promise<void> {
+        const updates: string[] = ['status = $2', 'updated_at = NOW()'];
+        const params: any[] = [id, status];
+        let paramIndex = 3;
+
+        if (currentPeriodEnd !== undefined) {
+            updates.push(`current_period_end = $${paramIndex++}`);
+            params.push(currentPeriodEnd);
+        }
+
+        if (cancelAtPeriodEnd !== undefined) {
+            updates.push(`cancel_at_period_end = $${paramIndex++}`);
+            params.push(cancelAtPeriodEnd);
+        }
+
+        if (status === 'cancelled' && !cancelAtPeriodEnd) {
+            updates.push('cancelled_at = NOW()');
+        }
+
+        await this.db.query(
+            `UPDATE ${this.tableName} SET ${updates.join(', ')} WHERE id = $1`,
+            params
+        );
+    }
 }
