@@ -49,7 +49,12 @@
         "archive:stats": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts stats",
         "minio:avatars:public": "docker exec spendwise-service-minio-1 mc policy set-download local/spendwise-avatars || docker exec minio mc policy set-download local/spendwise-avatars",
         "stripe:listen": "stripe listen --forward-to localhost:3000/api/v1/payment/webhook/stripe",
-        "stripe:listen:verbose": "stripe listen --forward-to localhost:3000/api/v1/payment/webhook/stripe --verbose"
+        "stripe:listen:verbose": "stripe listen --forward-to localhost:3000/api/v1/payment/webhook/stripe --verbose",
+        "stripe:fetch": "ts-node -r tsconfig-paths/register scripts/fetch-stripe-subscription.ts",
+        "stripe:simulate": "ts-node -r tsconfig-paths/register scripts/stripe-simulate.ts",
+        "stripe:webhook": "ts-node -r tsconfig-paths/register scripts/test-webhook.ts",
+        "test:recurring": "ts-node -r tsconfig-paths/register scripts/test-recurring.ts",
+        "test:stripe-webhook": "stripe trigger"
     },
     "keywords": [
         "nodejs",

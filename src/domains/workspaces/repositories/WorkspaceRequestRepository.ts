@@ -101,7 +101,7 @@ export class WorkspaceRequestRepository {
 
     async getById(workspaceId: string, userId: string) {
         if (this.getMode() === 'direct') {
-            return this.wrap(this.service.getWorkspaceById(workspaceId, userId));
+            return this.wrap(this.service.getById(workspaceId, userId));
         }
         throw new Error('RPC mode not implemented');
     }
