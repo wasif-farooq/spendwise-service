@@ -43,45 +43,73 @@ export class AnalyticsController {
     }
 
     private truncateDateRange(filters: DateFilters, maxDays: number): { filters: DateFilters; truncated: boolean; warning?: string } {
-        if (!filters.startDate && !filters.endDate) {
-            return { filters, truncated: false };
-        }
-
         const now = new Date();
-        let startDate: Date;
-        let endDate: Date;
-
-        if (filters.startDate && filters.endDate) {
-            startDate = new Date(filters.startDate);
-            endDate = new Date(filters.endDate);
-        } else if (filters.startDate) {
-            startDate = new Date(filters.startDate);
-            endDate = now;
-        } else if (filters.endDate) {
-            endDate = new Date(filters.endDate);
-            startDate = new Date(endDate.getTime() - maxDays * 24 * 60 * 60 * 1000);
-        } else {
-            return { filters, truncated: false };
+        const maxDate = now.toISOString().split('T')[0]; // Today's date
+        
+        // If maxDays is -1 (unlimited), use defaults or provided values
+        if (maxDays === -1) {
+            const defaultFilters = { ...filters };
+            
+            // Default to 1 year if no dates provided
+            if (!defaultFilters.startDate) {
+                const oneYearAgo = new Date(now);
+                oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+                defaultFilters.startDate = oneYearAgo.toISOString().split('T')[0];
+            }
+            if (!defaultFilters.endDate) {
+                defaultFilters.endDate = maxDate;
+            }
+            
+            return { filters: defaultFilters, truncated: false };
         }
-
-        const diffDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-
-        if (maxDays === -1 || diffDays <= maxDays) {
-            return { filters, truncated: false };
+        
+        // Apply subscription limits for Free/Starter/Pro
+        if (maxDays > 0) {
+            const minDate = new Date(now.getTime() - maxDays * 24 * 60 * 60 * 1000);
+            const minDateStr = minDate.toISOString().split('T')[0];
+            let truncated = false;
+            
+            const limitedFilters = { ...filters };
+            
+            // Handle startDate
+            if (filters.startDate && filters.startDate < minDateStr) {
+                // User selected date beyond their limit - truncate it
+                limitedFilters.startDate = minDateStr;
+                truncated = true;
+            } else if (!filters.startDate) {
+                // No startDate provided - default to limit
+                limitedFilters.startDate = minDateStr;
+            }
+            
+            // Handle endDate
+            if (filters.endDate && filters.endDate > maxDate) {
+                // User selected future date - limit to today
+                limitedFilters.endDate = maxDate;
+                truncated = true;
+            } else if (!filters.endDate) {
+                // No endDate provided - default to today
+                limitedFilters.endDate = maxDate;
+            }
+            
+            const warning = truncated 
+                ? `Date range limited to ${maxDays} days based on your subscription plan.`
+                : undefined;
+                
+            return { 
+                filters: limitedFilters, 
+                truncated,
+                warning
+            };
         }
-
-        const truncatedStartDate = new Date(endDate.getTime() - maxDays * 24 * 60 * 60 * 1000);
-        const truncatedFilters = {
-            ...filters,
-            startDate: truncatedStartDate.toISOString().split('T')[0],
-            endDate: endDate.toISOString().split('T')[0],
+        
+        // Fallback: if maxDays is 0 or invalid, default to 30 days
+        const minDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const defaultFilters = {
+            startDate: minDate.toISOString().split('T')[0],
+            endDate: maxDate,
         };
-
-        return {
-            filters: truncatedFilters,
-            truncated: true,
-            warning: `Data truncated to last ${maxDays} days. Upgrade to Pro for full analytics.`
-        };
+        
+        return { filters: defaultFilters, truncated: false };
     }
 
     private addTruncationWarning(response: any, truncated: boolean, warning: string): any {
@@ -161,11 +189,11 @@ export class AnalyticsController {
         }
     }
 
-    async getMonthlyComparison(req: Request, res: Response) {
+    async getComparison(req: Request, res: Response) {
         try {
             const workspaceId = this.getWorkspaceId(req);
             const userId = this.getUserId(req);
-            const { months = 12, startDate, endDate } = req.query;
+            const { period = 'month', months = 12, startDate, endDate } = req.query;
 
             if (!workspaceId) {
                 return res.status(404).json({ message: 'Workspace not found' });
@@ -181,7 +209,13 @@ export class AnalyticsController {
 
             const { filters: truncatedFilters, truncated, warning } = this.truncateDateRange(filters, maxDays);
 
-            const result = await this.analyticsRequestRepository.getMonthlyComparison(workspaceId, userId, parseInt(months as string));
+            const result = await this.analyticsRequestRepository.getComparison(
+                workspaceId,
+                userId,
+                period as string,
+                parseInt(months as string),
+                truncatedFilters
+            );
 
             if (result.error) {
                 throw new Error(result.error);

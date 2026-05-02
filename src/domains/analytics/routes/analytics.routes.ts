@@ -13,7 +13,7 @@ const WorkspaceIdParamSchema = z.object({
 });
 
 const PeriodQuerySchema = z.object({
-    period: z.enum(['week', 'month', 'year']).optional(),
+    period: z.enum(['day', 'week', 'month', 'year']).optional(),
 });
 
 const MonthsQuerySchema = z.object({
@@ -24,8 +24,13 @@ const LimitQuerySchema = z.object({
     limit: z.coerce.number().min(1).max(100).optional(),
 });
 
+const ComparisonQuerySchema = z.object({
+    period: z.enum(['day', 'week', 'month', 'year']).optional(),
+    months: z.coerce.number().min(1).max(24).optional(),
+});
+
 const SpendingTrendQuerySchema = z.object({
-    period: z.enum(['week', 'month', 'year']).optional(),
+    period: z.enum(['day', 'week', 'month', 'year']).optional(),
     accountId: z.string().uuid().optional(),
 });
 
@@ -74,11 +79,11 @@ router.get('/:workspaceId/analytics/category-trends',
     controller.getCategoryTrends.bind(controller)
 );
 
-router.get('/:workspaceId/analytics/monthly-comparison',
+router.get('/:workspaceId/analytics/comparison',
     validateParams(WorkspaceIdParamSchema),
-    validateQuery(MonthsQuerySchema),
+    validateQuery(ComparisonQuerySchema),
     requirePermission('analytics:view'),
-    controller.getMonthlyComparison.bind(controller)
+    controller.getComparison.bind(controller)
 );
 
 router.get('/:workspaceId/analytics/spending-trend',

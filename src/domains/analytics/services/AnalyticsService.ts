@@ -28,8 +28,8 @@ export interface CategoryTrend {
 }
 
 export interface MonthlyComparison {
-    month: string;
-    monthLabel: string;
+    period: string;
+    periodLabel: string;
     income: number;
     expense: number;
     savings: number;
@@ -240,14 +240,31 @@ export class AnalyticsService {
         }));
     }
 
-    async getMonthlyComparison(workspaceId: string, months: number = 12, filters?: AnalyticsFilters): Promise<MonthlyComparison[]> {
-        const startDate = new Date();
-        startDate.setMonth(startDate.getMonth() - months);
+    async getComparison(workspaceId: string, period: string = 'month', months: number = 12, filters?: AnalyticsFilters): Promise<MonthlyComparison[]> {
+        let startDate: Date;
+        let endDate: Date;
+
+        if (filters?.startDate && filters?.endDate) {
+            startDate = new Date(filters.startDate);
+            endDate = new Date(filters.endDate);
+        } else if (filters?.startDate) {
+            startDate = new Date(filters.startDate);
+            endDate = new Date();
+        } else if (filters?.endDate) {
+            startDate = new Date();
+            startDate.setMonth(startDate.getMonth() - months);
+            endDate = new Date(filters.endDate);
+        } else {
+            startDate = this.getStartDateForPeriod(period);
+            startDate.setMonth(startDate.getMonth() - months);
+            endDate = new Date();
+        }
 
         const preferredCurrency = filters?.preferredCurrency || await this.getUserPreferredCurrency(undefined, workspaceId);
 
-        const params: any[] = [workspaceId, startDate.toISOString()];
-        let query = `SELECT TO_CHAR(date, 'YYYY-MM') as month, TO_CHAR(date, 'MMM YYYY') as month_label, amount, type, currency FROM transactions WHERE workspace_id = $1 AND date >= $2`;
+        const { dateFormat, labelFormat } = this.getDateFormatsForPeriod(period);
+        const params: any[] = [workspaceId, startDate.toISOString(), endDate.toISOString()];
+        let query = `SELECT TO_CHAR(date, '${dateFormat}') as period_key, TO_CHAR(date, '${labelFormat}') as period_label, amount, type, currency FROM transactions WHERE workspace_id = $1 AND date >= $2 AND date <= $3`;
 
         if (filters?.accounts?.length) {
             query += ` AND account_id = ANY($${params.length + 1})`;
@@ -260,31 +277,61 @@ export class AnalyticsService {
 
         const result = await this.db.query(query, params);
 
-        const monthlyData: Record<string, { income: number; expense: number; label: string }> = {};
+        const periodData: Record<string, { income: number; expense: number; label: string }> = {};
         for (const tx of result.rows) {
-            if (!monthlyData[tx.month]) monthlyData[tx.month] = { income: 0, expense: 0, label: tx.month_label };
+            if (!periodData[tx.period_key]) periodData[tx.period_key] = { income: 0, expense: 0, label: tx.period_label };
             const converted = await this.convertAmount(parseFloat(tx.amount || '0'), tx.currency || 'USD', preferredCurrency);
-            if (tx.type === 'income') monthlyData[tx.month].income += converted;
-            else monthlyData[tx.month].expense += converted;
+            if (tx.type === 'income') periodData[tx.period_key].income += converted;
+            else periodData[tx.period_key].expense += converted;
         }
 
-        return Object.entries(monthlyData).map(([month, data]) => ({
-            month,
-            monthLabel: data.label,
+        return Object.entries(periodData).map(([period, data]) => ({
+            period,
+            periodLabel: data.label,
             income: Math.round(data.income * 100) / 100,
             expense: Math.round(data.expense * 100) / 100,
             savings: Math.round((data.income - data.expense) * 100) / 100,
-        })).sort((a, b) => a.month.localeCompare(b.month));
+        })).sort((a, b) => a.period.localeCompare(b.period));
+    }
+
+    private getDateFormatsForPeriod(period: string): { dateFormat: string; labelFormat: string } {
+        switch (period) {
+            case 'day':
+                return { dateFormat: 'YYYY-MM-DD', labelFormat: 'Mon DD, YYYY' };
+            case 'week':
+                return { dateFormat: 'IYYY-IW', labelFormat: '"W"IW YYYY' };
+            case 'month':
+                return { dateFormat: 'YYYY-MM', labelFormat: 'MMM YYYY' };
+            case 'year':
+                return { dateFormat: 'YYYY', labelFormat: 'YYYY' };
+            default:
+                return { dateFormat: 'YYYY-MM', labelFormat: 'MMM YYYY' };
+        }
     }
 
     async getSpendingTrend(workspaceId: string, period: string, filters?: AnalyticsFilters): Promise<SpendingTrend[]> {
-        const startDate = new Date();
-        startDate.setFullYear(startDate.getFullYear() - 1);
+        let startDate: Date;
+        let endDate: Date;
+
+        if (filters?.startDate && filters?.endDate) {
+            startDate = new Date(filters.startDate);
+            endDate = new Date(filters.endDate);
+        } else if (filters?.startDate) {
+            startDate = new Date(filters.startDate);
+            endDate = new Date();
+        } else if (filters?.endDate) {
+            startDate = this.getStartDateForPeriod(period);
+            endDate = new Date(filters.endDate);
+        } else {
+            startDate = this.getStartDateForPeriod(period);
+            endDate = new Date();
+        }
 
         const preferredCurrency = filters?.preferredCurrency || await this.getUserPreferredCurrency(undefined, workspaceId);
 
-        const params: any[] = [workspaceId, startDate.toISOString()];
-        let query = `SELECT DATE_TRUNC('month', date) as period, amount, type, currency FROM transactions WHERE workspace_id = $1 AND date >= $2`;
+        const dateTrunc = this.getDateTruncForPeriod(period);
+        const params: any[] = [workspaceId, startDate.toISOString(), endDate.toISOString()];
+        let query = `SELECT DATE_TRUNC('${dateTrunc}', date) as period, amount, type, currency FROM transactions WHERE workspace_id = $1 AND date >= $2 AND date <= $3`;
 
         if (filters?.accounts?.length) {
             query += ` AND account_id = ANY($${params.length + 1})`;
@@ -300,7 +347,7 @@ export class AnalyticsService {
 
         const periodData: Record<string, { income: number; expense: number }> = {};
         for (const tx of result.rows) {
-            const periodKey = tx.period?.toISOString()?.split('T')[0] || '';
+            const periodKey = this.formatPeriodKey(tx.period, period);
             if (!periodData[periodKey]) periodData[periodKey] = { income: 0, expense: 0 };
             const converted = await this.convertAmount(parseFloat(tx.amount || '0'), tx.currency || 'USD', preferredCurrency);
             if (tx.type === 'income') periodData[periodKey].income += converted;
@@ -313,6 +360,64 @@ export class AnalyticsService {
             expense: Math.round(data.expense * 100) / 100,
             balance: Math.round((data.income - data.expense) * 100) / 100,
         }));
+    }
+
+    private getStartDateForPeriod(period: string): Date {
+        const startDate = new Date();
+        switch (period) {
+            case 'day':
+                startDate.setDate(startDate.getDate() - 30);
+                break;
+            case 'week':
+                startDate.setDate(startDate.getDate() - 84);
+                break;
+            case 'month':
+                startDate.setFullYear(startDate.getFullYear() - 1);
+                break;
+            case 'year':
+                startDate.setFullYear(startDate.getFullYear() - 5);
+                break;
+            default:
+                startDate.setFullYear(startDate.getFullYear() - 1);
+        }
+        return startDate;
+    }
+
+    private getDateTruncForPeriod(period: string): string {
+        switch (period) {
+            case 'day': return 'day';
+            case 'week': return 'week';
+            case 'month': return 'month';
+            case 'year': return 'year';
+            default: return 'month';
+        }
+    }
+
+    private formatPeriodKey(period: any, periodType: string): string {
+        if (!period) return '';
+        const date = new Date(period);
+        if (isNaN(date.getTime())) return String(period);
+        
+        switch (periodType) {
+            case 'day':
+                return date.toISOString().split('T')[0];
+            case 'week':
+                return date.toISOString().split('W')[0] + '-W' + this.getWeekNumber(date);
+            case 'month':
+                return date.toISOString().slice(0, 7);
+            case 'year':
+                return date.getFullYear().toString();
+            default:
+                return date.toISOString().split('T')[0];
+        }
+    }
+
+    private getWeekNumber(date: Date): string {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        const dayNum = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return String(Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7));
     }
 
     async getTopMerchants(workspaceId: string, period: string, limit: number = 10, filters?: AnalyticsFilters): Promise<TopMerchant[]> {
@@ -355,6 +460,10 @@ export class AnalyticsService {
         let prevStartDate = new Date(now);
 
         switch (period) {
+            case 'day':
+                startDate.setDate(startDate.getDate() - 30);
+                prevStartDate.setDate(prevStartDate.getDate() - 60);
+                break;
             case 'week':
                 startDate.setDate(startDate.getDate() - 7);
                 prevStartDate.setDate(prevStartDate.getDate() - 14);
