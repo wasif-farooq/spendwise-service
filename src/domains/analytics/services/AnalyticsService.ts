@@ -206,13 +206,29 @@ export class AnalyticsService {
     }
 
     async getCategoryTrends(workspaceId: string, months: number = 6, filters?: AnalyticsFilters): Promise<CategoryTrend[]> {
-        const startDate = new Date();
-        startDate.setMonth(startDate.getMonth() - months);
+        let startDate: Date;
+        let endDate: Date;
+
+        if (filters?.startDate && filters?.endDate) {
+            startDate = new Date(filters.startDate);
+            endDate = new Date(filters.endDate);
+        } else if (filters?.startDate) {
+            startDate = new Date(filters.startDate);
+            endDate = new Date();
+        } else if (filters?.endDate) {
+            startDate = new Date();
+            startDate.setMonth(startDate.getMonth() - months);
+            endDate = new Date(filters.endDate);
+        } else {
+            startDate = new Date();
+            startDate.setMonth(startDate.getMonth() - months);
+            endDate = new Date();
+        }
         
         const preferredCurrency = filters?.preferredCurrency || await this.getUserPreferredCurrency(undefined, workspaceId);
         
-        const params: any[] = [workspaceId, startDate.toISOString()];
-        let query = `SELECT COALESCE(c.name, 'Uncategorized') as category, c.id as category_id, t.amount, t.currency FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.workspace_id = $1 AND t.type = 'expense' AND t.date >= $2 AND t.date <= NOW()`;
+        const params: any[] = [workspaceId, startDate.toISOString(), endDate.toISOString()];
+        let query = `SELECT COALESCE(c.name, 'Uncategorized') as category, c.id as category_id, t.amount, t.currency FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.workspace_id = $1 AND t.type = 'expense' AND t.date >= $2 AND t.date <= $3`;
 
         if (filters?.accounts?.length) {
             query += ` AND t.account_id = ANY($${params.length + 1})`;
