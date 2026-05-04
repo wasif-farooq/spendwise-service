@@ -27,7 +27,7 @@ export class WorkspaceInvitationsRepository extends BaseRepository<WorkspaceInvi
             status: row.status,
             expiresAt: row.expires_at,
             invitedBy: row.invited_by,
-            acceptedBy: row.accepted_by,
+            acceptedAt: row.accepted_at,
             createdAt: row.created_at,
             updatedAt: row.updated_at
         }, row.id);
@@ -89,7 +89,7 @@ export class WorkspaceInvitationsRepository extends BaseRepository<WorkspaceInvi
         const query = status
             ? `SELECT 
                 wi.id, wi.workspace_id, wi.email, wi.role_ids, wi.account_permissions,
-                wi.token, wi.status, wi.expires_at, wi.invited_by, wi.accepted_by,
+                wi.token, wi.status, wi.expires_at, wi.invited_by, wi.accepted_at,
                 wi.created_at, wi.updated_at,
                 u.first_name as inviter_first_name, u.last_name as inviter_last_name
             FROM ${this.tableName} wi
@@ -99,7 +99,7 @@ export class WorkspaceInvitationsRepository extends BaseRepository<WorkspaceInvi
             LIMIT $3 OFFSET $4`
             : `SELECT 
                 wi.id, wi.workspace_id, wi.email, wi.role_ids, wi.account_permissions,
-                wi.token, wi.status, wi.expires_at, wi.invited_by, wi.accepted_by,
+                wi.token, wi.status, wi.expires_at, wi.invited_by, wi.accepted_at,
                 wi.created_at, wi.updated_at,
                 u.first_name as inviter_first_name, u.last_name as inviter_last_name
             FROM ${this.tableName} wi
@@ -124,7 +124,7 @@ export class WorkspaceInvitationsRepository extends BaseRepository<WorkspaceInvi
             status: row.status,
             expiresAt: row.expires_at,
             invitedBy: row.invited_by,
-            acceptedBy: row.accepted_by,
+            acceptedAt: row.accepted_at,
             createdAt: row.created_at,
             inviterName: row.inviter_first_name && row.inviter_last_name 
                 ? `${row.inviter_first_name} ${row.inviter_last_name}` 
@@ -160,7 +160,7 @@ export class WorkspaceInvitationsRepository extends BaseRepository<WorkspaceInvi
         const result = await this.dbToUse.query(
             `UPDATE ${this.tableName} 
              SET email = $2, role_ids = $3, account_permissions = $4, token = $5, status = $6, 
-                 expires_at = $7, accepted_by = $8, updated_at = $9
+                 expires_at = $7, accepted_at = $8, updated_at = $9
              WHERE id = $1
              RETURNING *`,
             [
@@ -171,7 +171,7 @@ export class WorkspaceInvitationsRepository extends BaseRepository<WorkspaceInvi
                 invitation.token,
                 invitation.status,
                 invitation.expiresAt,
-                invitation.acceptedBy,
+                invitation.acceptedAt,
                 new Date()
             ]
         );

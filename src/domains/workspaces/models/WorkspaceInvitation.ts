@@ -9,7 +9,7 @@ export interface WorkspaceInvitationProps {
     status: 'pending' | 'accepted' | 'expired' | 'declined' | 'cancelled';
     expiresAt: Date;
     invitedBy: string;
-    acceptedBy?: string;
+    acceptedAt?: Date;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -52,17 +52,13 @@ export class WorkspaceInvitation extends Entity<WorkspaceInvitationProps> {
     get status(): 'pending' | 'accepted' | 'expired' | 'declined' | 'cancelled' { return this.props.status; }
     get expiresAt(): Date { return this.props.expiresAt; }
     get invitedBy(): string { return this.props.invitedBy; }
-    get acceptedBy(): string | undefined { return this.props.acceptedBy; }
+    get acceptedAt(): Date | undefined { return this.props.acceptedAt; }
     get createdAt(): Date { return this.props.createdAt; }
     get updatedAt(): Date { return this.props.updatedAt; }
 
-    public isExpired(): boolean {
-        return new Date() > this.props.expiresAt;
-    }
-
-    public accept(userId: string): void {
+    public accept(): void {
         this.props.status = 'accepted';
-        this.props.acceptedBy = userId;
+        this.props.acceptedAt = new Date();
         this.props.updatedAt = new Date();
     }
 
@@ -75,6 +71,10 @@ export class WorkspaceInvitation extends Entity<WorkspaceInvitationProps> {
     public markAsExpired(): void {
         this.props.status = 'expired';
         this.props.updatedAt = new Date();
+    }
+
+    public isExpired(): boolean {
+        return new Date() > this.props.expiresAt;
     }
 
     public markAsDeclined(): void {

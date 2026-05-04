@@ -14,7 +14,7 @@ export class WorkspaceRolesController {
 
     async list(req: Request, res: Response) {
         const userId = this.getUserId(req);
-        const workspaceId = req.params.id;
+        const workspaceId = req.params.workspaceId;
         const { page, limit, search, types, minPermissions } = req.query;
 
         let typesArray: string[] | undefined;
@@ -43,7 +43,7 @@ export class WorkspaceRolesController {
 
     async getById(req: Request, res: Response) {
         const userId = this.getUserId(req);
-        const workspaceId = req.params.id;
+        const workspaceId = req.params.workspaceId;
         const roleId = req.params.roleId;
 
         const result = await this.workspaceRequestRepository.getRole(workspaceId, userId, roleId);
@@ -57,7 +57,7 @@ export class WorkspaceRolesController {
 
     async create(req: Request, res: Response) {
         const userId = this.getUserId(req);
-        const workspaceId = req.params.id;
+        const workspaceId = req.params.workspaceId;
 
         if (this.subscriptionRequestRepository) {
             const rolesResult = await this.workspaceRequestRepository.getRoles(workspaceId, userId, {});
@@ -80,7 +80,7 @@ export class WorkspaceRolesController {
 
     async update(req: Request, res: Response) {
         const userId = this.getUserId(req);
-        const workspaceId = req.params.id;
+        const workspaceId = req.params.workspaceId;
         const roleId = req.params.roleId;
         const result = await this.workspaceRequestRepository.updateRole(workspaceId, userId, roleId, req.body);
 
@@ -93,7 +93,7 @@ export class WorkspaceRolesController {
 
     async delete(req: Request, res: Response) {
         const userId = this.getUserId(req);
-        const workspaceId = req.params.id;
+        const workspaceId = req.params.workspaceId;
         const roleId = req.params.roleId;
         const result = await this.workspaceRequestRepository.deleteRole(workspaceId, userId, roleId);
 
@@ -106,7 +106,7 @@ export class WorkspaceRolesController {
 
     async assign(req: Request, res: Response) {
         const userId = this.getUserId(req);
-        const workspaceId = req.params.id;
+        const workspaceId = req.params.workspaceId;
         const memberId = req.params.memberId;
 
         let roleId = req.body.roleId || req.body.role;

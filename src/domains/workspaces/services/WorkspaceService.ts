@@ -168,7 +168,9 @@ export class WorkspaceService {
         startDate?: string;
         endDate?: string;
     } = {}): Promise<{ members: any[]; total: number }> {
+        // Check if user is member
         const member = await this.workspaceMembersRepository.findByUserAndWorkspace(userId, workspaceId);
+        
         if (!member) {
             throw new AppError('Not a member of this workspace', 403);
         }
@@ -569,7 +571,7 @@ Expires in 7 days.
             );
         }
 
-        invitation.accept(userId);
+        invitation.accept();
         await this.workspaceInvitationsRepository.updateInvitation(invitation);
 
         return { success: true, message: 'Successfully joined workspace' };
