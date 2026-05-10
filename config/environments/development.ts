@@ -11,7 +11,11 @@ export default {
                 'http://127.0.0.1:5173',
                 'http://127.0.0.1:5174',
                 'http://localhost:3000',
-                'http://localhost:3001'
+                'http://localhost:3001',
+                'http://localhost:8081',
+                'http://127.0.0.1:8081',
+                'http://10.0.2.2:3000',
+                'http://10.0.2.2:8081'
             ],
             credentials: true,
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -169,9 +173,9 @@ export default {
         accessKeyId: process.env.STORAGE_ACCESS_KEY_ID || 'minioadmin',
         secretAccessKey: process.env.STORAGE_SECRET_ACCESS_KEY || 'minioadmin',
         buckets: {
-            receipts: process.env.STORAGE_BUCKET_RECEIPTS || 'spendwise-receipts',
-            avatars: process.env.STORAGE_BUCKET_AVATARS || 'spendwise-avatars',
-            attachments: process.env.STORAGE_BUCKET_ATTACHMENTS || 'spendwise-attachments'
+            receipts: process.env.STORAGE_BUCKET_RECEIPTS || 'trackmypocket-receipts',
+            avatars: process.env.STORAGE_BUCKET_AVATARS || 'trackmypocket-avatars',
+            attachments: process.env.STORAGE_BUCKET_ATTACHMENTS || 'trackmypocket-attachments'
         },
         publicUrl: process.env.STORAGE_PUBLIC_URL || 'http://localhost:9000',
         presignedUrlExpiry: parseInt(process.env.STORAGE_PRESIGNED_URL_EXPIRY || '3600'), // 1 hour default
@@ -186,8 +190,8 @@ export default {
         secure: process.env.MAIL_SMTP_SECURE === 'true' || process.env.MAIL_SMTP_SECURE === 'TLS',
         username: process.env.MAIL_USERNAME,
         password: process.env.MAIL_PASSWORD,
-        fromAddress: process.env.MAIL_FROM_ADDRESS || 'noreply@spendwise.app',
-        fromName: process.env.MAIL_FROM_NAME || 'SpendWise'
+        fromAddress: process.env.MAIL_FROM_ADDRESS || 'noreply@trackmypocket.com',
+        fromName: process.env.MAIL_FROM_NAME || 'TrackMyPocket'
     },
 
     // Stripe Configuration

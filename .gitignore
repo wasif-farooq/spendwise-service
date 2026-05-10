@@ -43,3 +43,4 @@ config/monitoring/prometheus.yml
 
 .agents/
 venv/
+.gitnexus

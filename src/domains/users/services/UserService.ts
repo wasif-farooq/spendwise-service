@@ -43,7 +43,7 @@ export class UserService {
         let bucket = this.storageService.getBucket('avatars');
         
         if (!bucket || bucket.includes('undefined')) {
-            bucket = 'spendwise-avatars';
+            bucket = 'trackmypocket-avatars';
         }
 
         try {

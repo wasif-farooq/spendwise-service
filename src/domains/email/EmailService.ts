@@ -57,8 +57,8 @@ export class SmtpEmailService implements IEmailService {
     const config = ConfigLoader.getInstance();
     const mailConfig = config.get('mail') || {};
 
-    this.fromAddress = mailConfig.fromAddress || 'noreply@spendwise.app';
-    this.fromName = mailConfig.fromName || 'SpendWise';
+    this.fromAddress = mailConfig.fromAddress || 'noreply@trackmypocket.com';
+    this.fromName = mailConfig.fromName || 'TrackMyPocket';
 
     this.transporter = nodemailer.createTransport({
       host: mailConfig.host || 'smtp.mailtrap.io',

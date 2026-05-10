@@ -22,8 +22,8 @@ services:
       - REDIS_PORT=6379
       # Kafka
       - KAFKA_BROKERS=kafka:29092
-      - KAFKA_CLIENT_ID=spendwise-api
-      - KAFKA_GROUP_ID=spendwise-group
+      - KAFKA_CLIENT_ID=trackmypocket-api
+      - KAFKA_GROUP_ID=trackmypocket-group
     depends_on:
       - postgres
       - redis
@@ -49,8 +49,8 @@ services:
       - REDIS_PORT=6379
       # Kafka
       - KAFKA_BROKERS=kafka:29092
-      - KAFKA_CLIENT_ID=spendwise-worker
-      - KAFKA_GROUP_ID=spendwise-worker-group
+      - KAFKA_CLIENT_ID=trackmypocket-worker
+      - KAFKA_GROUP_ID=trackmypocket-worker-group
     depends_on:
       - postgres
       - redis

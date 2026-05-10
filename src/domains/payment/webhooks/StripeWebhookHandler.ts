@@ -7,7 +7,7 @@ import { TOKENS } from '@di/tokens';
 import { UserSubscriptionRepository } from '@domains/subscription/repositories/SubscriptionRepository';
 import { UserRepository } from '@domains/auth/repositories/UserRepository';
 
-const INVOICES_BUCKET = 'spendwise-invoices';
+const INVOICES_BUCKET = 'trackmypocket-invoices';
 
 export class StripeWebhookHandler {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

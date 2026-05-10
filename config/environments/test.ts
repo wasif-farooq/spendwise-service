@@ -28,12 +28,19 @@ export default {
             port: parseInt(process.env.DB_PORT || '5432'),
             username: process.env.DB_USER || 'antigravity',
             password: process.env.DB_PASSWORD || 'password',
-            database: process.env.DB_TEST_NAME || 'antigravity',
+            database: process.env.TEST_DB_NAME || 'test_antigravity',
             pool: {
                 min: 2,
                 max: 10
             },
             ssl: false
+        },
+        admin: {
+            host: process.env.DB_HOST || 'localhost',
+            port: parseInt(process.env.DB_PORT || '5432'),
+            username: process.env.DB_USER || 'antigravity',
+            password: process.env.DB_PASSWORD || 'password',
+            database: 'postgres'
         },
         redis: {
             host: process.env.REDIS_HOST || 'localhost',
@@ -55,8 +62,8 @@ export default {
     messaging: {
         kafka: {
             brokers: [process.env.KAFKA_BROKERS || 'localhost:9092'],
-            clientId: 'spendwise-test',
-            groupId: 'spendwise-test-group'
+            clientId: 'trackmypocket-test',
+            groupId: 'trackmypocket-test-group'
         }
     },
 

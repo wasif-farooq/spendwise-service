@@ -224,12 +224,12 @@ export class StorageService {
         
         // Return a guaranteed valid bucket name
         const defaultBuckets: Record<string, string> = {
-            receipts: 'spendwise-receipts',
-            avatars: 'spendwise-avatars',
-            attachments: 'spendwise-attachments'
+            receipts: 'trackmypocket-receipts',
+            avatars: 'trackmypocket-avatars',
+            attachments: 'trackmypocket-attachments'
         };
         
-        return defaultBuckets[type] || 'spendwise-receipts';
+        return defaultBuckets[type] || 'trackmypocket-receipts';
     }
 
     /**
