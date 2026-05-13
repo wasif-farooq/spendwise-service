@@ -5,6 +5,7 @@ import { MessagingFacade } from '@messaging/facades/MessagingFacade';
 import { Container } from '@di/Container';
 import { PostgresFactory } from '@database/factories/PostgresFactory';
 import { KafkaMessageQueueFactory } from '@messaging/factories/KafkaMessageQueueFactory';
+import { BullMQMessageQueueFactory } from '@messaging/factories/BullMQMessageQueueFactory';
 import { RepositoryFactory } from '@factories/RepositoryFactory';
 import { ServiceFactory } from '@factories/ServiceFactory';
 import { AuthControllerFactory } from '@factories/AuthControllerFactory';
@@ -85,7 +86,11 @@ export class ServiceBootstrap {
             const dbFacade = new DatabaseFacade(dbFactory);
             this.container.registerInstance(TOKENS.Database, dbFacade);
 
-            const msgFactory = new KafkaMessageQueueFactory();
+            const messagingProvider = ConfigLoader.getInstance().get('messaging.provider');
+            const msgFactory = messagingProvider === 'bullmq'
+                ? new BullMQMessageQueueFactory()
+                : new KafkaMessageQueueFactory();
+            console.log(`[ServiceBootstrap] Using messaging provider: ${messagingProvider}`);
             const msgFacade = new MessagingFacade(msgFactory);
             this.container.registerInstance(TOKENS.Messaging, msgFacade);
 

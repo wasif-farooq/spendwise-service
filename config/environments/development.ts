@@ -94,6 +94,7 @@ export default {
     },
 
     messaging: {
+        provider: process.env.MESSAGE_QUEUE_PROVIDER || 'kafka',
         kafka: {
             brokers: [process.env.KAFKA_BROKERS || 'localhost:9092'],
             clientId: 'antigravity',
@@ -102,6 +103,13 @@ export default {
                 authEvents: 'auth-events',
                 userEvents: 'user-events',
                 notificationEvents: 'notification-events'
+            }
+        },
+        bullmq: {
+            connection: {
+                host: process.env.REDIS_HOST || 'localhost',
+                port: parseInt(process.env.REDIS_PORT || '6379'),
+                password: process.env.REDIS_PASSWORD || '',
             }
         }
     },

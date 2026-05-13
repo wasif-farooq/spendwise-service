@@ -60,10 +60,18 @@ export default {
     },
 
     messaging: {
+        provider: process.env.MESSAGE_QUEUE_PROVIDER || 'kafka',
         kafka: {
             brokers: [process.env.KAFKA_BROKERS || 'localhost:9092'],
             clientId: 'trackmypocket-test',
             groupId: 'trackmypocket-test-group'
+        },
+        bullmq: {
+            connection: {
+                host: process.env.REDIS_HOST || 'localhost',
+                port: parseInt(process.env.REDIS_PORT || '6379'),
+                password: process.env.REDIS_PASSWORD || '',
+            }
         }
     },
 

@@ -1,5 +1,4 @@
 import { ServiceBootstrap } from '../../src/bootstrap/ServiceBootstrap';
-import { Kafka } from 'kafkajs';
 import { ConfigLoader } from '@config/ConfigLoader';
 import { TOKENS } from '@di/tokens';
 import { Container } from '@di/Container';
@@ -10,30 +9,24 @@ import { FeatureFlagService } from '@domains/feature-flags/services/FeatureFlagS
 import { AppError } from '@shared/errors/AppError';
 import { ReportService } from '../../src/domains/reports/services/ReportService';
 import { ExportReportRequest } from '../../src/domains/reports/types';
+import { RpcClientFactory } from '../../src/messaging/factories/RpcClientFactory';
+import { IRpcClient } from '../../src/messaging/interfaces/IRpcClient';
 
 // Consolidate Worker Logic
 const startWorker = async () => {
     const bootstrap = ServiceBootstrap.getInstance();
     await bootstrap.initialize('Unified Worker');
 
-    const config = ConfigLoader.getInstance();
-    const kafkaConfig = config.get('messaging.kafka');
+    const rpcClient: IRpcClient = RpcClientFactory.create();
+    await rpcClient.connect();
 
-    const kafka = new Kafka({
-        clientId: 'backend-worker',
-        brokers: kafkaConfig.brokers,
-    });
-
-    const consumer = kafka.consumer({ groupId: 'backend-service-group' }); // Unified Group
-    const producer = kafka.producer();
-
-    await consumer.connect();
-    await producer.connect();
+    if ('startListening' in rpcClient) {
+        await (rpcClient as any).startListening();
+    }
 
     const container = Container.getInstance();
     const serviceFactory = container.resolve<any>(TOKENS.ServiceFactory);
 
-    // Resolve Services (AuthService.createAuthService is async due to Redis connection)
     const authService = await serviceFactory.createAuthService() as AuthService;
     const userService = serviceFactory.createUserService() as UserService;
     const workspaceService = serviceFactory.createWorkspaceService() as WorkspaceService;
@@ -42,68 +35,9 @@ const startWorker = async () => {
 
     console.log('Unified Worker Listening...');
 
-    // Subscribe to Auth Topics
-    await consumer.subscribe({ topic: 'auth.service.login', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.register', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.verify-2fa', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.resend-2fa', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.verify-backup-code', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.forgot-password', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.verify-reset-code', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.reset-password', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.verify-email', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.get-me', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.change-password', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.generate-2fa-secret', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.enable-2fa', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.disable-2fa', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.disable-2fa-method', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.regenerate-backup-codes', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.get-active-sessions', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.revoke-session', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.get-login-history', fromBeginning: false });
-
-    // Subscribe to User Topics
-    await consumer.subscribe({ topic: 'user.service.getProfile', fromBeginning: false });
-    await consumer.subscribe({ topic: 'user.service.updateProfile', fromBeginning: false });
-    await consumer.subscribe({ topic: 'user.service.getPreferences', fromBeginning: false });
-    await consumer.subscribe({ topic: 'user.service.updatePreferences', fromBeginning: false });
-
-    // Subscribe to Workspace Topics
-    await consumer.subscribe({ topic: 'workspace.service.create', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.update', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.delete', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.list', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.get-members', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.invite-member', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.remove-member', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.get-roles', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.get-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.create-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.update-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.assign-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.delete-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.check-permission', fromBeginning: false });
-
-    // Subscribe to Feature Flag Topics
-    await consumer.subscribe({ topic: 'feature-flags.service.get-all', fromBeginning: false });
-
-    // Subscribe to Report Topics
-    await consumer.subscribe({ topic: 'reports.export', fromBeginning: false });
-
-    await consumer.run({
-        eachMessage: async ({ topic, partition, message }) => {
-            const replyTo = message.headers?.replyTo?.toString();
-            const correlationId = message.headers?.correlationId?.toString();
-
-            // Fire-and-forget messages (like reports.export) don't have replyTo
-            const isFireAndForget = !replyTo && !correlationId;
-
-            if (!replyTo && !correlationId && topic !== 'reports.export') return;
-
-            try {
-                const payload = JSON.parse(message.value?.toString() || '{}');
-                let result;
+    const handleMessage = async (payload: any, correlationId?: string): Promise<any> => {
+        const topic = payload._topic || '';
+        let result: any;
 
                 // --- Auth Handling ---
                 if (topic === 'auth.service.login') {
@@ -245,41 +179,56 @@ const startWorker = async () => {
                     } catch (error: any) {
                         console.error(`[Report] Export failed:`, error);
                     }
-                    // No reply for fire-and-forget messages
                 }
 
-                // Reply Success (only for RPC requests with replyTo)
-                else if (replyTo && correlationId) {
-                    await producer.send({
-                        topic: replyTo,
-                        messages: [{
-                            value: JSON.stringify(result ?? { success: true }),
-                            headers: { correlationId }
-                        }]
-                    });
-                }
+        return result;
+    };
 
-            } catch (error: any) {
-                console.error(`Error processing RPC [${topic}]`, error);
+    await rpcClient.subscribe('auth.service.login', handleMessage);
+    await rpcClient.subscribe('auth.service.register', handleMessage);
+    await rpcClient.subscribe('auth.service.verify-2fa', handleMessage);
+    await rpcClient.subscribe('auth.service.resend-2fa', handleMessage);
+    await rpcClient.subscribe('auth.service.verify-backup-code', handleMessage);
+    await rpcClient.subscribe('auth.service.forgot-password', handleMessage);
+    await rpcClient.subscribe('auth.service.verify-reset-code', handleMessage);
+    await rpcClient.subscribe('auth.service.reset-password', handleMessage);
+    await rpcClient.subscribe('auth.service.verify-email', handleMessage);
+    await rpcClient.subscribe('auth.service.get-me', handleMessage);
+    await rpcClient.subscribe('auth.service.change-password', handleMessage);
+    await rpcClient.subscribe('auth.service.generate-2fa-secret', handleMessage);
+    await rpcClient.subscribe('auth.service.enable-2fa', handleMessage);
+    await rpcClient.subscribe('auth.service.disable-2fa', handleMessage);
+    await rpcClient.subscribe('auth.service.disable-2fa-method', handleMessage);
+    await rpcClient.subscribe('auth.service.regenerate-backup-codes', handleMessage);
+    await rpcClient.subscribe('auth.service.get-active-sessions', handleMessage);
+    await rpcClient.subscribe('auth.service.revoke-session', handleMessage);
+    await rpcClient.subscribe('auth.service.get-login-history', handleMessage);
 
-                // Only reply if it's an RPC request
-                if (replyTo && correlationId) {
-                    const errorResponse = {
-                        error: error.message || 'Internal Error',
-                        statusCode: (error instanceof AppError) ? error.statusCode : 500
-                    };
+    await rpcClient.subscribe('user.service.getProfile', handleMessage);
+    await rpcClient.subscribe('user.service.updateProfile', handleMessage);
+    await rpcClient.subscribe('user.service.getPreferences', handleMessage);
+    await rpcClient.subscribe('user.service.updatePreferences', handleMessage);
 
-                    await producer.send({
-                        topic: replyTo,
-                        messages: [{
-                            value: JSON.stringify(errorResponse),
-                            headers: { correlationId }
-                        }]
-                    });
-                }
-            }
-        },
-    });
+    await rpcClient.subscribe('workspace.service.create', handleMessage);
+    await rpcClient.subscribe('workspace.service.update', handleMessage);
+    await rpcClient.subscribe('workspace.service.delete', handleMessage);
+    await rpcClient.subscribe('workspace.service.list', handleMessage);
+    await rpcClient.subscribe('workspace.service.get-members', handleMessage);
+    await rpcClient.subscribe('workspace.service.invite-member', handleMessage);
+    await rpcClient.subscribe('workspace.service.remove-member', handleMessage);
+    await rpcClient.subscribe('workspace.service.get-roles', handleMessage);
+    await rpcClient.subscribe('workspace.service.get-role', handleMessage);
+    await rpcClient.subscribe('workspace.service.create-role', handleMessage);
+    await rpcClient.subscribe('workspace.service.update-role', handleMessage);
+    await rpcClient.subscribe('workspace.service.assign-role', handleMessage);
+    await rpcClient.subscribe('workspace.service.delete-role', handleMessage);
+    await rpcClient.subscribe('workspace.service.check-permission', handleMessage);
+
+    await rpcClient.subscribe('feature-flags.service.get-all', handleMessage);
+
+    await rpcClient.subscribe('reports.export', handleMessage);
+
+    console.log('[Worker] All topics subscribed');
 };
 
 startWorker().catch(console.error);
