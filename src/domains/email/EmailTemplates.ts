@@ -18,7 +18,7 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'USD',
     }).format(amount);
   };
 
@@ -26,7 +26,7 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
     return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
-      day: 'numeric'
+      day: 'numeric',
     });
   };
 
@@ -83,7 +83,10 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
               <td style="padding: 0 40px 24px;">
                 <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 18px; font-weight: 600;">Expenses by Category</h2>
                 <table width="100%" cellpadding="0" cellspacing="0">
-                  ${data.byCategory.slice(0, 5).map(cat => `
+                  ${data.byCategory
+                    .slice(0, 5)
+                    .map(
+                      (cat) => `
                     <tr>
                       <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
                         <span style="color: #111827; font-size: 14px;">${cat.category}</span>
@@ -93,7 +96,9 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
                         <span style="color: #6b7280; font-size: 12px; margin-left: 8px;">(${cat.percentage.toFixed(1)}%)</span>
                       </td>
                     </tr>
-                  `).join('')}
+                  `,
+                    )
+                    .join('')}
                 </table>
               </td>
             </tr>
@@ -103,7 +108,10 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
               <td style="padding: 0 40px 24px;">
                 <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 18px; font-weight: 600;">Top Merchants</h2>
                 <table width="100%" cellpadding="0" cellspacing="0">
-                  ${data.byMerchant.slice(0, 5).map(merchant => `
+                  ${data.byMerchant
+                    .slice(0, 5)
+                    .map(
+                      (merchant) => `
                     <tr>
                       <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
                         <span style="color: #111827; font-size: 14px;">${merchant.merchant}</span>
@@ -113,7 +121,9 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
                         <span style="color: #111827; font-size: 14px; font-weight: 600;">${formatCurrency(merchant.amount)}</span>
                       </td>
                     </tr>
-                  `).join('')}
+                  `,
+                    )
+                    .join('')}
                 </table>
               </td>
             </tr>
@@ -123,7 +133,10 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
               <td style="padding: 0 40px 32px;">
                 <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 18px; font-weight: 600;">Largest Transactions</h2>
                 <table width="100%" cellpadding="0" cellspacing="0">
-                  ${data.topExpenses.slice(0, 5).map(tx => `
+                  ${data.topExpenses
+                    .slice(0, 5)
+                    .map(
+                      (tx) => `
                     <tr>
                       <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
                         <span style="color: #111827; font-size: 14px;">${tx.description || 'No description'}</span>
@@ -133,7 +146,9 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
                         <span style="color: #ef4444; font-size: 14px; font-weight: 600;">${formatCurrency(tx.amount)}</span>
                       </td>
                     </tr>
-                  `).join('')}
+                  `,
+                    )
+                    .join('')}
                 </table>
               </td>
             </tr>
@@ -160,7 +175,7 @@ export function getExpenseReportSubject(data: ExpenseReportData): string {
     return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     });
   };
 
@@ -181,7 +196,7 @@ export function generatePaymentFailureEmailHtml(data: PaymentFailureData): strin
   const formatCurrency = (amount: number, currency: string) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: currency.toUpperCase()
+      currency: currency.toUpperCase(),
     }).format(amount / 100);
   };
 

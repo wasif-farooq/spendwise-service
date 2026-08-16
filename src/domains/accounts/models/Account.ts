@@ -4,96 +4,123 @@ export type AccountType = 'bank' | 'savings' | 'cash' | 'credit_card' | 'investm
 export type AccountTrend = 'up' | 'down' | 'stable';
 
 export interface AccountProps {
-    name: string;
-    type: AccountType;
-    balance: number;
-    currency: string;
-    color: string;
-    workspaceId: string;
-    userId: string;
-    lastActivity: Date;
-    createdAt: Date;
-    updatedAt: Date;
-    totalIncome: number;
-    totalExpense: number;
+  name: string;
+  type: AccountType;
+  balance: number;
+  currency: string;
+  color: string;
+  workspaceId: string;
+  userId: string;
+  lastActivity: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  totalIncome: number;
+  totalExpense: number;
 }
 
 export class Account extends Entity<AccountProps> {
-    private constructor(props: AccountProps, id?: string) {
-        super(props, id);
-    }
+  private constructor(props: AccountProps, id?: string) {
+    super(props, id);
+  }
 
-    public static create(props: {
-        name: string;
-        type: AccountType;
-        balance: number;
-        currency: string;
-        color?: string;
-        workspaceId: string;
-        userId: string;
-    }, id?: string): Account {
-        const now = new Date();
-        const accountProps: AccountProps = {
-            ...props,
-            color: props.color || '#6b7280',
-            lastActivity: now,
-            createdAt: now,
-            updatedAt: now,
-            totalIncome: 0,
-            totalExpense: 0,
-        };
-        return new Account(accountProps, id);
-    }
+  public static create(
+    props: {
+      name: string;
+      type: AccountType;
+      balance: number;
+      currency: string;
+      color?: string;
+      workspaceId: string;
+      userId: string;
+    },
+    id?: string,
+  ): Account {
+    const now = new Date();
+    const accountProps: AccountProps = {
+      ...props,
+      color: props.color || '#6b7280',
+      lastActivity: now,
+      createdAt: now,
+      updatedAt: now,
+      totalIncome: 0,
+      totalExpense: 0,
+    };
+    return new Account(accountProps, id);
+  }
 
-    public static restore(props: AccountProps, id: string): Account {
-        return new Account(props, id);
-    }
+  public static restore(props: AccountProps, id: string): Account {
+    return new Account(props, id);
+  }
 
-    public updateBalance(newBalance: number): void {
-        this.props.balance = newBalance;
-        this.props.lastActivity = new Date();
-        this.props.updatedAt = new Date();
-    }
+  public updateBalance(newBalance: number): void {
+    this.props.balance = newBalance;
+    this.props.lastActivity = new Date();
+    this.props.updatedAt = new Date();
+  }
 
-    public updateIncomeExpense(totalIncome: number, totalExpense: number): void {
-        this.props.totalIncome = totalIncome;
-        this.props.totalExpense = totalExpense;
-        this.props.balance = totalIncome - totalExpense;
-        this.props.lastActivity = new Date();
-        this.props.updatedAt = new Date();
-    }
+  public updateIncomeExpense(totalIncome: number, totalExpense: number): void {
+    this.props.totalIncome = totalIncome;
+    this.props.totalExpense = totalExpense;
+    this.props.balance = totalIncome - totalExpense;
+    this.props.lastActivity = new Date();
+    this.props.updatedAt = new Date();
+  }
 
-    public updateDetails(name: string, color: string): void {
-        this.props.name = name;
-        this.props.color = color;
-        this.props.updatedAt = new Date();
-    }
+  public updateDetails(name: string, color: string): void {
+    this.props.name = name;
+    this.props.color = color;
+    this.props.updatedAt = new Date();
+  }
 
-    public updateType(type: AccountType): void {
-        this.props.type = type;
-        this.props.updatedAt = new Date();
-    }
+  public updateType(type: AccountType): void {
+    this.props.type = type;
+    this.props.updatedAt = new Date();
+  }
 
-    public updateCurrency(currency: string): void {
-        this.props.currency = currency;
-        this.props.updatedAt = new Date();
-    }
+  public updateCurrency(currency: string): void {
+    this.props.currency = currency;
+    this.props.updatedAt = new Date();
+  }
 
-    public hasTransactions(): boolean {
-        return this.props.totalIncome > 0 || this.props.totalExpense > 0;
-    }
+  public hasTransactions(): boolean {
+    return this.props.totalIncome > 0 || this.props.totalExpense > 0;
+  }
 
-    // Getters
-    get name(): string { return this.props.name; }
-    get type(): AccountType { return this.props.type; }
-    get balance(): number { return this.props.balance; }
-    get currency(): string { return this.props.currency; }
-    get color(): string { return this.props.color; }
-    get workspaceId(): string { return this.props.workspaceId; }
-    get userId(): string { return this.props.userId; }
-    get lastActivity(): Date { return this.props.lastActivity; }
-    get createdAt(): Date { return this.props.createdAt; }
-    get updatedAt(): Date { return this.props.updatedAt; }
-    get totalIncome(): number { return this.props.totalIncome; }
-    get totalExpense(): number { return this.props.totalExpense; }
+  // Getters
+  get name(): string {
+    return this.props.name;
+  }
+  get type(): AccountType {
+    return this.props.type;
+  }
+  get balance(): number {
+    return this.props.balance;
+  }
+  get currency(): string {
+    return this.props.currency;
+  }
+  get color(): string {
+    return this.props.color;
+  }
+  get workspaceId(): string {
+    return this.props.workspaceId;
+  }
+  get userId(): string {
+    return this.props.userId;
+  }
+  get lastActivity(): Date {
+    return this.props.lastActivity;
+  }
+  get createdAt(): Date {
+    return this.props.createdAt;
+  }
+  get updatedAt(): Date {
+    return this.props.updatedAt;
+  }
+  get totalIncome(): number {
+    return this.props.totalIncome;
+  }
+  get totalExpense(): number {
+    return this.props.totalExpense;
+  }
 }

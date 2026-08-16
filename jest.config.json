@@ -2,18 +2,21 @@
     "preset": "ts-jest",
     "testEnvironment": "node",
     "moduleNameMapper": {
-        "^@core/(.*)$": "<rootDir>/src/core/$1",
-        "^@api/(.*)$": "<rootDir>/src/api/$1",
-        "^@modules/(.*)$": "<rootDir>/src/modules/$1",
-        "^@messaging/(.*)$": "<rootDir>/src/messaging/$1",
-        "^@database/(.*)$": "<rootDir>/src/database/$1",
+        "^@shared/(.*)$": "<rootDir>/src/@shared/$1",
+        "^@domains/(.*)$": "<rootDir>/src/domains/$1",
+        "^@facades/(.*)$": "<rootDir>/src/facades/$1",
+        "^@interfaces/(.*)$": "<rootDir>/src/interfaces/$1",
+        "^@abstract-factories/(.*)$": "<rootDir>/src/abstract-factories/$1",
+        "^@factories/(.*)$": "<rootDir>/src/factories/$1",
+        "^@config/(.*)$": "<rootDir>/src/config/$1",
+        "^@di/(.*)$": "<rootDir>/src/di/$1",
         "^@cache/(.*)$": "<rootDir>/src/cache/$1",
-        "^@server/(.*)$": "<rootDir>/src/server/$1",
+        "^@messaging/(.*)$": "<rootDir>/src/messaging/$1",
+        "^@monitoring/(.*)$": "<rootDir>/src/monitoring/$1",
         "^@bootstrap/(.*)$": "<rootDir>/src/bootstrap/$1",
-        "^@utils/(.*)$": "<rootDir>/src/core/utils/$1",
-        "^@middleware/(.*)$": "<rootDir>/src/core/middleware/*",
-        "^@di/(.*)$": "<rootDir>/src/core/di/$1",
-        "^@config/(.*)$": "<rootDir>/config/$1",
+        "^@server/(.*)$": "<rootDir>/src/server/$1",
+        "^@database/(.*)$": "<rootDir>/src/database/$1",
+        "^@processes/(.*)$": "<rootDir>/processes/$1",
         "^@tests/(.*)$": "<rootDir>/tests/$1"
     },
     "testMatch": [
@@ -21,7 +24,10 @@
         "**/?(*.)+(spec|test).ts"
     ],
     "transform": {
-        "^.+\\.ts$": "ts-jest"
+        "^.+\\.ts$": ["ts-jest", {
+            "useESM": false,
+            "isolatedModules": true
+        }]
     },
     "moduleFileExtensions": [
         "ts",
@@ -31,5 +37,9 @@
     ],
     "setupFilesAfterEnv": [
         "<rootDir>/tests/setup.ts"
-    ]
+    ],
+    "testTimeout": 30000,
+    "verbose": true,
+    "forceExit": true,
+    "detectOpenHandles": true
 }

@@ -1,10 +1,10 @@
-export type DateRangePreset = 
-  | 'last7days' 
-  | 'last30days' 
-  | 'thisMonth' 
-  | 'lastMonth' 
-  | 'thisYear' 
-  | 'lastYear' 
+export type DateRangePreset =
+  | 'last7days'
+  | 'last30days'
+  | 'thisMonth'
+  | 'lastMonth'
+  | 'thisYear'
+  | 'lastYear'
   | 'custom';
 
 export interface CustomDateRange {
@@ -27,12 +27,12 @@ export interface ResolvedDateRange {
 }
 
 export function resolveDateRange(
-  preset: DateRangePreset, 
-  customDates?: CustomDateRange
+  preset: DateRangePreset,
+  customDates?: CustomDateRange,
 ): ResolvedDateRange {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  
+
   switch (preset) {
     case 'last7days': {
       const startDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -64,9 +64,9 @@ export function resolveDateRange(
       if (!customDates) {
         throw new Error('Custom date range requires startDate and endDate');
       }
-      return { 
-        startDate: new Date(customDates.startDate), 
-        endDate: new Date(customDates.endDate) 
+      return {
+        startDate: new Date(customDates.startDate),
+        endDate: new Date(customDates.endDate),
       };
     }
   }
@@ -80,10 +80,10 @@ export function formatDateForFile(date: Date): string {
 }
 
 export function formatDateRange(startDate: Date, endDate: Date): string {
-  const options: Intl.DateTimeFormatOptions = { 
-    year: 'numeric', 
-    month: 'short', 
-    day: 'numeric' 
+  const options: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
   };
   return `${startDate.toLocaleDateString('en-US', options)} - ${endDate.toLocaleDateString('en-US', options)}`;
 }

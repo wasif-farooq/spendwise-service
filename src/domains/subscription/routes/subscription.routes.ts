@@ -19,7 +19,7 @@ router.post('/cancel', controller.cancel.bind(controller));
 router.get('/usage', controller.getFeatureUsage.bind(controller));
 router.get('/workspace/:workspaceId/current', controller.getWorkspaceSubscription.bind(controller));
 router.get('/check-access/:feature', (req: Request, res: Response) => {
-    return res.json({ hasAccess: true });
+  return res.json({ hasAccess: true });
 });
 
 export default router;

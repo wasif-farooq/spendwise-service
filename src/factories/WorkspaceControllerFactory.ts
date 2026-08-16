@@ -7,30 +7,35 @@ import { SubscriptionRequestRepositoryFactory } from '@domains/subscription/repo
 import { AuthRequestRepositoryFactory } from '@domains/auth/repositories/AuthRequestRepositoryFactory';
 
 export class WorkspaceControllerFactory {
-    private static instance: WorkspaceController | null = null;
+  private static instance: WorkspaceController | null = null;
 
-    create(): WorkspaceController {
-        if (WorkspaceControllerFactory.instance) {
-            return WorkspaceControllerFactory.instance;
-        }
-
-        const workspaceRequestRepoFactory = Container.getInstance()
-            .resolve<WorkspaceRequestRepositoryFactory>('WorkspaceRequestRepositoryFactory');
-        const subscriptionRequestRepoFactory = Container.getInstance()
-            .resolve<SubscriptionRequestRepositoryFactory>('SubscriptionRequestRepositoryFactory');
-        const authRequestRepoFactory = Container.getInstance()
-            .resolve<AuthRequestRepositoryFactory>('AuthRequestRepositoryFactory');
-
-        const workspaceRequestRepository = workspaceRequestRepoFactory.create();
-        const subscriptionRequestRepository = subscriptionRequestRepoFactory.create();
-        const authRequestRepository = authRequestRepoFactory.create();
-
-        WorkspaceControllerFactory.instance = new WorkspaceController(
-            workspaceRequestRepository,
-            subscriptionRequestRepository,
-            authRequestRepository
-        );
-
-        return WorkspaceControllerFactory.instance;
+  create(): WorkspaceController {
+    if (WorkspaceControllerFactory.instance) {
+      return WorkspaceControllerFactory.instance;
     }
+
+    const workspaceRequestRepoFactory =
+      Container.getInstance().resolve<WorkspaceRequestRepositoryFactory>(
+        'WorkspaceRequestRepositoryFactory',
+      );
+    const subscriptionRequestRepoFactory =
+      Container.getInstance().resolve<SubscriptionRequestRepositoryFactory>(
+        'SubscriptionRequestRepositoryFactory',
+      );
+    const authRequestRepoFactory = Container.getInstance().resolve<AuthRequestRepositoryFactory>(
+      'AuthRequestRepositoryFactory',
+    );
+
+    const workspaceRequestRepository = workspaceRequestRepoFactory.create();
+    const subscriptionRequestRepository = subscriptionRequestRepoFactory.create();
+    const authRequestRepository = authRequestRepoFactory.create();
+
+    WorkspaceControllerFactory.instance = new WorkspaceController(
+      workspaceRequestRepository,
+      subscriptionRequestRepository,
+      authRequestRepository,
+    );
+
+    return WorkspaceControllerFactory.instance;
+  }
 }

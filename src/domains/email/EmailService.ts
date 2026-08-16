@@ -13,11 +13,12 @@ export class ConsoleEmailService implements IEmailService {
       subject: options.subject,
       hasHtml: !!options.html,
       hasText: !!options.text,
-      attachments: options.attachments?.map(a => ({
-        filename: a.filename,
-        contentType: a.contentType,
-        size: a.content.length
-      })) || []
+      attachments:
+        options.attachments?.map((a) => ({
+          filename: a.filename,
+          contentType: a.contentType,
+          size: a.content.length,
+        })) || [],
     };
 
     console.log('='.repeat(60));
@@ -35,7 +36,9 @@ export class ConsoleEmailService implements IEmailService {
       console.log('-'.repeat(60));
       console.log(`[EMAIL] Attachments (${options.attachments.length}):`);
       options.attachments.forEach((att, i) => {
-        console.log(`  ${i + 1}. ${att.filename} (${att.contentType}, ${att.content.length} bytes)`);
+        console.log(
+          `  ${i + 1}. ${att.filename} (${att.contentType}, ${att.content.length} bytes)`,
+        );
       });
     }
 
@@ -43,7 +46,7 @@ export class ConsoleEmailService implements IEmailService {
 
     return {
       success: true,
-      messageId: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      messageId: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     };
   }
 }
@@ -66,8 +69,8 @@ export class SmtpEmailService implements IEmailService {
       secure: mailConfig.secure === true || mailConfig.secure === 'true',
       auth: {
         user: mailConfig.username || '',
-        pass: mailConfig.password || ''
-      }
+        pass: mailConfig.password || '',
+      },
     });
   }
 
@@ -79,23 +82,23 @@ export class SmtpEmailService implements IEmailService {
         subject: options.subject,
         text: options.text,
         html: options.html,
-        attachments: options.attachments?.map(a => ({
+        attachments: options.attachments?.map((a) => ({
           filename: a.filename,
           content: a.content,
-          contentType: a.contentType
-        }))
+          contentType: a.contentType,
+        })),
       });
 
       return {
         success: true,
-        messageId: result.messageId
+        messageId: result.messageId,
       };
     } catch (error: any) {
       console.error('[EMAIL] Failed to send email:', error);
       return {
         success: false,
         messageId: undefined,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -105,7 +108,7 @@ export class EmailServiceFactory {
   static create(provider?: string): IEmailService {
     // Use provided provider, or fall back to environment variable, or default to console
     const emailProvider = provider || process.env.MAIL_PROVIDER || 'console';
-    
+
     if (emailProvider === 'smtp') {
       return new SmtpEmailService();
     }

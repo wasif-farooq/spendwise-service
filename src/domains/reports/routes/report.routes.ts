@@ -15,7 +15,21 @@ router.use(requireAuth);
 router.post(
   '/:workspaceId/reports/export',
   requirePermission('analytics:export'),
-  controller.exportReport.bind(controller)
+  controller.exportReport.bind(controller),
+);
+
+// Download report directly as file attachment
+router.get(
+  '/:workspaceId/reports/download',
+  requirePermission('analytics:export'),
+  controller.downloadReport.bind(controller),
+);
+
+// List report history
+router.get(
+  '/:workspaceId/reports',
+  requirePermission('analytics:view'),
+  controller.listReports.bind(controller),
 );
 
 export default router;

@@ -5,41 +5,41 @@ import { Inject } from '@di/decorators/inject.decorator';
 import { TOKENS } from '@di/tokens';
 
 export class WorkspaceRepository extends BaseRepository<Workspace> {
-    private dbToUse: DatabaseFacade;
+  private dbToUse: DatabaseFacade;
 
-    constructor(@Inject(TOKENS.Database) db: DatabaseFacade) {
-        super(db, 'workspaces');
-        this.dbToUse = db;
-    }
+  constructor(@Inject(TOKENS.Database) db: DatabaseFacade) {
+    super(db, 'workspaces');
+    this.dbToUse = db;
+  }
 
-    // For using a different DB client (e.g., in transactions)
-    withDb(db: DatabaseFacade): WorkspaceRepository {
-        this.dbToUse = db;
-        return this;
-    }
+  // For using a different DB client (e.g., in transactions)
+  withDb(db: DatabaseFacade): WorkspaceRepository {
+    this.dbToUse = db;
+    return this;
+  }
 
-    async findByIds(ids: string[]): Promise<Workspace[]> {
-        const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
-        const query = `SELECT * FROM ${this.tableName} WHERE id IN (${placeholders})`;
-        const result = await this.db.query(query, ids);
-        return result.rows.map((row: any) => this.mapToEntity(row));
-    }
+  async findByIds(ids: string[]): Promise<Workspace[]> {
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
+    const query = `SELECT * FROM ${this.tableName} WHERE id IN (${placeholders})`;
+    const result = await this.db.query(query, ids);
+    return result.rows.map((row: any) => this.mapToEntity(row));
+  }
 
-    protected mapToEntity(row: any): Workspace {
-        return Workspace.restore(
-            {
-                name: row.name,
-                slug: row.slug,
-                ownerId: row.owner_id,
-                description: row.description,
-                logo: row.logo,
-                website: row.website,
-                industry: row.industry,
-                size: row.size,
-                createdAt: new Date(row.created_at),
-                updatedAt: new Date(row.updated_at),
-            },
-            row.id
-        );
-    }
+  protected mapToEntity(row: any): Workspace {
+    return Workspace.restore(
+      {
+        name: row.name,
+        slug: row.slug,
+        ownerId: row.owner_id,
+        description: row.description,
+        logo: row.logo,
+        website: row.website,
+        industry: row.industry,
+        size: row.size,
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at),
+      },
+      row.id,
+    );
+  }
 }

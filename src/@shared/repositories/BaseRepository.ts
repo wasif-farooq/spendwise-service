@@ -49,6 +49,13 @@ export abstract class BaseRepository<T> {
     return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
   }
 
+  async findManyById(ids: string[], options?: { db?: DatabaseFacade }): Promise<T[]> {
+    if (ids.length === 0) return [];
+    const db = options?.db || this.db;
+    const result = await db.query(`SELECT * FROM ${this.tableName} WHERE id = ANY($1)`, [ids]);
+    return result.rows.map((row: any) => this.mapToEntity(row));
+  }
+
   protected mapToEntity(row: any): T {
     return row as T;
   }

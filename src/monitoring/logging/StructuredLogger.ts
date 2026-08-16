@@ -3,54 +3,51 @@ import { ILogger } from '@interfaces/ILogger';
 import { ConfigLoader } from '@config/ConfigLoader';
 
 export class StructuredLogger implements ILogger {
-    private logger: winston.Logger;
+  private logger: winston.Logger;
 
-    constructor() {
-        const config = ConfigLoader.getInstance();
-        const level = config.get('monitoring.logging.level') || 'info';
-        const filePath = config.get('monitoring.logging.file.path');
+  constructor() {
+    const config = ConfigLoader.getInstance();
+    const level = config.get('monitoring.logging.level') || 'info';
+    const filePath = config.get('monitoring.logging.file.path');
 
-        const transports: any[] = [
-            new winston.transports.Console({
-                format: winston.format.combine(
-                    winston.format.timestamp(),
-                    winston.format.colorize(),
-                    winston.format.simple(),
-                ),
-            }),
-        ];
+    const transports: any[] = [
+      new winston.transports.Console({
+        format: winston.format.combine(
+          winston.format.timestamp(),
+          winston.format.colorize(),
+          winston.format.simple(),
+        ),
+      }),
+    ];
 
-        if (filePath) {
-            transports.push(
-                new winston.transports.File({
-                    filename: filePath,
-                    format: winston.format.combine(
-                        winston.format.timestamp(),
-                        winston.format.json(),
-                    ),
-                }),
-            );
-        }
-
-        this.logger = winston.createLogger({
-            level,
-            transports,
-        });
+    if (filePath) {
+      transports.push(
+        new winston.transports.File({
+          filename: filePath,
+          format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
+        }),
+      );
     }
 
-    debug(message: string, context?: any): void {
-        this.logger.debug(message, { context });
-    }
+    this.logger = winston.createLogger({
+      level,
+      transports,
+    });
+  }
 
-    info(message: string, context?: any): void {
-        this.logger.info(message, { context });
-    }
+  debug(message: string, context?: any): void {
+    this.logger.debug(message, { context });
+  }
 
-    warn(message: string, context?: any): void {
-        this.logger.warn(message, { context });
-    }
+  info(message: string, context?: any): void {
+    this.logger.info(message, { context });
+  }
 
-    error(message: string, trace?: string, context?: any): void {
-        this.logger.error(message, { trace, context });
-    }
+  warn(message: string, context?: any): void {
+    this.logger.warn(message, { context });
+  }
+
+  error(message: string, trace?: string, context?: any): void {
+    this.logger.error(message, { trace, context });
+  }
 }

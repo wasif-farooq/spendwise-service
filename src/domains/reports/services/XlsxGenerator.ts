@@ -1,63 +1,137 @@
 import * as XLSX from 'xlsx';
 import { ExpenseReportData } from './ExpenseReportGenerator';
 
+/**
+ * Format a date string to a readable format.
+ */
+function formatDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+/**
+ * Build a sheet from an array-of-arrays with optional column widths.
+ */
+function buildSheet(data: (string | number)[][], colWidths?: number[]): XLSX.WorkSheet {
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  if (colWidths) {
+    ws['!cols'] = colWidths.map((w) => ({ wch: w }));
+  }
+  return ws;
+}
+
+/**
+ * Add a blank separator row between sections in a sheet.
+ */
+function addSeparator(data: (string | number)[][]) {
+  data.push([]);
+}
+
+/**
+ * Add a section label row between data sections.
+ */
+function addSectionLabel(data: (string | number)[][], title: string) {
+  addSeparator(data);
+  data.push([title]);
+  addSeparator(data);
+}
+
 export function generateExpenseReportXlsx(data: ExpenseReportData): Buffer {
   const workbook = XLSX.utils.book_new();
-  
-  const formatCurrency = (amount: number) => amount.toFixed(2);
 
-  // Summary Sheet
-  const summaryData: (string | number)[][] = [
+  // ═══════════════════════════════════════════════════════
+  // Sheet 1: Overview
+  // ═══════════════════════════════════════════════════════
+  const overview: (string | number)[][] = [
     ['SpendWise Expense Report'],
-    [`Period: ${data.period.startDate} to ${data.period.endDate}`],
-    [`Generated: ${data.generatedAt}`],
-    [''],
-    ['=== SUMMARY ==='],
-    ['Total Expenses', data.summary.totalExpenses],
-    ['Transaction Count', data.summary.transactionCount],
-    ['Average Transaction', data.summary.averageTransaction],
-    ['Previous Period Change', `${data.summary.previousPeriodChange.toFixed(1)}%`]
+    [`Period: ${formatDate(data.period.startDate)} — ${formatDate(data.period.endDate)}`],
+    [`Generated: ${formatDate(data.generatedAt)}`],
   ];
-  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
-  // By Category Sheet
-  const categoryData: (string | number)[][] = [['Category', 'Amount', 'Percentage']];
+  addSectionLabel(overview, 'Summary');
+  overview.push(['Metric', 'Value']);
+  overview.push(['Total Expenses', data.summary.totalExpenses]);
+  overview.push(['Transaction Count', data.summary.transactionCount]);
+  overview.push(['Average Transaction', data.summary.averageTransaction]);
+  overview.push(['Previous Period Change', `${data.summary.previousPeriodChange.toFixed(1)}%`]);
+
+  addSectionLabel(overview, 'Expenses by Category');
+  overview.push(['Category', 'Amount', 'Percentage']);
   for (const cat of data.byCategory) {
-    categoryData.push([cat.category, cat.amount, cat.percentage.toFixed(1) + '%']);
+    overview.push([cat.category, cat.amount, `${cat.percentage.toFixed(1)}%`]);
   }
-  const categorySheet = XLSX.utils.aoa_to_sheet(categoryData);
+
+  addSectionLabel(overview, 'Expenses by Account');
+  overview.push(['Account', 'Amount']);
+  for (const acc of data.byAccount) {
+    overview.push([acc.accountName, acc.amount]);
+  }
+
+  const overviewSheet = buildSheet(overview, [30, 20, 18]);
+  XLSX.utils.book_append_sheet(workbook, overviewSheet, 'Overview');
+
+  // ═══════════════════════════════════════════════════════
+  // Sheet 2: By Category (tabular)
+  // ═══════════════════════════════════════════════════════
+  const categoryData: (string | number)[][] = [
+    ['Category', 'Amount', 'Percentage of Total'],
+  ];
+  for (const cat of data.byCategory) {
+    categoryData.push([cat.category, cat.amount, `${cat.percentage.toFixed(1)}%`]);
+  }
+  const categorySheet = buildSheet(categoryData, [25, 18, 20]);
   XLSX.utils.book_append_sheet(workbook, categorySheet, 'By Category');
 
-  // By Merchant Sheet
-  const merchantData: (string | number)[][] = [['Merchant', 'Amount', 'Transaction Count']];
-  for (const merch of data.byMerchant) {
-    merchantData.push([merch.merchant, merch.amount, merch.count]);
-  }
-  const merchantSheet = XLSX.utils.aoa_to_sheet(merchantData);
-  XLSX.utils.book_append_sheet(workbook, merchantSheet, 'By Merchant');
-
-  // By Account Sheet
-  const accountData: (string | number)[][] = [['Account', 'Amount']];
+  // ═══════════════════════════════════════════════════════
+  // Sheet 3: By Account (tabular)
+  // ═══════════════════════════════════════════════════════
+  const accountData: (string | number)[][] = [
+    ['Account', 'Expenses'],
+  ];
   for (const acc of data.byAccount) {
     accountData.push([acc.accountName, acc.amount]);
   }
-  const accountSheet = XLSX.utils.aoa_to_sheet(accountData);
+  const accountSheet = buildSheet(accountData, [30, 18]);
   XLSX.utils.book_append_sheet(workbook, accountSheet, 'By Account');
 
-  // Top Expenses Sheet
-  const topExpData: (string | number)[][] = [['Description', 'Amount', 'Date', 'Category']];
-  for (const tx of data.topExpenses) {
-    topExpData.push([tx.description, tx.amount, tx.date, tx.category]);
+  // ═══════════════════════════════════════════════════════
+  // Sheet 4: Top Merchants (tabular)
+  // ═══════════════════════════════════════════════════════
+  const merchantData: (string | number)[][] = [
+    ['Merchant', 'Total Spent', 'Transactions'],
+  ];
+  for (const merch of data.byMerchant) {
+    merchantData.push([merch.merchant, merch.amount, merch.count]);
   }
-  const topExpSheet = XLSX.utils.aoa_to_sheet(topExpData);
-  XLSX.utils.book_append_sheet(workbook, topExpSheet, 'Top Expenses');
+  const merchantSheet = buildSheet(merchantData, [35, 18, 15]);
+  XLSX.utils.book_append_sheet(workbook, merchantSheet, 'Top Merchants');
+
+  // ═══════════════════════════════════════════════════════
+  // Sheet 5: Largest Transactions (tabular)
+  // ═══════════════════════════════════════════════════════
+  const txData: (string | number)[][] = [
+    ['Description', 'Amount', 'Date', 'Category'],
+  ];
+  for (const tx of data.topExpenses) {
+    txData.push([tx.description, tx.amount, tx.date, tx.category]);
+  }
+  const txSheet = buildSheet(txData, [40, 18, 14, 20]);
+  XLSX.utils.book_append_sheet(workbook, txSheet, 'Largest Transactions');
 
   // Write to buffer
-  const xlsxBuffer = XLSX.write(workbook, { 
-    bookType: 'xlsx', 
-    type: 'buffer' 
+  const xlsxBuffer = XLSX.write(workbook, {
+    bookType: 'xlsx',
+    type: 'buffer',
   });
-  
+
   return Buffer.from(xlsxBuffer);
 }
