@@ -11,49 +11,68 @@ import { LogStream } from '@monitoring/logging/LogStream';
 import { versionMiddleware } from '@shared/versioning/middleware/version.middleware';
 import { ApiRouter } from '@shared/ApiRouter';
 import { errorMiddleware } from '@shared/middleware/error.middleware';
+import { STRIPE_WEBHOOK_PATHS } from '@domains/payment/routes/payment.routes';
 
 export class Server {
-    private app: Express;
-    private logger: StructuredLogger;
-    private config: ConfigLoader;
+  private app: Express;
+  private logger: StructuredLogger;
+  private config: ConfigLoader;
 
-    constructor() {
-        this.app = express();
-        this.logger = new StructuredLogger();
-        this.config = ConfigLoader.getInstance();
+  constructor() {
+    this.app = express();
+    this.logger = new StructuredLogger();
+    this.config = ConfigLoader.getInstance();
 
-        this.configureMiddleware();
-        this.configureRoutes();
+    this.configureMiddleware();
+    this.configureRoutes();
+  }
+
+  private configureMiddleware() {
+    // Rate limiting keys on req.ip. Behind a load balancer or ingress, Express
+    // only derives that from X-Forwarded-For when trust proxy is set —
+    // otherwise every client resolves to the proxy address and shares a single
+    // bucket, which would lock everyone out at once. Keep this false when the
+    // app is directly exposed, or X-Forwarded-For becomes spoofable.
+    const trustProxy = this.config.get('server.trustProxy');
+    if (trustProxy) {
+      this.app.set('trust proxy', trustProxy);
     }
 
-    private configureMiddleware() {
-        this.app.use(helmet({
-            crossOriginResourcePolicy: false,
-            crossOriginOpenerPolicy: false,
-        }));
-        this.app.use(cors(this.config.get('server.cors')));
-        this.app.use(compression());
-        this.app.use(express.json());
-        this.app.use(express.urlencoded({ extended: true }));
+    this.app.use(
+      helmet({
+        crossOriginResourcePolicy: false,
+        crossOriginOpenerPolicy: false,
+      }),
+    );
+    this.app.use(cors(this.config.get('server.cors')));
+    this.app.use(compression());
 
-        // Logging middleware
-        const stream = new LogStream(this.logger);
-        this.app.use(morgan('combined', { stream: stream as any }));
+    // Stripe signs the raw request bytes, so its webhook endpoints must see an
+    // unparsed Buffer. This has to run before express.json(): body-parser marks
+    // the request as parsed, so the JSON parser below skips these paths.
+    this.app.use(STRIPE_WEBHOOK_PATHS, express.raw({ type: '*/*' }));
 
-        // Versioning middleware
-        this.app.use('/api', versionMiddleware);
-    }
+    this.app.use(express.json());
+    this.app.use(express.urlencoded({ extended: true }));
 
-private configureRoutes() {
+    // Logging middleware
+    const stream = new LogStream(this.logger);
+    this.app.use(morgan('combined', { stream: stream as any }));
+
+    // Versioning middleware
+    this.app.use('/api', versionMiddleware);
+  }
+
+  private configureRoutes() {
     this.app.get('/health', (req, res) => {
-        res.json({ status: 'ok', timestamp: new Date(), service: 'API Gateway' });
+      res.json({ status: 'ok', timestamp: new Date(), service: 'API Gateway' });
     });
 
     // Metrics endpoint
     this.app.get('/metrics', async (req, res) => {
-        const metricsService = MetricsService.getInstance();
-        res.set('Content-Type', metricsService.getContentType());
-        res.send(await metricsService.getMetrics());
+      const metricsService = MetricsService.getInstance();
+      res.set('Content-Type', metricsService.getContentType());
+      res.send(await metricsService.getMetrics());
     });
 
     // Mount API Router here
@@ -63,16 +82,16 @@ private configureRoutes() {
 
     // Global Error Handler
     this.app.use(errorMiddleware);
-}
+  }
 
-    public start() {
-        const port = this.config.get('server.port') || 3000;
-        this.app.listen(port, () => {
-            this.logger.info(`Server started on port ${port}`);
-        });
-    }
+  public start() {
+    const port = this.config.get('server.port') || 3000;
+    this.app.listen(port, () => {
+      this.logger.info(`Server started on port ${port}`);
+    });
+  }
 
-    public getApp(): Express {
-        return this.app;
-    }
+  public getApp(): Express {
+    return this.app;
+  }
 }
