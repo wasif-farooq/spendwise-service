@@ -4,22 +4,23 @@
     "description": "A scalable, versioned Node.js backend with independent services",
     "main": "dist/src/index.js",
     "scripts": {
-        "dev": "nodemon --exec ts-node -r tsconfig-paths/register src/index.ts",
-        "build": "tsc -p tsconfig.build.json",
-        "start": "node -r tsconfig-paths/register dist/src/index.js",
-        "start:api": "npm run start -- --process=api",
-        "start:auth": "npm run start -- --process=auth",
-        "start:user": "npm run start -- --process=user",
+        "dev": "nodemon --watch src --watch config --ext ts,json --ignore dist --ignore node_modules --exec ts-node -r tsconfig-paths/register src/index.ts",
+        "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
+        "start": "node dist/src/index.js",
+        "start:api": "node dist/processes/api-gateway/index.js",
+        "start:auth": "node dist/processes/auth/index.js",
+        "start:user": "node dist/processes/user/index.js",
         "dev:app": "npm run dev:api",
-        "dev:api": "nodemon --exec ts-node -r ./src/register-safe.js processes/api-gateway/index.ts",
-        "dev:worker": "nodemon --exec ts-node -r ./src/register-safe.js processes/worker/index.ts",
+        "dev:api": "nodemon --watch src --watch config --ext ts,json --ignore dist --ignore node_modules --exec ts-node -r ./src/register-safe.js processes/api-gateway/index.ts",
+        "dev:worker": "nodemon --watch src --watch config --ext ts,json --ignore dist --ignore node_modules --exec ts-node -r ./src/register-safe.js processes/worker/index.ts",
         "test": "jest --config jest.config.json",
         "test:watch": "jest --watch",
         "test:coverage": "jest --coverage",
         "test:v1": "jest --testPathPattern=v1",
         "test:v2": "jest --testPathPattern=v2",
-        "lint": "eslint src/**/*.ts",
-        "lint:fix": "eslint src/**/*.ts --fix",
+        "lint": "eslint \"src/**/*.ts\" \"processes/**/*.ts\" \"config/**/*.ts\" \"tests/**/*.ts\"",
+        "lint:ci": "node scripts/ratchet.mjs lint",
+        "lint:fix": "eslint \"src/**/*.ts\" \"processes/**/*.ts\" \"config/**/*.ts\" \"tests/**/*.ts\" --fix",
         "format": "prettier --write \"src/**/*.ts\"",
         "type-check": "tsc --noEmit",
         "migrate": "node-pg-migrate",
@@ -28,6 +29,7 @@
         "migrate:down": "node-pg-migrate down",
         "migrate:reset": "node-pg-migrate down --count 999999",
         "seed": "ts-node -r tsconfig-paths/register scripts/database/seed.ts",
+        "backup-codes:hash": "ts-node -r tsconfig-paths/register scripts/database/hash-backup-codes.ts",
         "exchange-rates": "ts-node -r tsconfig-paths/register src/cli/exchange-rates.cli.ts",
         "exchange-rates:fetch": "ts-node -r tsconfig-paths/register src/cli/exchange-rates.cli.ts fetch",
         "docker:up": "docker compose up -d",
@@ -47,6 +49,8 @@
         "archive:run-older": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts run-older",
         "archive:dry-run": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts dry-run",
         "archive:stats": "ts-node -r tsconfig-paths/register src/workers/archive.worker.ts stats",
+        "activity:partitions:create": "ts-node -r tsconfig-paths/register -e \"const { DatabaseFacade } = require('@facades/DatabaseFacade'); const { PostgresFactory } = require('@database/factories/PostgresFactory'); const { ActivityLogRepository } = require('@domains/activity/repositories/ActivityLogRepository'); const db = new DatabaseFacade(new PostgresFactory()); const repo = new ActivityLogRepository(db); const now = new Date(); const future = new Date(now); future.setMonth(future.getMonth() + 6); repo.ensurePartitionsExist(now, future).then(() => { console.log('Partitions created'); process.exit(0); }).catch(e => { console.error(e); process.exit(1); });\"",
+        "activity:partitions:list": "ts-node -r tsconfig-paths/register -e \"const { DatabaseFacade } = require('@facades/DatabaseFacade'); const { PostgresFactory } = require('@database/factories/PostgresFactory'); const { ActivityLogRepository } = require('@domains/activity/repositories/ActivityLogRepository'); const db = new DatabaseFacade(new PostgresFactory()); const repo = new ActivityLogRepository(db); repo.listPartitions().then(partitions => { console.log(JSON.stringify(partitions, null, 2)); process.exit(0); }).catch(e => { console.error(e); process.exit(1); });\"",
         "minio:avatars:public": "docker exec trackmypocket-backend-minio-1 mc policy set-download local/trackmypocket-avatars || docker exec minio mc policy set-download local/trackmypocket-avatars",
         "stripe:listen": "stripe listen --forward-to localhost:3000/api/v1/payment/webhook/stripe",
         "stripe:listen:verbose": "stripe listen --forward-to localhost:3000/api/v1/payment/webhook/stripe --verbose",
@@ -54,7 +58,8 @@
         "stripe:simulate": "ts-node -r tsconfig-paths/register scripts/stripe-simulate.ts",
         "stripe:webhook": "ts-node -r tsconfig-paths/register scripts/test-webhook.ts",
         "test:recurring": "ts-node -r tsconfig-paths/register scripts/test-recurring.ts",
-        "test:stripe-webhook": "stripe trigger"
+        "test:stripe-webhook": "stripe trigger",
+        "test:unit": "jest --config jest.unit.config.json"
     },
     "keywords": [
         "nodejs",
@@ -70,6 +75,7 @@
         "@aws-sdk/client-s3": "^3.1008.0",
         "@aws-sdk/lib-storage": "^3.1008.0",
         "@aws-sdk/s3-request-presigner": "^3.1008.0",
+        "@types/bcrypt": "^6.0.0",
         "bcrypt": "^5.1.1",
         "bullmq": "^5.0.0",
         "compression": "^1.7.4",
@@ -104,7 +110,6 @@
         "zod": "^3.22.4"
     },
     "devDependencies": {
-        "@types/bcrypt": "^5.0.2",
         "@types/compression": "^1.7.5",
         "@types/cors": "^2.8.17",
         "@types/express": "^4.17.21",
@@ -136,5 +141,12 @@
         "tsx": "^4.21.0",
         "typescript": "^5.3.3"
     },
-    "packageManager": "pnpm@10.30.2+sha512.36cdc707e7b7940a988c9c1ecf88d084f8514b5c3f085f53a2e244c2921d3b2545bc20dd4ebe1fc245feec463bb298aecea7a63ed1f7680b877dc6379d8d0cb4"
+    "packageManager": "pnpm@10.30.2+sha512.36cdc707e7b7940a988c9c1ecf88d084f8514b5c3f085f53a2e244c2921d3b2545bc20dd4ebe1fc245feec463bb298aecea7a63ed1f7680b877dc6379d8d0cb4",
+    "pnpm": {
+        "//": "pnpm 10 blocks dependency build scripts by default. These two need to compile a native binding (bcrypt) or fetch a platform binary (esbuild); without them a fresh install leaves bcrypt unusable. @scarf/scarf and msgpackr-extract are deliberately omitted — the former is telemetry, the latter an optional accelerator with a JS fallback.",
+        "onlyBuiltDependencies": [
+            "bcrypt",
+            "esbuild"
+        ]
+    }
 }

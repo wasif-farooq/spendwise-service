@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Typecheck, test and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Version comes from the "packageManager" field in package.json.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run type-check
+
+      # Unit tests only. `pnpm test` runs the integration suite, which needs a
+      # live Postgres and Redis and currently fails to even load — several
+      # specs import a src/core, src/modules layout that no longer exists.
+      - name: Unit tests
+        run: pnpm run test:unit
+
+      # Compiles with tsconfig.build.json and rewrites path aliases, which is
+      # what the Docker image ships. Catches build-only config drift that
+      # type-check (a different tsconfig) would miss.
+      - name: Build
+        run: pnpm run build
+
+      # Ratcheted against .ratchet-baseline.json: 189 pre-existing errors are
+      # tolerated, a 190th fails the build. Warnings are reported but not
+      # gated. When the baseline reaches 0, replace this with `pnpm run lint`
+      # and delete scripts/ratchet.mjs.
+      - name: Lint
+        run: pnpm run lint:ci
+
+# Not wired up: integration tests. `pnpm test` requires Postgres, Redis and
+# Kafka services and the suite does not currently load — several specs import a
+# src/core, src/modules layout that no longer exists. Once those imports are
+# repaired they can run here via service containers.
