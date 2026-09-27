@@ -42,6 +42,19 @@ export const loginSchema = z.object({
   }),
 });
 
+// Web clients send the authorization code from the redirect; native apps
+// (expo-auth-session) send the ID token from their own PKCE flow.
+export const googleLoginSchema = z.object({
+  body: z
+    .object({
+      code: z.string().min(1).optional(),
+      idToken: z.string().min(1).optional(),
+    })
+    .refine((data) => Boolean(data.code || data.idToken), {
+      message: 'Authorization code or ID token required',
+    }),
+});
+
 // tempToken is an opaque signed token, not a user id — it must never be
 // accepted as a bare UUID, and a caller-supplied userId is not proof of
 // anything, so it is no longer honoured.

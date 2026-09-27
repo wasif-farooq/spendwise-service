@@ -135,14 +135,18 @@ export class AuthController {
   }
 
   async googleLogin(req: Request, res: Response) {
-    const { code } = req.body;
+    // Web sends an authorization code; native apps send the ID token they got
+    // from their own PKCE flow. The code path wins if both are present.
+    const { code, idToken } = req.body;
 
-    if (!code) {
-      res.status(400).json({ message: 'Authorization code required' });
+    if (!code && !idToken) {
+      res.status(400).json({ message: 'Authorization code or ID token required' });
       return;
     }
 
-    const result = await this.authRequestRepository.loginWithGoogle(code);
+    const result = code
+      ? await this.authRequestRepository.loginWithGoogle(code)
+      : await this.authRequestRepository.loginWithGoogleIdToken(idToken);
 
     if (result.error) {
       res.status(result.statusCode || 400).json({ message: result.error });

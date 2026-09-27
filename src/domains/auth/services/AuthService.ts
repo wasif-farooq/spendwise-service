@@ -27,6 +27,24 @@ import { WorkspaceRole } from '@domains/workspaces/models/WorkspaceRole';
 import { WorkspaceMember } from '@domains/workspaces/models/WorkspaceMember';
 import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
 
+/** The subset of a Google profile the login flow needs, from either source. */
+interface GoogleProfile {
+  sub: string;
+  email: string;
+  name?: string;
+  given_name?: string;
+  family_name?: string;
+}
+
+type GoogleLoginResult = {
+  token?: string;
+  refreshToken?: string;
+  user?: User;
+  requiresTwoFactor?: boolean;
+  availableMethods?: any[];
+  tempToken?: string;
+};
+
 export class AuthService {
   /** Failed second-factor guesses allowed before the challenge is locked. */
   private static readonly MAX_2FA_ATTEMPTS = 5;
@@ -199,14 +217,11 @@ export class AuthService {
     return { token, refreshToken, user };
   }
 
-  async loginWithGoogle(code: string): Promise<{
-    token?: string;
-    refreshToken?: string;
-    user?: User;
-    requiresTwoFactor?: boolean;
-    availableMethods?: any[];
-    tempToken?: string;
-  }> {
+  /**
+   * Web sign-in: exchange an authorization code (issued to the web client with
+   * the fixed redirect URI) for tokens, then read the profile from userinfo.
+   */
+  async loginWithGoogle(code: string): Promise<GoogleLoginResult> {
     const config = ConfigLoader.getInstance();
     const googleConfig = config.get('auth.social.google') as any;
 
@@ -253,6 +268,116 @@ export class AuthService {
       picture?: string;
     };
 
+    return this.completeGoogleLogin({
+      sub: googleUser.id,
+      email: googleUser.email,
+      name: googleUser.name,
+      given_name: googleUser.given_name,
+      family_name: googleUser.family_name,
+    });
+  }
+
+  /**
+   * Native sign-in: the mobile app (expo-auth-session's Google provider) runs
+   * the PKCE flow against its own iOS/Android client and sends us the
+   * resulting ID token. There is no client secret on a device, so instead of
+   * exchanging a code we verify the token with Google and check it was issued
+   * to one of our client IDs.
+   */
+  async loginWithGoogleIdToken(idToken: string): Promise<GoogleLoginResult> {
+    const allowedAudiences = this.getGoogleAudiences();
+    if (allowedAudiences.length === 0) {
+      throw new AppError('Google OAuth not configured', 500);
+    }
+
+    const profile = await this.verifyGoogleIdToken(idToken, allowedAudiences);
+    return this.completeGoogleLogin(profile);
+  }
+
+  /** The web client ID plus every configured mobile client ID. */
+  private getGoogleAudiences(): string[] {
+    const googleConfig = ConfigLoader.getInstance().get('auth.social.google') as
+      | { clientId?: unknown; mobileClientIds?: unknown }
+      | undefined;
+    const mobile = googleConfig?.mobileClientIds;
+    const mobileIds = Array.isArray(mobile)
+      ? mobile
+      : typeof mobile === 'string'
+        ? mobile.split(',')
+        : [];
+
+    return [googleConfig?.clientId, ...(mobileIds as unknown[])]
+      .filter((id): id is string => typeof id === 'string')
+      .map((id) => id.trim())
+      .filter(Boolean);
+  }
+
+  /**
+   * Verify an ID token via Google's tokeninfo endpoint, which checks the
+   * signature. We still have to check the claims: a validly signed token
+   * minted for some other app's client ID must not log anyone in here.
+   */
+  private async verifyGoogleIdToken(
+    idToken: string,
+    allowedAudiences: string[],
+  ): Promise<GoogleProfile> {
+    const invalid = () => new AppError('Invalid Google ID token', 401);
+
+    let response: Response;
+    try {
+      response = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+      );
+    } catch (error) {
+      console.error('[AuthService] Google tokeninfo request failed:', error);
+      throw invalid();
+    }
+
+    if (!response.ok) {
+      throw invalid();
+    }
+
+    const claims = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!claims) {
+      throw invalid();
+    }
+
+    const { iss, aud, exp, sub, email, email_verified } = claims;
+
+    if (iss !== 'accounts.google.com' && iss !== 'https://accounts.google.com') {
+      throw invalid();
+    }
+    if (typeof aud !== 'string' || !allowedAudiences.includes(aud)) {
+      throw invalid();
+    }
+    const expiresAt = Number(exp);
+    if (!Number.isFinite(expiresAt) || expiresAt * 1000 <= Date.now()) {
+      throw invalid();
+    }
+    if (email_verified !== true && email_verified !== 'true') {
+      throw invalid();
+    }
+    if (typeof sub !== 'string' || !sub || typeof email !== 'string' || !email) {
+      throw invalid();
+    }
+
+    const optionalString = (value: unknown) => (typeof value === 'string' ? value : undefined);
+
+    return {
+      sub,
+      email,
+      name: optionalString(claims.name),
+      given_name: optionalString(claims.given_name),
+      family_name: optionalString(claims.family_name),
+    };
+  }
+
+  /**
+   * Shared tail of both Google flows: find or create the user, link the
+   * Google identity, provision default resources, then either start the 2FA
+   * challenge or issue tokens.
+   */
+  private async completeGoogleLogin(googleUser: GoogleProfile): Promise<GoogleLoginResult> {
     // Step 3: Find existing auth identity by provider + sub
     let user = await this.userRepo.findByEmail(googleUser.email);
     let isNewUser = false;
@@ -265,7 +390,7 @@ export class AuthService {
         const newIdentity = AuthIdentity.create({
           userId: user.id,
           provider: 'google',
-          sub: googleUser.id,
+          sub: googleUser.sub,
         });
         await this.authRepo.save(newIdentity);
       }
@@ -308,7 +433,7 @@ export class AuthService {
       const identity = AuthIdentity.create({
         userId: user.id,
         provider: 'google',
-        sub: googleUser.id,
+        sub: googleUser.sub,
       });
       await this.authRepo.save(identity);
 
