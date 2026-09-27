@@ -12,10 +12,14 @@ export class WorkspaceRepository extends BaseRepository<Workspace> {
     this.dbToUse = db;
   }
 
-  // For using a different DB client (e.g., in transactions)
+  // Returns a copy bound to `db` (e.g. a transaction client). The shared
+  // instance is never modified: repositories are singletons, and rebinding
+  // them left every later request on a released client ("Client was closed").
   withDb(db: DatabaseFacade): WorkspaceRepository {
-    this.dbToUse = db;
-    return this;
+    const bound = Object.create(Object.getPrototypeOf(this)) as WorkspaceRepository;
+    Object.assign(bound, this);
+    bound.dbToUse = db;
+    return bound;
   }
 
   async findByIds(ids: string[]): Promise<Workspace[]> {

@@ -12,9 +12,12 @@ export class WorkspaceInvitationsRepository extends BaseRepository<WorkspaceInvi
     this.dbToUse = db;
   }
 
+  // Returns a copy bound to `db`; the shared singleton is never modified.
   withDb(db: DatabaseFacade): WorkspaceInvitationsRepository {
-    this.dbToUse = db;
-    return this;
+    const bound = Object.create(Object.getPrototypeOf(this)) as WorkspaceInvitationsRepository;
+    Object.assign(bound, this);
+    bound.dbToUse = db;
+    return bound;
   }
 
   protected mapToEntity(row: any): WorkspaceInvitation {
