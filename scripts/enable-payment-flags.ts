@@ -20,16 +20,17 @@ async function enablePaymentFlags() {
         const flags = [
             { key: 'paymentStripe', description: 'Stripe Payment Gateway: Enable payments via Stripe', is_enabled: true },
             { key: 'paymentLemonSqueezy', description: 'Lemon Squeezy Payment Gateway: Enable payments via Lemon Squeezy', is_enabled: true },
-            { key: 'paymentTwoCheckout', description: '2Checkout Payment Gateway: Enable payments via 2Checkout', is_enabled: true }
+            { key: 'paymentTwoCheckout', description: '2Checkout Payment Gateway: Enable payments via 2Checkout', is_enabled: true },
+            { key: 'paymentPaddle', description: 'Paddle Billing: Enable payments via Paddle (card, PayPal)', is_enabled: true }
         ];
 
         for (const flag of flags) {
             await client.query(`
-                INSERT INTO feature_flags (key, description, is_enabled)
-                VALUES ($1, $2, $3)
+                INSERT INTO feature_flags (key, description, enabled, rollout_percentage)
+                VALUES ($1, $2, $3, 100)
                 ON CONFLICT (key) DO UPDATE SET
                     description = EXCLUDED.description,
-                    is_enabled = EXCLUDED.is_enabled;
+                    enabled = EXCLUDED.enabled;
             `, [flag.key, flag.description, flag.is_enabled]);
             console.log(`Enabled: ${flag.key}`);
         }

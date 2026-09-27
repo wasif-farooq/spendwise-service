@@ -213,6 +213,16 @@ export default {
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
   },
 
+  // Paddle Billing. PADDLE_ENV=sandbox targets sandbox-api.paddle.com. The
+  // client token is browser-safe and is handed to the web app per checkout;
+  // the API key and webhook secret must never leave the server.
+  paddle: {
+    apiKey: process.env.PADDLE_API_KEY,
+    clientToken: process.env.PADDLE_CLIENT_TOKEN,
+    webhookSecret: process.env.PADDLE_WEBHOOK_SECRET,
+    environment: process.env.PADDLE_ENV === 'production' ? 'production' : 'sandbox',
+  },
+
   // Activity Log Configuration
   activityLog: {
     enabled: process.env.ACTIVITY_LOG_ENABLED !== 'false',

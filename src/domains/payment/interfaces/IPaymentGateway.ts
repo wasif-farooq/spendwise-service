@@ -13,8 +13,15 @@ export interface SubscriptionDetails {
 }
 
 export interface CheckoutSession {
+  /** Hosted checkout URL to redirect to. Empty for overlay-only providers (Paddle). */
   url: string;
   sessionId: string;
+  /** Set by providers whose checkout is opened client-side (Paddle.js overlay). */
+  provider?: PaymentProvider;
+  transactionId?: string;
+  /** Browser-safe client-side token. Never an API key. */
+  clientToken?: string;
+  environment?: 'sandbox' | 'production';
 }
 
 export interface IPaymentGateway {
@@ -30,6 +37,8 @@ export interface IPaymentGateway {
     successUrl: string;
     cancelUrl: string;
     userId?: string;
+    /** ISO 4217 code of the plan's price. Defaults to USD. */
+    currency?: string;
   }): Promise<CheckoutSession>;
 
   /**
@@ -48,4 +57,12 @@ export interface IPaymentGateway {
   getProviderName(): string;
 }
 
-export type PaymentProvider = 'stripe' | 'lemonsqueezy' | 'twocheckout';
+export type PaymentProvider = 'stripe' | 'lemonsqueezy' | 'twocheckout' | 'paddle';
+
+/** Feature flag that gates each provider (feature_flags.key). */
+export const PAYMENT_PROVIDER_FLAGS: Record<PaymentProvider, string> = {
+  stripe: 'paymentStripe',
+  lemonsqueezy: 'paymentLemonSqueezy',
+  twocheckout: 'paymentTwoCheckout',
+  paddle: 'paymentPaddle',
+};
