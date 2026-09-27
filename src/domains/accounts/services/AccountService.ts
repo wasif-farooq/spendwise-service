@@ -5,112 +5,190 @@ import { Account, AccountType } from '../models/Account';
 import { AppError } from '@shared/errors/AppError';
 import { CreateAccountDto, UpdateAccountDto } from '../dto';
 import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
+import { ActivityCaptureService } from '@shared/ActivityCaptureService';
 
 export class AccountService {
-    constructor(
-        @Inject('AccountRepository') private accountRepository: IAccountRepository,
-        @Inject('ExchangeRateService') private exchangeRateService?: ExchangeRateService
-    ) { }
+  constructor(
+    @Inject('AccountRepository') private accountRepository: IAccountRepository,
+    @Inject('ExchangeRateService') private exchangeRateService?: ExchangeRateService,
+    private activityCapture?: ActivityCaptureService,
+  ) {}
 
-    async getAccountsByWorkspace(workspaceId: string): Promise<Account[]> {
-        return this.accountRepository.findByWorkspaceId(workspaceId);
+  async getAccountsByWorkspace(workspaceId: string): Promise<Account[]> {
+    return this.accountRepository.findByWorkspaceId(workspaceId);
+  }
+
+  async getAccountsByUser(userId: string): Promise<Account[]> {
+    return this.accountRepository.findByUserId(userId);
+  }
+
+  async getAccountById(id: string, workspaceId: string): Promise<Account> {
+    const account = await this.accountRepository.findById(id);
+    if (!account) {
+      throw new AppError('Account not found', 404);
     }
-
-    async getAccountsByUser(userId: string): Promise<Account[]> {
-        return this.accountRepository.findByUserId(userId);
+    // Verify the account belongs to the workspace
+    if (account.workspaceId !== workspaceId) {
+      throw new AppError('Account not found', 404);
     }
+    return account;
+  }
 
-    async getAccountById(id: string, workspaceId: string): Promise<Account> {
-        const account = await this.accountRepository.findById(id);
-        if (!account) {
-            throw new AppError('Account not found', 404);
-        }
-        // Verify the account belongs to the workspace
-        if (account.workspaceId !== workspaceId) {
-            throw new AppError('Account not found', 404);
-        }
-        return account;
-    }
+  async createAccount(
+    data: CreateAccountDto,
+    userId: string,
+    workspaceId: string,
+  ): Promise<Account> {
+    const account = Account.create({
+      ...data,
+      userId,
+      workspaceId,
+    });
+    const saved = await this.accountRepository.save(account);
 
-    async createAccount(data: CreateAccountDto, userId: string, workspaceId: string): Promise<Account> {
-        const account = Account.create({
-            ...data,
-            userId,
+    if (this.activityCapture) {
+      this.activityCapture
+        .log(
+          {
+            entityType: 'account',
+            entityId: saved.id,
+            action: 'create',
+            newValues: saved.toJSON(),
+          },
+          {
             workspaceId,
-        });
-        return this.accountRepository.save(account);
-    }
-
-    async createAccountWithRepo(data: CreateAccountDto, userId: string, workspaceId: string, repo: any): Promise<Account> {
-        const account = Account.create({
-            ...data,
             userId,
+          },
+        )
+        .catch(() => {});
+    }
+
+    return saved;
+  }
+
+  async createAccountWithRepo(
+    data: CreateAccountDto,
+    userId: string,
+    workspaceId: string,
+    repo: any,
+  ): Promise<Account> {
+    const account = Account.create({
+      ...data,
+      userId,
+      workspaceId,
+    });
+    return repo.save(account);
+  }
+
+  async updateAccount(
+    id: string,
+    data: UpdateAccountDto,
+    workspaceId: string,
+    userId?: string,
+  ): Promise<Account> {
+    console.log('[DEBUG AccountService] updateAccount called with data:', data);
+    const account = await this.getAccountById(id, workspaceId);
+    const oldValues = account.toJSON();
+
+    if (data.name !== undefined) {
+      console.log('[DEBUG] Updating name to:', data.name);
+      account.updateDetails(data.name, account.color);
+    }
+    if (data.balance !== undefined) {
+      account.updateBalance(data.balance);
+    }
+    if (data.color !== undefined) {
+      account.updateDetails(account.name, data.color);
+    }
+    if (data.type !== undefined) {
+      console.log('[DEBUG] Updating type to:', data.type);
+      account.updateType(data.type);
+    }
+    if (data.currency !== undefined) {
+      if (account.currency !== data.currency && account.hasTransactions()) {
+        throw new AppError('Cannot change currency for account with existing transactions', 400);
+      }
+      console.log('[DEBUG] Updating currency to:', data.currency);
+      account.updateCurrency(data.currency);
+    }
+
+    const updated = await this.accountRepository.update(account);
+    console.log('[DEBUG] Repository returned:', updated.toJSON());
+
+    if (this.activityCapture) {
+      this.activityCapture
+        .log(
+          {
+            entityType: 'account',
+            entityId: id,
+            action: 'update',
+            oldValues,
+            newValues: updated.toJSON(),
+          },
+          {
             workspaceId,
-        });
-        return repo.save(account);
+            userId: userId || account.userId,
+          },
+        )
+        .catch(() => {});
     }
 
-    async updateAccount(id: string, data: UpdateAccountDto, workspaceId: string): Promise<Account> {
-        console.log('[DEBUG AccountService] updateAccount called with data:', data);
-        const account = await this.getAccountById(id, workspaceId);
-        
-        if (data.name !== undefined) {
-            console.log('[DEBUG] Updating name to:', data.name);
-            account.updateDetails(data.name, account.color);
+    return updated;
+  }
+
+  async deleteAccount(id: string, workspaceId: string, userId?: string): Promise<void> {
+    const account = await this.getAccountById(id, workspaceId);
+    const oldValues = account.toJSON();
+    await this.accountRepository.delete(id);
+
+    if (this.activityCapture) {
+      this.activityCapture
+        .log(
+          {
+            entityType: 'account',
+            entityId: id,
+            action: 'delete',
+            oldValues,
+          },
+          {
+            workspaceId,
+            userId: userId || account.userId,
+          },
+        )
+        .catch(() => {});
+    }
+  }
+
+  async getTotalBalance(
+    workspaceIdId: string,
+    targetCurrency: string,
+  ): Promise<{ total: number; currency: string }> {
+    const accounts = await this.accountRepository.findAllWithBalancesForWorkspace(workspaceIdId);
+
+    let total = 0;
+    for (const account of accounts) {
+      if (account.currency === targetCurrency) {
+        total += account.balance;
+      } else if (this.exchangeRateService) {
+        try {
+          const conversion = await this.exchangeRateService.convert(
+            account.balance,
+            account.currency,
+            targetCurrency,
+          );
+          total += conversion.convertedAmount;
+        } catch (err) {
+          console.error(
+            `[AccountService] Failed to convert ${account.currency} to ${targetCurrency}:`,
+            err,
+          );
+          total += account.balance;
         }
-        if (data.balance !== undefined) {
-            account.updateBalance(data.balance);
-        }
-        if (data.color !== undefined) {
-            account.updateDetails(account.name, data.color);
-        }
-        if (data.type !== undefined) {
-            console.log('[DEBUG] Updating type to:', data.type);
-            account.updateType(data.type);
-        }
-        if (data.currency !== undefined) {
-            // Check if trying to change currency for account with transactions
-            if (account.currency !== data.currency && account.hasTransactions()) {
-                throw new AppError('Cannot change currency for account with existing transactions', 400);
-            }
-            console.log('[DEBUG] Updating currency to:', data.currency);
-            account.updateCurrency(data.currency);
-        }
-        
-        const updated = await this.accountRepository.update(account);
-        console.log('[DEBUG] Repository returned:', updated.toJSON());
-        return updated;
+      } else {
+        total += account.balance;
+      }
     }
 
-    async deleteAccount(id: string, workspaceId: string): Promise<void> {
-        await this.getAccountById(id, workspaceId); // Verify ownership
-        await this.accountRepository.delete(id);
-    }
-
-    async getTotalBalance(workspaceIdId: string, targetCurrency: string): Promise<{ total: number; currency: string }> {
-        const accounts = await this.accountRepository.findAllWithBalancesForWorkspace(workspaceIdId);
-        
-        let total = 0;
-        for (const account of accounts) {
-            if (account.currency === targetCurrency) {
-                total += account.balance;
-            } else if (this.exchangeRateService) {
-                try {
-                    const conversion = await this.exchangeRateService.convert(
-                        account.balance,
-                        account.currency,
-                        targetCurrency
-                    );
-                    total += conversion.convertedAmount;
-                } catch (err) {
-                    console.error(`[AccountService] Failed to convert ${account.currency} to ${targetCurrency}:`, err);
-                    total += account.balance;
-                }
-            } else {
-                total += account.balance;
-            }
-        }
-        
-        return { total: Math.round(total * 100) / 100, currency: targetCurrency };
-    }
+    return { total: Math.round(total * 100) / 100, currency: targetCurrency };
+  }
 }

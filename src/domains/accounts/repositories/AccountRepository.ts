@@ -3,85 +3,86 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { IAccountRepository, AccountWithBalance } from './IAccountRepository';
 
 export class AccountRepository implements IAccountRepository {
-    private dbToUse: DatabaseFacade;
+  private dbToUse: DatabaseFacade;
 
-    constructor(private db: DatabaseFacade) {
-        this.dbToUse = db;
-    }
+  constructor(private db: DatabaseFacade) {
+    this.dbToUse = db;
+  }
 
-    // For using a different DB client (e.g., in transactions)
-    withDb(db: DatabaseFacade): AccountRepository {
-        this.dbToUse = db;
-        return this;
-    }
+  // Returns a copy bound to `db` (e.g. a transaction client). The shared
+  // instance is never modified: repositories are singletons, and rebinding
+  // them left every later request on a released client ("Client was closed").
+  withDb(db: DatabaseFacade): AccountRepository {
+    const bound = Object.create(Object.getPrototypeOf(this)) as AccountRepository;
+    Object.assign(bound, this);
+    bound.dbToUse = db;
+    return bound;
+  }
 
-    async findById(id: string): Promise<Account | null> {
-        const result = await this.dbToUse.query(
-            'SELECT * FROM accounts WHERE id = $1',
-            [id]
-        );
-        return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
-    }
+  async findById(id: string): Promise<Account | null> {
+    const result = await this.dbToUse.query('SELECT * FROM accounts WHERE id = $1', [id]);
+    return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
+  }
 
-    async findByWorkspaceId(workspaceId: string): Promise<Account[]> {
-        const result = await this.dbToUse.query(
-            'SELECT * FROM accounts WHERE workspace_id = $1 ORDER BY created_at DESC',
-            [workspaceId]
-        );
-        return result.rows.map((row: any) => this.mapToEntity(row));
-    }
+  async findByWorkspaceId(workspaceId: string): Promise<Account[]> {
+    const result = await this.dbToUse.query(
+      'SELECT * FROM accounts WHERE workspace_id = $1 ORDER BY created_at DESC',
+      [workspaceId],
+    );
+    return result.rows.map((row: any) => this.mapToEntity(row));
+  }
 
-    async countByWorkspaceId(workspaceId: string): Promise<number> {
-        const result = await this.dbToUse.query(
-            'SELECT COUNT(*) as count FROM accounts WHERE workspace_id = $1',
-            [workspaceId]
-        );
-        return parseInt(result.rows[0]?.count || '0');
-    }
+  async countByWorkspaceId(workspaceId: string): Promise<number> {
+    const result = await this.dbToUse.query(
+      'SELECT COUNT(*) as count FROM accounts WHERE workspace_id = $1',
+      [workspaceId],
+    );
+    return parseInt(result.rows[0]?.count || '0');
+  }
 
-    async findByUserId(userId: string): Promise<Account[]> {
-        const result = await this.dbToUse.query(
-            'SELECT * FROM accounts WHERE user_id = $1 ORDER BY created_at DESC',
-            [userId]
-        );
-        return result.rows.map((row: any) => this.mapToEntity(row));
-    }
+  async findByUserId(userId: string): Promise<Account[]> {
+    const result = await this.dbToUse.query(
+      'SELECT * FROM accounts WHERE user_id = $1 ORDER BY created_at DESC',
+      [userId],
+    );
+    return result.rows.map((row: any) => this.mapToEntity(row));
+  }
 
-    async save(account: Account): Promise<Account> {
-        const data = account.getProps();
-        const mappedData = {
-            id: account.id,
-            name: data.name,
-            type: data.type,
-            balance: data.balance,
-            currency: data.currency,
-            color: data.color,
-            workspace_id: data.workspaceId,
-            user_id: data.userId,
-            last_activity: data.lastActivity,
-            created_at: data.createdAt,
-            updated_at: data.updatedAt,
-            total_income: data.totalIncome,
-            total_expense: data.totalExpense,
-        };
+  async save(account: Account): Promise<Account> {
+    const data = account.getProps();
+    const mappedData = {
+      id: account.id,
+      name: data.name,
+      type: data.type,
+      balance: data.balance,
+      currency: data.currency,
+      color: data.color,
+      workspace_id: data.workspaceId,
+      user_id: data.userId,
+      last_activity: data.lastActivity,
+      created_at: data.createdAt,
+      updated_at: data.updatedAt,
+      total_income: data.totalIncome,
+      total_expense: data.totalExpense,
+    };
 
-        const keys = Object.keys(mappedData);
-        const values = Object.values(mappedData);
-        const indices = keys.map((_, i) => `$${i + 1}`).join(', ');
+    const keys = Object.keys(mappedData);
+    const values = Object.values(mappedData);
+    const indices = keys.map((_, i) => `$${i + 1}`).join(', ');
 
-        const query = `
+    const query = `
             INSERT INTO accounts (${keys.join(', ')})
             VALUES (${indices})
             RETURNING *
         `;
 
-        const result = await this.dbToUse.query(query, values);
-        return this.mapToEntity(result.rows[0]);
-    }
+    const result = await this.dbToUse.query(query, values);
+    return this.mapToEntity(result.rows[0]);
+  }
 
-    async update(account: Account): Promise<Account> {
-        const data = account.getProps();
-        const query = `
+  async update(account: Account): Promise<Account> {
+    const data = account.getProps();
+    const query = `
             UPDATE accounts
             SET name = $1, type = $2, balance = $3, currency = $4, color = $5,
                 last_activity = $6, updated_at = NOW(),
@@ -90,84 +91,84 @@ export class AccountRepository implements IAccountRepository {
             RETURNING *
         `;
 
-        const result = await this.dbToUse.query(query, [
-            data.name,
-            data.type,
-            data.balance,
-            data.currency,
-            data.color,
-            data.lastActivity,
-            account.id,
-            data.totalIncome,
-            data.totalExpense,
-        ]);
+    const result = await this.dbToUse.query(query, [
+      data.name,
+      data.type,
+      data.balance,
+      data.currency,
+      data.color,
+      data.lastActivity,
+      account.id,
+      data.totalIncome,
+      data.totalExpense,
+    ]);
 
-        if (result.rowCount === 0) {
-            throw new Error('Account not found');
-        }
-
-        return this.mapToEntity(result.rows[0]);
+    if (result.rowCount === 0) {
+      throw new Error('Account not found');
     }
 
-    async updateIncomeExpense(id: string, totalIncome: number, totalExpense: number): Promise<void> {
-        const balance = totalIncome - totalExpense;
-        await this.dbToUse.query(
-            'UPDATE accounts SET balance = $1, total_income = $2, total_expense = $3, last_activity = NOW(), updated_at = NOW() WHERE id = $4',
-            [balance, totalIncome, totalExpense, id]
-        );
-    }
+    return this.mapToEntity(result.rows[0]);
+  }
 
-    async delete(id: string): Promise<void> {
-        await this.dbToUse.query('DELETE FROM accounts WHERE id = $1', [id]);
-    }
+  async updateIncomeExpense(id: string, totalIncome: number, totalExpense: number): Promise<void> {
+    const balance = totalIncome - totalExpense;
+    await this.dbToUse.query(
+      'UPDATE accounts SET balance = $1, total_income = $2, total_expense = $3, last_activity = NOW(), updated_at = NOW() WHERE id = $4',
+      [balance, totalIncome, totalExpense, id],
+    );
+  }
 
-    async deleteByWorkspaceId(workspaceId: string): Promise<void> {
-        await this.dbToUse.query('DELETE FROM accounts WHERE workspace_id = $1', [workspaceId]);
-    }
+  async delete(id: string): Promise<void> {
+    await this.dbToUse.query('DELETE FROM accounts WHERE id = $1', [id]);
+  }
 
-    async getTotalBalance(workspaceId: string): Promise<number> {
-        const result = await this.dbToUse.query(
-            'SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE workspace_id = $1',
-            [workspaceId]
-        );
-        return parseFloat(result.rows[0]?.total || '0');
-    }
+  async deleteByWorkspaceId(workspaceId: string): Promise<void> {
+    await this.dbToUse.query('DELETE FROM accounts WHERE workspace_id = $1', [workspaceId]);
+  }
 
-    async findAllWithBalancesForWorkspace(workspaceId: string): Promise<AccountWithBalance[]> {
-        const result = await this.dbToUse.query(
-            'SELECT id, name, balance, currency FROM accounts WHERE workspace_id = $1',
-            [workspaceId]
-        );
-        return result.rows.map((row: any) => ({
-            id: row.id,
-            name: row.name,
-            balance: parseFloat(row.balance),
-            currency: row.currency
-        }));
-    }
+  async getTotalBalance(workspaceId: string): Promise<number> {
+    const result = await this.dbToUse.query(
+      'SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE workspace_id = $1',
+      [workspaceId],
+    );
+    return parseFloat(result.rows[0]?.total || '0');
+  }
 
-    async updateBalance(id: string, balance: number): Promise<void> {
-        await this.dbToUse.query(
-            'UPDATE accounts SET balance = $1, last_activity = NOW(), updated_at = NOW() WHERE id = $2',
-            [balance, id]
-        );
-    }
+  async findAllWithBalancesForWorkspace(workspaceId: string): Promise<AccountWithBalance[]> {
+    const result = await this.dbToUse.query(
+      'SELECT id, name, balance, currency FROM accounts WHERE workspace_id = $1',
+      [workspaceId],
+    );
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      balance: parseFloat(row.balance),
+      currency: row.currency,
+    }));
+  }
 
-    private mapToEntity(row: any): Account {
-        const props: AccountProps = {
-            name: row.name,
-            type: row.type,
-            balance: parseFloat(row.balance),
-            currency: row.currency,
-            color: row.color,
-            workspaceId: row.workspace_id,
-            userId: row.user_id,
-            lastActivity: new Date(row.last_activity),
-            createdAt: new Date(row.created_at),
-            updatedAt: new Date(row.updated_at),
-            totalIncome: parseFloat(row.total_income) || 0,
-            totalExpense: parseFloat(row.total_expense) || 0,
-        };
-        return Account.restore(props, row.id);
-    }
+  async updateBalance(id: string, balance: number): Promise<void> {
+    await this.dbToUse.query(
+      'UPDATE accounts SET balance = $1, last_activity = NOW(), updated_at = NOW() WHERE id = $2',
+      [balance, id],
+    );
+  }
+
+  private mapToEntity(row: any): Account {
+    const props: AccountProps = {
+      name: row.name,
+      type: row.type,
+      balance: parseFloat(row.balance),
+      currency: row.currency,
+      color: row.color,
+      workspaceId: row.workspace_id,
+      userId: row.user_id,
+      lastActivity: new Date(row.last_activity),
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+      totalIncome: parseFloat(row.total_income) || 0,
+      totalExpense: parseFloat(row.total_expense) || 0,
+    };
+    return Account.restore(props, row.id);
+  }
 }

@@ -43,3 +43,11 @@ config/monitoring/prometheus.yml
 
 .agents/
 venv/
+.gitnexus
+
+# Generated tool output
+graphify-out/
+.graphify_chunk_*.txt
+.graphify_detect.json
+.opencode/
+mock_2fa_code.txt

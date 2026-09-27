@@ -1,70 +1,49 @@
 import { DatabaseFacade } from '@facades/DatabaseFacade';
+import { CacheFacade } from '@facades/CacheFacade';
 import { Transaction, TransactionProps } from '../models/Transaction';
 import { CursorPaginationOptions, CursorFilters, PaginatedResult } from './types';
 import { Container } from '@di/Container';
 
-// In-memory cache for stats (fallback when Redis unavailable)
-interface CacheEntry<T> {
-    data: T;
-    expiresAt: number;
-}
-
-class StatsCache {
-    private cache = new Map<string, CacheEntry<any>>();
-    private defaultTTL = 5 * 60 * 1000; // 5 minutes
-
-    get<T>(key: string): T | null {
-        const entry = this.cache.get(key);
-        if (!entry) return null;
-        if (Date.now() > entry.expiresAt) {
-            this.cache.delete(key);
-            return null;
-        }
-        return entry.data as T;
-    }
-
-    set<T>(key: string, data: T, ttl = this.defaultTTL): void {
-        this.cache.set(key, { data, expiresAt: Date.now() + ttl });
-    }
-
-    invalidate(key: string): void {
-        this.cache.delete(key);
-    }
-
-    invalidatePattern(pattern: string): void {
-        for (const key of this.cache.keys()) {
-            if (key.includes(pattern)) this.cache.delete(key);
-        }
-    }
-}
-
-const statsCache = new StatsCache();
-const ACCOUNTS_STATS_TTL = 5 * 60 * 1000; // 5 minutes
+const ACCOUNTS_STATS_TTL = 5 * 60; // 5 minutes in seconds (Redis EX)
 
 export class TransactionRepository {
-    private dbToUse: DatabaseFacade;
+  private dbToUse: DatabaseFacade;
+  private cache: CacheFacade | null;
 
-    constructor(private db: DatabaseFacade) {
-        this.dbToUse = db;
-    }
+  constructor(
+    private db: DatabaseFacade,
+    cache?: CacheFacade,
+  ) {
+    this.dbToUse = db;
+    this.cache = cache || null;
+  }
 
-    // For using a different DB client (e.g., in transactions)
-    withDb(db: DatabaseFacade): TransactionRepository {
-        this.dbToUse = db;
-        return this;
-    }
+  // Returns a copy bound to `db` (e.g. a transaction client). The shared
+  // instance is never modified: repositories are singletons, and rebinding
+  // them left every later request on a released client ("Client was closed").
+  withDb(db: DatabaseFacade): TransactionRepository {
+    const bound = Object.create(Object.getPrototypeOf(this)) as TransactionRepository;
+    Object.assign(bound, this);
+    bound.dbToUse = db;
+    return bound;
+  }
 
-    async findById(id: string): Promise<Transaction | null> {
-        const result = await this.dbToUse.query(
-            'SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.id = $1',
-            [id]
-        );
-        return result.rows[0] ? this.mapToEntityWithCategory(result.rows[0]) : null;
-    }
+  withCache(cache: CacheFacade): TransactionRepository {
+    this.cache = cache;
+    return this;
+  }
 
-    async findByIdWithDetails(id: string): Promise<any | null> {
-        const result = await this.dbToUse.query(
-            `SELECT 
+  async findById(id: string): Promise<Transaction | null> {
+    const result = await this.dbToUse.query(
+      'SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.id = $1',
+      [id],
+    );
+    return result.rows[0] ? this.mapToEntityWithCategory(result.rows[0]) : null;
+  }
+
+  async findByIdWithDetails(id: string): Promise<any | null> {
+    const result = await this.dbToUse.query(
+      `SELECT 
                 t.*, 
                 c.name as category_name,
                 c.icon as category_icon,
@@ -78,125 +57,133 @@ export class TransactionRepository {
             LEFT JOIN accounts a ON t.account_id = a.id
             LEFT JOIN users u ON t.user_id = u.id
             WHERE t.id = $1`,
-            [id]
-        );
-        if (!result.rows[0]) return null;
+      [id],
+    );
+    if (!result.rows[0]) return null;
 
-        const row = result.rows[0];
-        
-        // Fetch all linked transactions
-        const linkedTransactionIds = row.linked_transaction_ids || [];
-        const linkedTransactions = await Promise.all(
-            linkedTransactionIds.map((linkedId: string) => this.findByIdBasic(linkedId))
-        );
-        
-        const filteredLinkedTransactions = linkedTransactions.filter(Boolean);
+    const row = result.rows[0];
 
-        // Fetch attachments for receipt_ids
-        const receiptIds = row.receipt_ids || [];
-        let receipts: any[] = [];
-        
-        if (receiptIds.length > 0) {
-            try {
-                const attachmentsResult = await this.dbToUse.query(
-                    'SELECT * FROM attachments WHERE id = ANY($1)',
-                    [receiptIds]
-                );
-                
-                let storageService: any = null;
-                try {
-                    const StorageModule = await import('@domains/storage/services/StorageService');
-                    storageService = Container.getInstance().resolve<any>('StorageService');
-                } catch (e) {
-                    console.log('[TransactionRepository] StorageService not available');
-                }
-                
-                if (storageService) {
-                    receipts = await Promise.all(
-                        attachmentsResult.rows.map(async (att: any) => {
-                            try {
-                                const { url } = await storageService.getFile(att.id);
-                                return {
-                                    id: att.id,
-                                    filename: att.filename,
-                                    contentType: att.content_type,
-                                    size: att.size,
-                                    url
-                                };
-                            } catch (e) {
-                                return {
-                                    id: att.id,
-                                    filename: att.filename,
-                                    contentType: att.content_type,
-                                    size: att.size,
-                                    url: null
-                                };
-                            }
-                        })
-                    );
-                } else {
-                    // Just return basic info without URLs
-                    receipts = attachmentsResult.rows.map((att: any) => ({
-                        id: att.id,
-                        filename: att.filename,
-                        contentType: att.content_type,
-                        size: att.size,
-                        url: null
-                    }));
-                }
-                
-                // Sort by original order of receiptIds
-                receipts.sort((a, b) => receiptIds.indexOf(a.id) - receiptIds.indexOf(b.id));
-            } catch (e) {
-                console.error('[TransactionRepository] Error fetching attachments:', e);
-                receipts = [];
-            }
-        }
-
-        return {
-            id: row.id,
-            accountId: row.account_id,
-            accountName: row.account_name,
-            accountCurrency: row.account_currency,
-            userId: row.user_id,
-            userName: row.user_first_name && row.user_last_name 
-                ? `${row.user_first_name} ${row.user_last_name}` 
-                : row.user_first_name || row.user_last_name || null,
-            workspaceId: row.workspace_id,
-            type: row.type,
-            amount: parseFloat(row.amount),
-            currency: row.currency,
-            description: row.description,
-            date: row.date,
-            categoryId: row.category_id,
-            categoryName: row.category_name,
-            categoryIcon: row.category_icon,
-            categoryColor: row.category_color,
-            linkedTransactionIds: linkedTransactionIds,
-            linkedTransactions: filteredLinkedTransactions.map(linkedTx => ({
-                id: linkedTx.id,
-                accountId: linkedTx.account_id,
-                accountName: linkedTx.account_name,
-                amount: parseFloat(linkedTx.amount),
-                currency: linkedTx.currency,
-                type: linkedTx.type,
-                description: linkedTx.description,
-                date: linkedTx.date,
-                categoryName: linkedTx.category_name
-            })),
-            receiptIds: receiptIds,
-            receipts: receipts,
-            exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
-            convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
-            baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at
-        };
+    // Fetch all linked transactions in a single query
+    const linkedTransactionIds = row.linked_transaction_ids || [];
+    let linkedTransactions: any[] = [];
+    if (linkedTransactionIds.length > 0) {
+      const linkedResult = await this.dbToUse.query(
+        `SELECT t.*, a.name as account_name, c.name as category_name
+                 FROM transactions t
+                 LEFT JOIN accounts a ON t.account_id = a.id
+                 LEFT JOIN categories c ON t.category_id = c.id
+                 WHERE t.id = ANY($1)`,
+        [linkedTransactionIds],
+      );
+      linkedTransactions = linkedResult.rows;
     }
 
-    private async findByIdBasic(id: string): Promise<any | null> {
-        const result = await this.dbToUse.query(
-            `SELECT 
+    // Fetch attachments for receipt_ids
+    const receiptIds = row.receipt_ids || [];
+    let receipts: any[] = [];
+
+    if (receiptIds.length > 0) {
+      try {
+        const attachmentsResult = await this.dbToUse.query(
+          'SELECT * FROM attachments WHERE id = ANY($1)',
+          [receiptIds],
+        );
+
+        let storageService: any = null;
+        try {
+          const StorageModule = await import('@domains/storage/services/StorageService');
+          storageService = Container.getInstance().resolve<any>('StorageService');
+        } catch (e) {
+          console.log('[TransactionRepository] StorageService not available');
+        }
+
+        if (storageService) {
+          receipts = await Promise.all(
+            attachmentsResult.rows.map(async (att: any) => {
+              try {
+                const { url } = await storageService.getFile(att.id);
+                return {
+                  id: att.id,
+                  filename: att.filename,
+                  contentType: att.content_type,
+                  size: att.size,
+                  url,
+                };
+              } catch (e) {
+                return {
+                  id: att.id,
+                  filename: att.filename,
+                  contentType: att.content_type,
+                  size: att.size,
+                  url: null,
+                };
+              }
+            }),
+          );
+        } else {
+          // Just return basic info without URLs
+          receipts = attachmentsResult.rows.map((att: any) => ({
+            id: att.id,
+            filename: att.filename,
+            contentType: att.content_type,
+            size: att.size,
+            url: null,
+          }));
+        }
+
+        // Sort by original order of receiptIds
+        receipts.sort((a, b) => receiptIds.indexOf(a.id) - receiptIds.indexOf(b.id));
+      } catch (e) {
+        console.error('[TransactionRepository] Error fetching attachments:', e);
+        receipts = [];
+      }
+    }
+
+    return {
+      id: row.id,
+      accountId: row.account_id,
+      accountName: row.account_name,
+      accountCurrency: row.account_currency,
+      userId: row.user_id,
+      userName:
+        row.user_first_name && row.user_last_name
+          ? `${row.user_first_name} ${row.user_last_name}`
+          : row.user_first_name || row.user_last_name || null,
+      workspaceId: row.workspace_id,
+      type: row.type,
+      amount: parseFloat(row.amount),
+      currency: row.currency,
+      description: row.description,
+      date: row.date,
+      categoryId: row.category_id,
+      categoryName: row.category_name,
+      categoryIcon: row.category_icon,
+      categoryColor: row.category_color,
+      linkedTransactionIds: linkedTransactionIds,
+      linkedTransactions: linkedTransactions.map((linkedTx) => ({
+        id: linkedTx.id,
+        accountId: linkedTx.account_id,
+        accountName: linkedTx.account_name,
+        amount: parseFloat(linkedTx.amount),
+        currency: linkedTx.currency,
+        type: linkedTx.type,
+        description: linkedTx.description,
+        date: linkedTx.date,
+        categoryName: linkedTx.category_name,
+      })),
+      receiptIds: receiptIds,
+      receipts: receipts,
+      exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
+      convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
+      baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private async findByIdBasic(id: string): Promise<any | null> {
+    const result = await this.dbToUse.query(
+      `SELECT 
                 t.*,
                 a.name as account_name,
                 c.name as category_name
@@ -204,200 +191,114 @@ export class TransactionRepository {
             LEFT JOIN accounts a ON t.account_id = a.id
             LEFT JOIN categories c ON t.category_id = c.id
             WHERE t.id = $1`,
-            [id]
-        );
-        return result.rows[0] || null;
+      [id],
+    );
+    return result.rows[0] || null;
+  }
+
+  async findByAccountId(accountId: string, limit = 100, offset = 0): Promise<Transaction[]> {
+    const result = await this.dbToUse.query(
+      'SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.account_id = $1 ORDER BY t.date DESC, t.id DESC LIMIT $2 OFFSET $3',
+      [accountId, limit, offset],
+    );
+    return result.rows.map((row: any) => this.mapToEntity(row));
+  }
+
+  // ==================== CURSOR-BASED PAGINATION ====================
+
+  /**
+   * Decode cursor string to get id and date for pagination
+   * Cursor format: base64("id-date")
+   */
+  private decodeCursor(cursor?: string): { id: string; date: string } | null {
+    if (!cursor) return null;
+    try {
+      const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
+      const [id, date] = decoded.split('|');
+      if (!id) return null;
+      // Return null if date is empty or undefined
+      if (!date || date === 'undefined') return null;
+      return { id, date };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Encode transaction to cursor string
+   * Cursor format: base64("id-date")
+   */
+  private encodeCursor(transaction: Transaction): string {
+    const date = transaction.date;
+    if (!date) {
+      return Buffer.from(`${transaction.id}|`).toString('base64');
+    }
+    const dateStr = date instanceof Date ? date.toISOString() : String(date);
+    return Buffer.from(`${transaction.id}|${dateStr}`).toString('base64');
+  }
+
+  /**
+   * Build a cursor-based pagination query with shared filter logic
+   */
+  private buildCursorQuery(
+    baseWhere: string,
+    baseParams: any[],
+    cursor: string | undefined,
+    filters:
+      | {
+          type?: string;
+          categoryId?: string;
+          accountId?: string;
+          startDate?: string;
+          endDate?: string;
+          search?: string;
+        }
+      | undefined,
+    limit: number,
+  ): { query: string; params: any[] } {
+    let whereClause = baseWhere;
+    const params: any[] = [...baseParams];
+    let paramIndex = baseParams.length + 1;
+
+    const cursorData = this.decodeCursor(cursor);
+    if (cursorData) {
+      whereClause += ` AND (t.date < $${paramIndex} OR (t.date = $${paramIndex} AND t.id < $${paramIndex + 1}))`;
+      params.push(cursorData.date, cursorData.id);
+      paramIndex += 2;
     }
 
-    async findByAccountId(accountId: string, limit = 100, offset = 0): Promise<Transaction[]> {
-        const result = await this.dbToUse.query(
-            'SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.account_id = $1 ORDER BY t.date DESC, t.id DESC LIMIT $2 OFFSET $3',
-            [accountId, limit, offset]
-        );
-        return result.rows.map((row: any) => this.mapToEntity(row));
+    if (filters?.type) {
+      whereClause += ` AND t.type = $${paramIndex}`;
+      params.push(filters.type);
+      paramIndex++;
+    }
+    if (filters?.categoryId) {
+      whereClause += ` AND t.category_id = $${paramIndex}`;
+      params.push(filters.categoryId);
+      paramIndex++;
+    }
+    if (filters?.accountId) {
+      whereClause += ` AND t.account_id = $${paramIndex}`;
+      params.push(filters.accountId);
+      paramIndex++;
+    }
+    if (filters?.startDate) {
+      whereClause += ` AND t.date >= $${paramIndex}`;
+      params.push(filters.startDate);
+      paramIndex++;
+    }
+    if (filters?.endDate) {
+      whereClause += ` AND t.date <= $${paramIndex}`;
+      params.push(filters.endDate);
+      paramIndex++;
+    }
+    if (filters?.search) {
+      whereClause += ` AND (t.description ILIKE $${paramIndex} OR t.amount::text ILIKE $${paramIndex})`;
+      params.push(`%${filters.search}%`);
+      paramIndex++;
     }
 
-    // ==================== CURSOR-BASED PAGINATION ====================
-
-    /**
-     * Decode cursor string to get id and date for pagination
-     * Cursor format: base64("id-date")
-     */
-    private decodeCursor(cursor?: string): { id: string; date: string } | null {
-        if (!cursor) return null;
-        try {
-            const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
-            const [id, date] = decoded.split('|');
-            if (!id) return null;
-            // Return null if date is empty or undefined
-            if (!date || date === 'undefined') return null;
-            return { id, date };
-        } catch {
-            return null;
-        }
-    }
-
-    /**
-     * Encode transaction to cursor string
-     * Cursor format: base64("id-date")
-     */
-    private encodeCursor(transaction: Transaction): string {
-        const date = transaction.date;
-        if (!date) {
-            return Buffer.from(`${transaction.id}|`).toString('base64');
-        }
-        const dateStr = date instanceof Date 
-            ? date.toISOString()
-            : String(date);
-        return Buffer.from(`${transaction.id}|${dateStr}`).toString('base64');
-    }
-
-    /**
-     * Find transactions by account ID with cursor-based pagination
-     */
-    async findByAccountIdCursor(
-        accountId: string,
-        options: CursorPaginationOptions,
-        filters?: CursorFilters
-    ): Promise<PaginatedResult<Transaction>> {
-        const { limit = 50, cursor } = options;
-        const cursorData = this.decodeCursor(cursor);
-
-        // Build query with cursor filtering
-        let whereClause = 'WHERE t.account_id = $1';
-        const params: any[] = [accountId];
-        let paramIndex = 2;
-
-        // Apply cursor-based filtering (use date + id for stable ordering)
-        if (cursorData) {
-            whereClause += ` AND (t.date < $${paramIndex} OR (t.date = $${paramIndex} AND t.id < $${paramIndex + 1}))`;
-            params.push(cursorData.date, cursorData.id);
-            paramIndex += 2;
-        }
-
-        // Apply filters
-        if (filters?.type) {
-            whereClause += ` AND t.type = $${paramIndex}`;
-            params.push(filters.type);
-            paramIndex++;
-        }
-
-        if (filters?.categoryId) {
-            whereClause += ` AND t.category_id = $${paramIndex}`;
-            params.push(filters.categoryId);
-            paramIndex++;
-        }
-
-        if (filters?.startDate) {
-            whereClause += ` AND t.date >= $${paramIndex}`;
-            params.push(filters.startDate);
-            paramIndex++;
-        }
-
-        if (filters?.endDate) {
-            whereClause += ` AND t.date <= $${paramIndex}`;
-            params.push(filters.endDate);
-            paramIndex++;
-        }
-
-        if (filters?.search) {
-            whereClause += ` AND (t.description ILIKE $${paramIndex} OR t.amount::text ILIKE $${paramIndex})`;
-            params.push(`%${filters.search}%`);
-            paramIndex++;
-        }
-
-        // Fetch one extra to determine hasMore
-        const query = `
-            SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color
-            FROM transactions t
-            LEFT JOIN categories c ON t.category_id = c.id 
-            ${whereClause} 
-            ORDER BY t.date DESC, t.id DESC 
-            LIMIT $${paramIndex}
-        `;
-        params.push(limit + 1);
-
-        const result = await this.dbToUse.query(query, params);
-        const hasMore = result.rows.length > limit;
-        const data = hasMore ? result.rows.slice(0, -1) : result.rows;
-
-        return {
-            data: data.map((row: any) => this.mapToEntityWithCategory(row)),
-            pagination: {
-                nextCursor: hasMore && data.length > 0 ? this.encodeCursor(data[data.length - 1]) : null,
-                hasMore,
-            },
-        };
-    }
-
-    /**
-     * Find all transactions for a workspace with cursor-based pagination
-     */
-    async findByWorkspaceIdCursor(
-        workspaceId: string,
-        options: CursorPaginationOptions,
-        filters?: {
-            accountId?: string;
-            categoryId?: string;
-            category?: string;
-            type?: string;
-            startDate?: string;
-            endDate?: string;
-            search?: string;
-        }
-    ): Promise<PaginatedResult<Transaction>> {
-        const { limit = 50, cursor } = options;
-        const cursorData = this.decodeCursor(cursor);
-
-        let whereClause = 'WHERE t.workspace_id = $1';
-        const params: any[] = [workspaceId];
-        let paramIndex = 2;
-
-        // Apply cursor filtering
-        if (cursorData) {
-            whereClause += ` AND (t.date < $${paramIndex} OR (t.date = $${paramIndex} AND t.id < $${paramIndex + 1}))`;
-            params.push(cursorData.date, cursorData.id);
-            paramIndex += 2;
-        }
-
-        // Apply filters
-        if (filters?.accountId) {
-            whereClause += ` AND t.account_id = $${paramIndex}`;
-            params.push(filters.accountId);
-            paramIndex++;
-        }
-
-        if (filters?.categoryId) {
-            whereClause += ` AND t.category_id = $${paramIndex}`;
-            params.push(filters.categoryId);
-            paramIndex++;
-        }
-
-        if (filters?.type) {
-            whereClause += ` AND t.type = $${paramIndex}`;
-            params.push(filters.type);
-            paramIndex++;
-        }
-
-        if (filters?.startDate) {
-            whereClause += ` AND t.date >= $${paramIndex}`;
-            params.push(filters.startDate);
-            paramIndex++;
-        }
-
-        if (filters?.endDate) {
-            whereClause += ` AND t.date <= $${paramIndex}`;
-            params.push(filters.endDate);
-            paramIndex++;
-        }
-
-        if (filters?.search) {
-            whereClause += ` AND (t.description ILIKE $${paramIndex} OR t.amount::text ILIKE $${paramIndex})`;
-            params.push(`%${filters.search}%`);
-            paramIndex++;
-        }
-
-        const query = `
+    const query = `
             SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id
@@ -405,100 +306,168 @@ export class TransactionRepository {
             ORDER BY t.date DESC, t.id DESC
             LIMIT $${paramIndex}
         `;
-        params.push(limit + 1);
+    params.push(limit + 1);
 
-        const result = await this.dbToUse.query(query, params);
-        const hasMore = result.rows.length > limit;
-        const data = hasMore ? result.rows.slice(0, -1) : result.rows;
+    return { query, params };
+  }
 
-        return {
-            data: data.map((row: any) => this.mapToEntityWithCategory(row)),
-            pagination: {
-                nextCursor: hasMore && data.length > 0 ? this.encodeCursor(data[data.length - 1]) : null,
-                hasMore,
-            },
-        };
+  private executeCursorQuery(
+    query: string,
+    params: any[],
+    limit: number,
+  ): Promise<PaginatedResult<Transaction>> {
+    return this.dbToUse.query(query, params).then((result) => {
+      const hasMore = result.rows.length > limit;
+      const data = hasMore ? result.rows.slice(0, -1) : result.rows;
+      return {
+        data: data.map((row: any) => this.mapToEntityWithCategory(row)),
+        pagination: {
+          nextCursor: hasMore && data.length > 0 ? this.encodeCursor(data[data.length - 1]) : null,
+          hasMore,
+        },
+      };
+    });
+  }
+
+  /**
+   * Find transactions by account ID with cursor-based pagination
+   */
+  async findByAccountIdCursor(
+    accountId: string,
+    options: CursorPaginationOptions,
+    filters?: CursorFilters,
+  ): Promise<PaginatedResult<Transaction>> {
+    const { limit = 50, cursor } = options;
+    const { query, params } = this.buildCursorQuery(
+      'WHERE t.account_id = $1',
+      [accountId],
+      cursor,
+      filters,
+      limit,
+    );
+    return this.executeCursorQuery(query, params, limit);
+  }
+
+  /**
+   * Find all transactions for a workspace with cursor-based pagination
+   */
+  async findByWorkspaceIdCursor(
+    workspaceId: string,
+    options: CursorPaginationOptions,
+    filters?: {
+      accountId?: string;
+      categoryId?: string;
+      category?: string;
+      type?: string;
+      startDate?: string;
+      endDate?: string;
+      search?: string;
+    },
+  ): Promise<PaginatedResult<Transaction>> {
+    const { limit = 50, cursor } = options;
+    const { query, params } = this.buildCursorQuery(
+      'WHERE t.workspace_id = $1',
+      [workspaceId],
+      cursor,
+      filters,
+      limit,
+    );
+    return this.executeCursorQuery(query, params, limit);
+  }
+
+  async findByWorkspaceId(
+    workspaceId: string,
+    options: {
+      limit?: number;
+      offset?: number;
+      search?: string;
+      accountId?: string;
+      categoryId?: string;
+      category?: string;
+      type?: string;
+      startDate?: string;
+      endDate?: string;
+      linkedStatus?: 'all' | 'linked' | 'unlinked';
+    } = {},
+  ): Promise<{ transactions: Transaction[]; total: number }> {
+    const {
+      limit = 50,
+      offset = 0,
+      search,
+      accountId,
+      categoryId,
+      category,
+      type,
+      startDate,
+      endDate,
+      linkedStatus,
+    } = options;
+
+    let whereClause = 'WHERE t.workspace_id = $1';
+    const params: any[] = [workspaceId];
+    let paramIndex = 2;
+
+    if (accountId) {
+      whereClause += ` AND t.account_id = $${paramIndex}`;
+      params.push(accountId);
+      paramIndex++;
     }
 
-    async findByWorkspaceId(workspaceId: string, options: {
-        limit?: number;
-        offset?: number;
-        search?: string;
-        accountId?: string;
-        categoryId?: string;
-        category?: string;
-        type?: string;
-        startDate?: string;
-        endDate?: string;
-        linkedStatus?: 'all' | 'linked' | 'unlinked';
-    } = {}): Promise<{ transactions: Transaction[]; total: number }> {
-        const { limit = 50, offset = 0, search, accountId, categoryId, category, type, startDate, endDate, linkedStatus } = options;
+    if (categoryId) {
+      whereClause += ` AND t.category_id = $${paramIndex}`;
+      params.push(categoryId);
+      paramIndex++;
+    }
 
-        let whereClause = 'WHERE t.workspace_id = $1';
-        const params: any[] = [workspaceId];
-        let paramIndex = 2;
+    // Filter by category name
+    if (category) {
+      whereClause += ` AND c.name ILIKE $${paramIndex}`;
+      params.push(`%${category}%`);
+      paramIndex++;
+    }
 
-        if (accountId) {
-            whereClause += ` AND t.account_id = $${paramIndex}`;
-            params.push(accountId);
-            paramIndex++;
-        }
+    if (type) {
+      whereClause += ` AND t.type = $${paramIndex}`;
+      params.push(type);
+      paramIndex++;
+    }
 
-        if (categoryId) {
-            whereClause += ` AND t.category_id = $${paramIndex}`;
-            params.push(categoryId);
-            paramIndex++;
-        }
+    if (startDate) {
+      whereClause += ` AND t.date >= $${paramIndex}`;
+      params.push(startDate);
+      paramIndex++;
+    }
 
-        // Filter by category name
-        if (category) {
-            whereClause += ` AND c.name ILIKE $${paramIndex}`;
-            params.push(`%${category}%`);
-            paramIndex++;
-        }
+    if (endDate) {
+      whereClause += ` AND t.date <= $${paramIndex}`;
+      params.push(endDate);
+      paramIndex++;
+    }
 
-        if (type) {
-            whereClause += ` AND t.type = $${paramIndex}`;
-            params.push(type);
-            paramIndex++;
-        }
+    if (search) {
+      whereClause += ` AND (t.description ILIKE $${paramIndex} OR t.amount::text ILIKE $${paramIndex})`;
+      params.push(`%${search}%`);
+      paramIndex++;
+    }
 
-        if (startDate) {
-            whereClause += ` AND t.date >= $${paramIndex}`;
-            params.push(startDate);
-            paramIndex++;
-        }
+    // Filter by linked status
+    if (linkedStatus && linkedStatus !== 'all') {
+      if (linkedStatus === 'linked') {
+        whereClause += ` AND t.linked_transaction_id IS NOT NULL`;
+      } else if (linkedStatus === 'unlinked') {
+        whereClause += ` AND t.linked_transaction_id IS NULL`;
+      }
+    }
 
-        if (endDate) {
-            whereClause += ` AND t.date <= $${paramIndex}`;
-            params.push(endDate);
-            paramIndex++;
-        }
+    // Get total count
+    const countResult = await this.dbToUse.query(
+      `SELECT COUNT(*) as total FROM transactions t ${whereClause}`,
+      params,
+    );
+    const total = parseInt(countResult.rows[0]?.total || '0');
 
-        if (search) {
-            whereClause += ` AND (t.description ILIKE $${paramIndex} OR t.amount::text ILIKE $${paramIndex})`;
-            params.push(`%${search}%`);
-            paramIndex++;
-        }
-
-        // Filter by linked status
-        if (linkedStatus && linkedStatus !== 'all') {
-            if (linkedStatus === 'linked') {
-                whereClause += ` AND t.linked_transaction_id IS NOT NULL`;
-            } else if (linkedStatus === 'unlinked') {
-                whereClause += ` AND t.linked_transaction_id IS NULL`;
-            }
-        }
-
-        // Get total count
-        const countResult = await this.dbToUse.query(
-            `SELECT COUNT(*) as total FROM transactions t ${whereClause}`,
-            params
-        );
-        const total = parseInt(countResult.rows[0]?.total || '0');
-
-        // Get paginated results with category name
-        const query = `
+    // Get paginated results with category name
+    const query = `
             SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id
@@ -506,136 +475,168 @@ export class TransactionRepository {
             ORDER BY t.date DESC, t.id DESC
             LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
         `;
-        
-        const result = await this.dbToUse.query(query, [...params, limit, offset]);
-        
-        return {
-            transactions: result.rows.map((row: any) => this.mapToEntityWithCategory(row)),
-            total
-        };
-    }
 
-    async countByAccountThisMonth(accountId: string): Promise<number> {
-        const result = await this.dbToUse.query(
-            `SELECT COUNT(*) as count FROM transactions 
+    const result = await this.dbToUse.query(query, [...params, limit, offset]);
+
+    return {
+      transactions: result.rows.map((row: any) => this.mapToEntityWithCategory(row)),
+      total,
+    };
+  }
+
+  async countByAccountThisMonth(accountId: string): Promise<number> {
+    const result = await this.dbToUse.query(
+      `SELECT COUNT(*) as count FROM transactions 
              WHERE account_id = $1 
              AND created_at >= date_trunc('month', NOW())`,
-            [accountId]
-        );
-        return parseInt(result.rows[0]?.count || '0');
-    }
+      [accountId],
+    );
+    return parseInt(result.rows[0]?.count || '0');
+  }
 
-    async countByWorkspaceId(workspaceId: string): Promise<number> {
-        const result = await this.dbToUse.query(
-            'SELECT COUNT(*) as count FROM transactions WHERE workspace_id = $1',
-            [workspaceId]
-        );
-        return parseInt(result.rows[0]?.count || '0');
-    }
+  async countByWorkspaceId(workspaceId: string): Promise<number> {
+    const result = await this.dbToUse.query(
+      'SELECT COUNT(*) as count FROM transactions WHERE workspace_id = $1',
+      [workspaceId],
+    );
+    return parseInt(result.rows[0]?.count || '0');
+  }
 
-    async countByCategoryId(categoryId: string): Promise<number> {
-        const result = await this.dbToUse.query(
-            'SELECT COUNT(*) as count FROM transactions WHERE category_id = $1',
-            [categoryId]
-        );
-        return parseInt(result.rows[0]?.count || '0');
-    }
+  async countByCategoryId(categoryId: string): Promise<number> {
+    const result = await this.dbToUse.query(
+      'SELECT COUNT(*) as count FROM transactions WHERE category_id = $1',
+      [categoryId],
+    );
+    return parseInt(result.rows[0]?.count || '0');
+  }
 
-    async reassignCategory(fromCategoryId: string, toCategoryId: string, workspaceId: string): Promise<void> {
-        await this.dbToUse.query(
-            'UPDATE transactions SET category_id = $1, updated_at = NOW() WHERE category_id = $2 AND workspace_id = $3',
-            [toCategoryId, fromCategoryId, workspaceId]
-        );
-    }
+  async reassignCategory(
+    fromCategoryId: string,
+    toCategoryId: string,
+    workspaceId: string,
+  ): Promise<void> {
+    await this.dbToUse.query(
+      'UPDATE transactions SET category_id = $1, updated_at = NOW() WHERE category_id = $2 AND workspace_id = $3',
+      [toCategoryId, fromCategoryId, workspaceId],
+    );
+  }
 
-    // Get account stats: total income, expense, and balance (cached)
-    async getAccountStats(accountId: string, startDate?: string, endDate?: string): Promise<{
-        totalIncome: number;
-        totalExpense: number;
-        balance: number;
-        fromCache?: boolean;
-    }> {
-        // Check cache first
-        const cacheKey = `stats:${accountId}:${startDate || 'none'}:${endDate || 'none'}`;
-        const cached = statsCache.get<{ totalIncome: number; totalExpense: number; balance: number }>(cacheKey);
-        
+  // Get account stats: total income, expense, and balance (cached)
+  async getAccountStats(
+    accountId: string,
+    startDate?: string,
+    endDate?: string,
+  ): Promise<{
+    totalIncome: number;
+    totalExpense: number;
+    balance: number;
+    fromCache?: boolean;
+  }> {
+    const cacheKey = `txn:stats:${accountId}:${startDate || 'none'}:${endDate || 'none'}`;
+
+    if (this.cache) {
+      try {
+        const cached = await this.cache.get<{
+          totalIncome: number;
+          totalExpense: number;
+          balance: number;
+        }>(cacheKey);
         if (cached) {
-            console.log(`[Cache] Account stats HIT for ${accountId}`);
-            return { ...cached, fromCache: true };
+          return { ...cached, fromCache: true };
         }
+      } catch (e) {
+        console.log('[TransactionRepository] Redis cache unavailable, falling through to DB');
+      }
+    }
 
-        console.log(`[Cache] Account stats MISS for ${accountId}`);
+    let whereClause = 'WHERE account_id = $1';
+    const params: any[] = [accountId];
+    let paramIndex = 2;
 
-        let whereClause = 'WHERE account_id = $1';
-        const params: any[] = [accountId];
-        let paramIndex = 2;
+    if (startDate) {
+      whereClause += ` AND date >= $${paramIndex}`;
+      params.push(startDate);
+      paramIndex++;
+    }
 
-        if (startDate) {
-            whereClause += ` AND date >= $${paramIndex}`;
-            params.push(startDate);
-            paramIndex++;
-        }
+    if (endDate) {
+      whereClause += ` AND date <= $${paramIndex}`;
+      params.push(endDate);
+      paramIndex++;
+    }
 
-        if (endDate) {
-            whereClause += ` AND date <= $${paramIndex}`;
-            params.push(endDate);
-            paramIndex++;
-        }
-
-        const result = await this.dbToUse.query(
-            `SELECT 
+    const result = await this.dbToUse.query(
+      `SELECT 
                 COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as total_income,
                 COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) as total_expense
              FROM transactions ${whereClause}`,
-            params
-        );
+      params,
+    );
 
-        const totalIncome = parseFloat(result.rows[0]?.total_income || '0');
-        const totalExpense = parseFloat(result.rows[0]?.total_expense || '0');
+    const totalIncome = parseFloat(result.rows[0]?.total_income || '0');
+    const totalExpense = parseFloat(result.rows[0]?.total_expense || '0');
 
-        const stats = {
-            totalIncome,
-            totalExpense,
-            balance: totalIncome - totalExpense
-        };
+    const stats = {
+      totalIncome,
+      totalExpense,
+      balance: totalIncome - totalExpense,
+    };
 
-        // Cache the result
-        statsCache.set(cacheKey, stats, ACCOUNTS_STATS_TTL);
-
-        return { ...stats, fromCache: false };
+    if (this.cache) {
+      try {
+        await this.cache.set(cacheKey, stats, ACCOUNTS_STATS_TTL);
+      } catch (e) {
+        console.log('[TransactionRepository] Failed to cache stats in Redis');
+      }
     }
 
-    // Invalidate cache when transactions change
-    invalidateAccountStatsCache(accountId: string): void {
-        statsCache.invalidatePattern(`stats:${accountId}:`);
+    return { ...stats, fromCache: false };
+  }
+
+  // Invalidate cache when transactions change
+  async invalidateAccountStatsCache(accountId: string): Promise<void> {
+    if (this.cache) {
+      try {
+        const pattern = `txn:stats:${accountId}:`;
+        await this.cache.del(pattern);
+      } catch (e) {
+        console.log('[TransactionRepository] Failed to invalidate stats cache in Redis');
+      }
+    }
+  }
+
+  // Get all account stats for a workspace
+  async getWorkspaceAccountStats(
+    workspaceId: string,
+    startDate?: string,
+    endDate?: string,
+  ): Promise<
+    Array<{
+      accountId: string;
+      accountName: string;
+      totalIncome: number;
+      totalExpense: number;
+      balance: number;
+    }>
+  > {
+    let whereClause = 'WHERE t.workspace_id = $1';
+    const params: any[] = [workspaceId];
+    let paramIndex = 2;
+
+    if (startDate) {
+      whereClause += ` AND t.date >= $${paramIndex}`;
+      params.push(startDate);
+      paramIndex++;
     }
 
-    // Get all account stats for a workspace
-    async getWorkspaceAccountStats(workspaceId: string, startDate?: string, endDate?: string): Promise<Array<{
-        accountId: string;
-        accountName: string;
-        totalIncome: number;
-        totalExpense: number;
-        balance: number;
-    }>> {
-        let whereClause = 'WHERE t.workspace_id = $1';
-        const params: any[] = [workspaceId];
-        let paramIndex = 2;
+    if (endDate) {
+      whereClause += ` AND t.date <= $${paramIndex}`;
+      params.push(endDate);
+      paramIndex++;
+    }
 
-        if (startDate) {
-            whereClause += ` AND t.date >= $${paramIndex}`;
-            params.push(startDate);
-            paramIndex++;
-        }
-
-        if (endDate) {
-            whereClause += ` AND t.date <= $${paramIndex}`;
-            params.push(endDate);
-            paramIndex++;
-        }
-
-        const result = await this.dbToUse.query(
-            `SELECT 
+    const result = await this.dbToUse.query(
+      `SELECT 
                 t.account_id,
                 a.name as account_name,
                 COALESCE(SUM(CASE WHEN t.type = 'income' THEN t.amount ELSE 0 END), 0) as total_income,
@@ -645,101 +646,105 @@ export class TransactionRepository {
              ${whereClause}
              GROUP BY t.account_id, a.name
              ORDER BY a.name`,
-            params
-        );
+      params,
+    );
 
-        return result.rows.map((row: any) => ({
-            accountId: row.account_id,
-            accountName: row.account_name,
-            totalIncome: parseFloat(row.total_income),
-            totalExpense: parseFloat(row.total_expense),
-            balance: parseFloat(row.total_income) - parseFloat(row.total_expense)
-        }));
+    return result.rows.map((row: any) => ({
+      accountId: row.account_id,
+      accountName: row.account_name,
+      totalIncome: parseFloat(row.total_income),
+      totalExpense: parseFloat(row.total_expense),
+      balance: parseFloat(row.total_income) - parseFloat(row.total_expense),
+    }));
+  }
+
+  // Get workspace-wide stats
+  async getWorkspaceStats(
+    workspaceId: string,
+    startDate?: string,
+    endDate?: string,
+  ): Promise<{
+    totalIncome: number;
+    totalExpense: number;
+    balance: number;
+    transactionCount: number;
+  }> {
+    let whereClause = 'WHERE workspace_id = $1';
+    const params: any[] = [workspaceId];
+    let paramIndex = 2;
+
+    if (startDate) {
+      whereClause += ` AND date >= $${paramIndex}`;
+      params.push(startDate);
+      paramIndex++;
     }
 
-    // Get workspace-wide stats
-    async getWorkspaceStats(workspaceId: string, startDate?: string, endDate?: string): Promise<{
-        totalIncome: number;
-        totalExpense: number;
-        balance: number;
-        transactionCount: number;
-    }> {
-        let whereClause = 'WHERE workspace_id = $1';
-        const params: any[] = [workspaceId];
-        let paramIndex = 2;
+    if (endDate) {
+      whereClause += ` AND date <= $${paramIndex}`;
+      params.push(endDate);
+      paramIndex++;
+    }
 
-        if (startDate) {
-            whereClause += ` AND date >= $${paramIndex}`;
-            params.push(startDate);
-            paramIndex++;
-        }
-
-        if (endDate) {
-            whereClause += ` AND date <= $${paramIndex}`;
-            params.push(endDate);
-            paramIndex++;
-        }
-
-        const result = await this.dbToUse.query(
-            `SELECT 
+    const result = await this.dbToUse.query(
+      `SELECT 
                 COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as total_income,
                 COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) as total_expense,
                 COUNT(*) as transaction_count
              FROM transactions ${whereClause}`,
-            params
-        );
+      params,
+    );
 
-        const totalIncome = parseFloat(result.rows[0]?.total_income || '0');
-        const totalExpense = parseFloat(result.rows[0]?.total_expense || '0');
+    const totalIncome = parseFloat(result.rows[0]?.total_income || '0');
+    const totalExpense = parseFloat(result.rows[0]?.total_expense || '0');
 
-        return {
-            totalIncome,
-            totalExpense,
-            balance: totalIncome - totalExpense,
-            transactionCount: parseInt(result.rows[0]?.transaction_count || '0')
-        };
-    }
+    return {
+      totalIncome,
+      totalExpense,
+      balance: totalIncome - totalExpense,
+      transactionCount: parseInt(result.rows[0]?.transaction_count || '0'),
+    };
+  }
 
-    async save(transaction: Transaction): Promise<Transaction> {
-        const data = transaction.getProps();
-        const mappedData = {
-            id: transaction.id,
-            account_id: data.accountId,
-            user_id: data.userId,
-            workspace_id: data.workspaceId,
-            type: data.type,
-            amount: data.amount,
-            currency: data.currency,
-            description: data.description,
-            date: data.date,
-            category_id: data.categoryId,
-            linked_transaction_ids: data.linkedTransactionIds || [],
-            exchange_rate: data.exchangeRate,
-            converted_amount: data.convertedAmount,
-            base_amount: data.baseAmount,
-            receipt_ids: data.receiptIds || [],
-            created_at: data.createdAt,
-            updated_at: data.updatedAt,
-        };
+  async save(transaction: Transaction): Promise<Transaction> {
+    const data = transaction.getProps();
+    const mappedData = {
+      id: transaction.id,
+      account_id: data.accountId,
+      user_id: data.userId,
+      workspace_id: data.workspaceId,
+      type: data.type,
+      amount: data.amount,
+      currency: data.currency,
+      description: data.description,
+      date: data.date,
+      category_id: data.categoryId,
+      linked_transaction_ids: data.linkedTransactionIds || [],
+      exchange_rate: data.exchangeRate,
+      converted_amount: data.convertedAmount,
+      base_amount: data.baseAmount,
+      receipt_ids: data.receiptIds || [],
+      created_at: data.createdAt,
+      updated_at: data.updatedAt,
+    };
 
-        const keys = Object.keys(mappedData);
-        const values = Object.values(mappedData);
-        const indices = keys.map((_, i) => `$${i + 1}`).join(', ');
+    const keys = Object.keys(mappedData);
+    const values = Object.values(mappedData);
+    const indices = keys.map((_, i) => `$${i + 1}`).join(', ');
 
-        const query = `
+    const query = `
             INSERT INTO transactions (${keys.join(', ')})
             VALUES (${indices})
             RETURNING *
         `;
 
-        const result = await this.dbToUse.query(query, values);
-        return this.mapToEntity(result.rows[0]);
-    }
+    const result = await this.dbToUse.query(query, values);
+    return this.mapToEntity(result.rows[0]);
+  }
 
-    async update(transaction: Transaction): Promise<Transaction> {
-        const data = transaction.getProps();
-        
-        const query = `
+  async update(transaction: Transaction): Promise<Transaction> {
+    const data = transaction.getProps();
+
+    const query = `
             UPDATE transactions SET
                 account_id = $1,
                 type = $2,
@@ -758,76 +763,76 @@ export class TransactionRepository {
             RETURNING *
         `;
 
-        const result = await this.dbToUse.query(query, [
-            data.accountId,
-            data.type,
-            data.amount,
-            data.currency,
-            data.description,
-            data.date,
-            data.categoryId,
-            data.linkedTransactionIds || [],
-            data.exchangeRate,
-            data.convertedAmount,
-            data.baseAmount,
-            data.receiptIds || [],
-            new Date(),
-            transaction.id
-        ]);
+    const result = await this.dbToUse.query(query, [
+      data.accountId,
+      data.type,
+      data.amount,
+      data.currency,
+      data.description,
+      data.date,
+      data.categoryId,
+      data.linkedTransactionIds || [],
+      data.exchangeRate,
+      data.convertedAmount,
+      data.baseAmount,
+      data.receiptIds || [],
+      new Date(),
+      transaction.id,
+    ]);
 
-        return this.mapToEntity(result.rows[0]);
-    }
+    return this.mapToEntity(result.rows[0]);
+  }
 
-    async delete(id: string): Promise<void> {
-        await this.dbToUse.query('DELETE FROM transactions WHERE id = $1', [id]);
-    }
+  async delete(id: string): Promise<void> {
+    await this.dbToUse.query('DELETE FROM transactions WHERE id = $1', [id]);
+  }
 
-    async deleteByWorkspaceId(workspaceId: string): Promise<void> {
-        await this.dbToUse.query('DELETE FROM transactions WHERE workspace_id = $1', [workspaceId]);
-    }
+  async deleteByWorkspaceId(workspaceId: string): Promise<void> {
+    await this.dbToUse.query('DELETE FROM transactions WHERE workspace_id = $1', [workspaceId]);
+  }
 
-    private mapToEntity(row: any): Transaction {
-        const props: TransactionProps = {
-            accountId: row.account_id,
-            userId: row.user_id,
-            workspaceId: row.workspace_id,
-            type: row.type,
-            amount: parseFloat(row.amount),
-            currency: row.currency,
-            description: row.description,
-            date: row.date,
-            categoryId: row.category_id,
-            linkedTransactionIds: row.linked_transaction_ids || [],
-            exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
-            convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
-            baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
-            receiptIds: row.receipt_ids || [],
-            createdAt: row.created_at,
-            updatedAt: row.updated_at,
-        };
-        return Transaction.restore(props, row.id);
-    }
+  private mapToEntity(row: any): Transaction {
+    const props: TransactionProps = {
+      accountId: row.account_id,
+      userId: row.user_id,
+      workspaceId: row.workspace_id,
+      type: row.type,
+      amount: parseFloat(row.amount),
+      currency: row.currency,
+      description: row.description,
+      date: row.date,
+      categoryId: row.category_id,
+      linkedTransactionIds: row.linked_transaction_ids || [],
+      exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
+      convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
+      baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
+      receiptIds: row.receipt_ids || [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+    return Transaction.restore(props, row.id);
+  }
 
-    private mapToEntityWithCategory(row: any): Transaction {
-        const props: TransactionProps = {
-            accountId: row.account_id,
-            userId: row.user_id,
-            workspaceId: row.workspace_id,
-            type: row.type,
-            amount: parseFloat(row.amount),
-            currency: row.currency,
-            description: row.description,
-            date: row.date,
-            categoryId: row.category_id,
-            categoryName: row.category_name || null,
-            linkedTransactionIds: row.linked_transaction_ids || [],
-            exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
-            convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
-            baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
-            receiptIds: row.receipt_ids || [],
-            createdAt: row.created_at,
-            updatedAt: row.updated_at,
-        };
-        return Transaction.restore(props, row.id);
-    }
+  private mapToEntityWithCategory(row: any): Transaction {
+    const props: TransactionProps = {
+      accountId: row.account_id,
+      userId: row.user_id,
+      workspaceId: row.workspace_id,
+      type: row.type,
+      amount: parseFloat(row.amount),
+      currency: row.currency,
+      description: row.description,
+      date: row.date,
+      categoryId: row.category_id,
+      categoryName: row.category_name || null,
+      linkedTransactionIds: row.linked_transaction_ids || [],
+      exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
+      convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
+      baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
+      receiptIds: row.receipt_ids || [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+    return Transaction.restore(props, row.id);
+  }
 }

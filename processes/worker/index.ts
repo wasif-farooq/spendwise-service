@@ -1,5 +1,4 @@
 import { ServiceBootstrap } from '../../src/bootstrap/ServiceBootstrap';
-import { Kafka } from 'kafkajs';
 import { ConfigLoader } from '@config/ConfigLoader';
 import { TOKENS } from '@di/tokens';
 import { Container } from '@di/Container';
@@ -10,276 +9,279 @@ import { FeatureFlagService } from '@domains/feature-flags/services/FeatureFlagS
 import { AppError } from '@shared/errors/AppError';
 import { ReportService } from '../../src/domains/reports/services/ReportService';
 import { ExportReportRequest } from '../../src/domains/reports/types';
+import { RpcClientFactory } from '../../src/messaging/factories/RpcClientFactory';
+import { IRpcClient } from '../../src/messaging/interfaces/IRpcClient';
+import { ActivityWorker } from '../../src/workers/activity.worker';
+import { ScheduledReportWorker } from '../../src/workers/scheduledReport.worker';
+import { ScheduledReportService } from '../../src/domains/reports/services/ScheduledReportService';
+import { TransactionRepository } from '../../src/domains/transactions/repositories/TransactionRepository';
+import { CategoryRepository } from '../../src/domains/categories/repositories/CategoryRepository';
+import { DatabaseFacade } from '../../src/facades/DatabaseFacade';
+import { PostgresFactory } from '../../src/database/factories/PostgresFactory';
 
 // Consolidate Worker Logic
 const startWorker = async () => {
-    const bootstrap = ServiceBootstrap.getInstance();
-    await bootstrap.initialize('Unified Worker');
+  const bootstrap = ServiceBootstrap.getInstance();
+  await bootstrap.initialize('Unified Worker');
 
-    const config = ConfigLoader.getInstance();
-    const kafkaConfig = config.get('messaging.kafka');
+  const rpcClient: IRpcClient = RpcClientFactory.create();
+  await rpcClient.connect();
 
-    const kafka = new Kafka({
-        clientId: 'backend-worker',
-        brokers: kafkaConfig.brokers,
-    });
+  if ('startListening' in rpcClient) {
+    await (rpcClient as any).startListening();
+  }
 
-    const consumer = kafka.consumer({ groupId: 'backend-service-group' }); // Unified Group
-    const producer = kafka.producer();
+  const container = Container.getInstance();
+  const serviceFactory = container.resolve<any>(TOKENS.ServiceFactory);
 
-    await consumer.connect();
-    await producer.connect();
+  const authService = (await serviceFactory.createAuthService()) as AuthService;
+  const userService = serviceFactory.createUserService() as UserService;
+  const workspaceService = serviceFactory.createWorkspaceService() as WorkspaceService;
+  const featureFlagService = serviceFactory.createFeatureFlagService() as FeatureFlagService;
+  const reportService = serviceFactory.createReportService() as ReportService;
 
-    const container = Container.getInstance();
-    const serviceFactory = container.resolve<any>(TOKENS.ServiceFactory);
+  console.log('Unified Worker Listening...');
 
-    // Resolve Services (AuthService.createAuthService is async due to Redis connection)
-    const authService = await serviceFactory.createAuthService() as AuthService;
-    const userService = serviceFactory.createUserService() as UserService;
-    const workspaceService = serviceFactory.createWorkspaceService() as WorkspaceService;
-    const featureFlagService = serviceFactory.createFeatureFlagService() as FeatureFlagService;
-    const reportService = new ReportService();
+  const handleMessage = async (payload: any, correlationId?: string): Promise<any> => {
+    const topic = payload._topic || '';
+    let result: any;
 
-    console.log('Unified Worker Listening...');
+    // --- Auth Handling ---
+    if (topic === 'auth.service.login') {
+      console.log(`[Auth] Processing Login for ${correlationId}`);
+      result = await authService.login(payload);
+    } else if (topic === 'auth.service.register') {
+      console.log(`[Auth] Processing Register for ${correlationId}`);
+      result = await authService.register(payload);
+    } else if (topic === 'auth.service.verify-2fa') {
+      console.log(`[Auth] Processing Verify 2FA for ${correlationId}`);
+      // Note: verify2FA expects (tempToken, code, method)
+      result = await authService.verify2FA(payload.tempToken, payload.code, payload.method);
+    } else if (topic === 'auth.service.resend-2fa') {
+      console.log(`[Auth] Processing Resend 2FA for ${correlationId}`);
+      result = await authService.resend2FA(payload.tempToken, payload.method);
+    } else if (topic === 'auth.service.verify-backup-code') {
+      console.log(`[Auth] Processing Verify Backup Code for ${correlationId}`);
+      result = await authService.verifyBackupCode(payload.tempToken, payload.code);
+    } else if (topic === 'auth.service.forgot-password') {
+      console.log(`[Auth] Processing Forgot Password for ${correlationId}`);
+      result = await authService.forgotPassword(payload.email);
+    } else if (topic === 'auth.service.verify-reset-code') {
+      console.log(`[Auth] Processing Verify Reset Code for ${correlationId}`);
+      result = await authService.verifyResetCode(payload.email, payload.code);
+    } else if (topic === 'auth.service.reset-password') {
+      console.log(`[Auth] Processing Reset Password for ${correlationId}`);
+      result = await authService.resetPassword(payload.token, payload.newPassword);
+    } else if (topic === 'auth.service.verify-email') {
+      console.log(`[Auth] Processing Verify Email for ${correlationId}`);
+      result = await authService.verifyEmail(payload.email, payload.code);
+    } else if (topic === 'auth.service.get-me') {
+      console.log(`[Auth] Processing GetMe for ${correlationId}`);
+      result = await authService.getUserById(payload.userId);
+    } else if (topic === 'auth.service.change-password') {
+      console.log(`[Auth] Processing Change Password for ${correlationId}`);
+      result = await authService.changePassword(
+        payload.userId,
+        payload.oldPassword,
+        payload.newPassword,
+      );
+    } else if (topic === 'auth.service.generate-2fa-secret') {
+      console.log(`[Auth] Processing Generate 2FA Secret for ${correlationId}`);
+      result = await authService.generate2FASecret(payload.userId, payload.method, payload.email);
+    } else if (topic === 'auth.service.enable-2fa') {
+      console.log(`[Auth] Processing Enable 2FA for ${correlationId}`);
+      result = await authService.enable2FA(payload.userId, payload.code, payload.method);
+    } else if (topic === 'auth.service.disable-2fa') {
+      console.log(`[Auth] Processing Disable 2FA for ${correlationId}`);
+      result = await authService.disable2FA(payload.userId);
+    } else if (topic === 'auth.service.disable-2fa-method') {
+      console.log(`[Auth] Processing Disable 2FA Method for ${correlationId}`);
+      result = await authService.disable2FAMethod(payload.userId, payload.method);
+    } else if (topic === 'auth.service.regenerate-backup-codes') {
+      console.log(`[Auth] Processing Regenerate Backup Codes for ${correlationId}`);
+      result = await authService.regenerateBackupCodes(payload.userId);
+    } else if (topic === 'auth.service.get-active-sessions') {
+      console.log(`[Auth] Processing Get Active Sessions for ${correlationId}`);
+      result = await authService.getActiveSessions(payload.userId);
+    } else if (topic === 'auth.service.revoke-session') {
+      console.log(`[Auth] Processing Revoke Session for ${correlationId}`);
+      result = await authService.revokeSession(payload.userId, payload.sessionId);
+    } else if (topic === 'auth.service.get-login-history') {
+      console.log(`[Auth] Processing Get Login History for ${correlationId}`);
+      result = await authService.getLoginHistory(payload.userId);
+    }
 
-    // Subscribe to Auth Topics
-    await consumer.subscribe({ topic: 'auth.service.login', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.register', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.verify-2fa', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.resend-2fa', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.verify-backup-code', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.forgot-password', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.verify-reset-code', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.reset-password', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.verify-email', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.get-me', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.change-password', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.generate-2fa-secret', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.enable-2fa', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.disable-2fa', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.disable-2fa-method', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.regenerate-backup-codes', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.get-active-sessions', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.revoke-session', fromBeginning: false });
-    await consumer.subscribe({ topic: 'auth.service.get-login-history', fromBeginning: false });
+    // --- User Handling ---
+    else if (topic === 'user.service.getProfile') {
+      console.log(`[User] Processing GetProfile for ${correlationId}`);
+      result = await userService.getProfile(payload.userId);
+    } else if (topic === 'user.service.updateProfile') {
+      console.log(`[User] Processing UpdateProfile for ${correlationId}`);
+      const { userId, ...data } = payload;
+      result = await userService.updateProfile(userId, data);
+    } else if (topic === 'user.service.getPreferences') {
+      console.log(`[User] Processing GetPreferences for ${correlationId}`);
+      const pref = await (authService as any).userPreferencesService.getPreferences(payload.userId);
+      result = pref.toDTO();
+    } else if (topic === 'user.service.updatePreferences') {
+      console.log(`[User] Processing UpdatePreferences for ${correlationId}`);
+      const { userId, ...data } = payload;
+      const pref = await (authService as any).userPreferencesService.updatePreferences(
+        userId,
+        data,
+      );
+      result = pref.toDTO();
+    }
 
-    // Subscribe to User Topics
-    await consumer.subscribe({ topic: 'user.service.getProfile', fromBeginning: false });
-    await consumer.subscribe({ topic: 'user.service.updateProfile', fromBeginning: false });
-    await consumer.subscribe({ topic: 'user.service.getPreferences', fromBeginning: false });
-    await consumer.subscribe({ topic: 'user.service.updatePreferences', fromBeginning: false });
+    // --- Workspace Handling ---
+    else if (topic === 'workspace.service.update') {
+      console.log(`[Workspace] Processing Update for ${correlationId}`);
+      result = await workspaceService.update(payload.workspaceId, payload.userId, payload);
+    } else if (topic === 'workspace.service.delete') {
+      console.log(`[Workspace] Processing Delete for ${correlationId}`);
+      result = await workspaceService.delete(payload.workspaceId, payload.userId);
+    } else if (topic === 'workspace.service.list') {
+      console.log(`[Workspace] Processing List for ${correlationId}`);
+      result = await workspaceService.getUserWorkspaces(payload.userId);
+    } else if (topic === 'workspace.service.get-members') {
+      console.log(`[Workspace] Processing GetMembers for ${correlationId}`);
+      result = await workspaceService.getMembers(payload.workspaceId, payload.userId);
+    } else if (topic === 'workspace.service.invite-member') {
+      console.log(`[Workspace] Processing InviteMember for ${correlationId}`);
+      result = await workspaceService.inviteMember(payload.workspaceId, payload.userId, payload);
+    } else if (topic === 'workspace.service.remove-member') {
+      console.log(`[Workspace] Processing RemoveMember for ${correlationId}`);
+      result = await workspaceService.removeMember(
+        payload.workspaceId,
+        payload.userId,
+        payload.memberId,
+      );
+    } else if (topic === 'workspace.service.get-roles') {
+      console.log(`[Workspace] Processing GetRoles for ${correlationId}`);
+      result = await workspaceService.getRoles(payload.workspaceId, payload.userId, payload);
+    } else if (topic === 'workspace.service.get-role') {
+      console.log(`[Workspace] Processing GetRole for ${correlationId}`);
+      result = await workspaceService.getRole(payload.workspaceId, payload.userId, payload.roleId);
+    } else if (topic === 'workspace.service.create-role') {
+      console.log(`[Workspace] Processing CreateRole for ${correlationId}`);
+      result = await workspaceService.createRole(payload.workspaceId, payload.userId, payload);
+    } else if (topic === 'workspace.service.update-role') {
+      console.log(`[Workspace] Processing UpdateRole for ${correlationId}`);
+      result = await workspaceService.updateRole(
+        payload.workspaceId,
+        payload.userId,
+        payload.roleId,
+        payload.permissions,
+      );
+    } else if (topic === 'workspace.service.assign-role') {
+      console.log(`[Workspace] Processing AssignRole for ${correlationId}`);
+      result = await workspaceService.assignRole(
+        payload.workspaceId,
+        payload.userId,
+        payload.memberId,
+        payload.roleId,
+      );
+    } else if (topic === 'workspace.service.delete-role') {
+      console.log(`[Workspace] Processing DeleteRole for ${correlationId}`);
+      result = await workspaceService.deleteRole(
+        payload.workspaceId,
+        payload.userId,
+        payload.roleId,
+      );
+    } else if (topic === 'workspace.service.create') {
+      console.log(`[Workspace] Processing Create for ${correlationId}`);
+      result = await workspaceService.create(payload.userId, payload);
+    } else if (topic === 'workspace.service.check-permission') {
+      console.log(`[Workspace] Processing CheckPermission for ${correlationId}`);
+      result = await workspaceService.checkPermission(
+        payload.workspaceId,
+        payload.userId,
+        payload.permission,
+      );
+    }
 
-    // Subscribe to Workspace Topics
-    await consumer.subscribe({ topic: 'workspace.service.create', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.update', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.delete', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.list', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.get-members', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.invite-member', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.remove-member', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.get-roles', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.get-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.create-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.update-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.assign-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.delete-role', fromBeginning: false });
-    await consumer.subscribe({ topic: 'workspace.service.check-permission', fromBeginning: false });
+    // --- Feature Flag Handling ---
+    else if (topic === 'feature-flags.service.get-all') {
+      console.log(`[FeatureFlags] Processing GetAll for ${correlationId}`);
+      result = await featureFlagService.getAllFlags();
+    }
 
-    // Subscribe to Feature Flag Topics
-    await consumer.subscribe({ topic: 'feature-flags.service.get-all', fromBeginning: false });
+    // --- Report Handling (Fire & Forget - No Reply) ---
+    else if (topic === 'reports.export') {
+      console.log(`[Report] Processing Export request for workspace ${payload.workspaceId}`);
+      try {
+        await reportService.handleExportRequest(payload as ExportReportRequest);
+        console.log(`[Report] Export completed for ${payload.userEmail}`);
+      } catch (error: any) {
+        console.error(`[Report] Export failed:`, error);
+      }
+    }
 
-    // Subscribe to Report Topics
-    await consumer.subscribe({ topic: 'reports.export', fromBeginning: false });
+    return result;
+  };
 
-    await consumer.run({
-        eachMessage: async ({ topic, partition, message }) => {
-            const replyTo = message.headers?.replyTo?.toString();
-            const correlationId = message.headers?.correlationId?.toString();
+  await rpcClient.subscribe('auth.service.login', handleMessage);
+  await rpcClient.subscribe('auth.service.register', handleMessage);
+  await rpcClient.subscribe('auth.service.verify-2fa', handleMessage);
+  await rpcClient.subscribe('auth.service.resend-2fa', handleMessage);
+  await rpcClient.subscribe('auth.service.verify-backup-code', handleMessage);
+  await rpcClient.subscribe('auth.service.forgot-password', handleMessage);
+  await rpcClient.subscribe('auth.service.verify-reset-code', handleMessage);
+  await rpcClient.subscribe('auth.service.reset-password', handleMessage);
+  await rpcClient.subscribe('auth.service.verify-email', handleMessage);
+  await rpcClient.subscribe('auth.service.get-me', handleMessage);
+  await rpcClient.subscribe('auth.service.change-password', handleMessage);
+  await rpcClient.subscribe('auth.service.generate-2fa-secret', handleMessage);
+  await rpcClient.subscribe('auth.service.enable-2fa', handleMessage);
+  await rpcClient.subscribe('auth.service.disable-2fa', handleMessage);
+  await rpcClient.subscribe('auth.service.disable-2fa-method', handleMessage);
+  await rpcClient.subscribe('auth.service.regenerate-backup-codes', handleMessage);
+  await rpcClient.subscribe('auth.service.get-active-sessions', handleMessage);
+  await rpcClient.subscribe('auth.service.revoke-session', handleMessage);
+  await rpcClient.subscribe('auth.service.get-login-history', handleMessage);
 
-            // Fire-and-forget messages (like reports.export) don't have replyTo
-            const isFireAndForget = !replyTo && !correlationId;
+  await rpcClient.subscribe('user.service.getProfile', handleMessage);
+  await rpcClient.subscribe('user.service.updateProfile', handleMessage);
+  await rpcClient.subscribe('user.service.getPreferences', handleMessage);
+  await rpcClient.subscribe('user.service.updatePreferences', handleMessage);
 
-            if (!replyTo && !correlationId && topic !== 'reports.export') return;
+  await rpcClient.subscribe('workspace.service.create', handleMessage);
+  await rpcClient.subscribe('workspace.service.update', handleMessage);
+  await rpcClient.subscribe('workspace.service.delete', handleMessage);
+  await rpcClient.subscribe('workspace.service.list', handleMessage);
+  await rpcClient.subscribe('workspace.service.get-members', handleMessage);
+  await rpcClient.subscribe('workspace.service.invite-member', handleMessage);
+  await rpcClient.subscribe('workspace.service.remove-member', handleMessage);
+  await rpcClient.subscribe('workspace.service.get-roles', handleMessage);
+  await rpcClient.subscribe('workspace.service.get-role', handleMessage);
+  await rpcClient.subscribe('workspace.service.create-role', handleMessage);
+  await rpcClient.subscribe('workspace.service.update-role', handleMessage);
+  await rpcClient.subscribe('workspace.service.assign-role', handleMessage);
+  await rpcClient.subscribe('workspace.service.delete-role', handleMessage);
+  await rpcClient.subscribe('workspace.service.check-permission', handleMessage);
 
-            try {
-                const payload = JSON.parse(message.value?.toString() || '{}');
-                let result;
+  await rpcClient.subscribe('feature-flags.service.get-all', handleMessage);
 
-                // --- Auth Handling ---
-                if (topic === 'auth.service.login') {
-                    console.log(`[Auth] Processing Login for ${correlationId}`);
-                    result = await authService.login(payload);
-                } else if (topic === 'auth.service.register') {
-                    console.log(`[Auth] Processing Register for ${correlationId}`);
-                    result = await authService.register(payload);
-                } else if (topic === 'auth.service.verify-2fa') {
-                    console.log(`[Auth] Processing Verify 2FA for ${correlationId}`);
-                    // Note: verify2FA expects (tempToken, code, method)
-                    result = await authService.verify2FA(payload.tempToken, payload.code, payload.method);
-                } else if (topic === 'auth.service.resend-2fa') {
-                    console.log(`[Auth] Processing Resend 2FA for ${correlationId}`);
-                    result = await authService.resend2FA(payload.tempToken, payload.method);
-                } else if (topic === 'auth.service.verify-backup-code') {
-                    console.log(`[Auth] Processing Verify Backup Code for ${correlationId}`);
-                    result = await authService.verifyBackupCode(payload.tempToken, payload.code);
-                } else if (topic === 'auth.service.forgot-password') {
-                    console.log(`[Auth] Processing Forgot Password for ${correlationId}`);
-                    result = await authService.forgotPassword(payload.email);
-                } else if (topic === 'auth.service.verify-reset-code') {
-                    console.log(`[Auth] Processing Verify Reset Code for ${correlationId}`);
-                    result = await authService.verifyResetCode(payload.email, payload.code);
-                } else if (topic === 'auth.service.reset-password') {
-                    console.log(`[Auth] Processing Reset Password for ${correlationId}`);
-                    result = await authService.resetPassword(payload.token, payload.newPassword);
-                } else if (topic === 'auth.service.verify-email') {
-                    console.log(`[Auth] Processing Verify Email for ${correlationId}`);
-                    result = await authService.verifyEmail(payload.email, payload.code);
-                } else if (topic === 'auth.service.get-me') {
-                    console.log(`[Auth] Processing GetMe for ${correlationId}`);
-                    result = await authService.getUserById(payload.userId);
-                } else if (topic === 'auth.service.change-password') {
-                    console.log(`[Auth] Processing Change Password for ${correlationId}`);
-                    result = await authService.changePassword(payload.userId, payload.oldPassword, payload.newPassword);
-                } else if (topic === 'auth.service.generate-2fa-secret') {
-                    console.log(`[Auth] Processing Generate 2FA Secret for ${correlationId}`);
-                    result = await authService.generate2FASecret(payload.userId, payload.method, payload.email);
-                } else if (topic === 'auth.service.enable-2fa') {
-                    console.log(`[Auth] Processing Enable 2FA for ${correlationId}`);
-                    result = await authService.enable2FA(payload.userId, payload.code, payload.method);
-                } else if (topic === 'auth.service.disable-2fa') {
-                    console.log(`[Auth] Processing Disable 2FA for ${correlationId}`);
-                    result = await authService.disable2FA(payload.userId);
-                } else if (topic === 'auth.service.disable-2fa-method') {
-                    console.log(`[Auth] Processing Disable 2FA Method for ${correlationId}`);
-                    result = await authService.disable2FAMethod(payload.userId, payload.method);
-                } else if (topic === 'auth.service.regenerate-backup-codes') {
-                    console.log(`[Auth] Processing Regenerate Backup Codes for ${correlationId}`);
-                    result = await authService.regenerateBackupCodes(payload.userId);
-                } else if (topic === 'auth.service.get-active-sessions') {
-                    console.log(`[Auth] Processing Get Active Sessions for ${correlationId}`);
-                    result = await authService.getActiveSessions(payload.userId);
-                } else if (topic === 'auth.service.revoke-session') {
-                    console.log(`[Auth] Processing Revoke Session for ${correlationId}`);
-                    result = await authService.revokeSession(payload.userId, payload.sessionId);
-                } else if (topic === 'auth.service.get-login-history') {
-                    console.log(`[Auth] Processing Get Login History for ${correlationId}`);
-                    result = await authService.getLoginHistory(payload.userId);
-                }
+  await rpcClient.subscribe('reports.export', handleMessage);
 
-                // --- User Handling ---
-                else if (topic === 'user.service.getProfile') {
-                    console.log(`[User] Processing GetProfile for ${correlationId}`);
-                    result = await userService.getProfile(payload.userId);
-                } else if (topic === 'user.service.updateProfile') {
-                    console.log(`[User] Processing UpdateProfile for ${correlationId}`);
-                    const { userId, ...data } = payload;
-                    result = await userService.updateProfile(userId, data);
-                } else if (topic === 'user.service.getPreferences') {
-                    console.log(`[User] Processing GetPreferences for ${correlationId}`);
-                    const pref = await (authService as any).userPreferencesService.getPreferences(payload.userId);
-                    result = pref.toDTO();
-                } else if (topic === 'user.service.updatePreferences') {
-                    console.log(`[User] Processing UpdatePreferences for ${correlationId}`);
-                    const { userId, ...data } = payload;
-                    const pref = await (authService as any).userPreferencesService.updatePreferences(userId, data);
-                    result = pref.toDTO();
-                }
+  const activityWorker = new ActivityWorker();
+  await activityWorker.start();
 
-                // --- Workspace Handling ---
-                else if (topic === 'workspace.service.update') {
-                    console.log(`[Workspace] Processing Update for ${correlationId}`);
-                    result = await workspaceService.update(payload.workspaceId, payload.userId, payload);
-                } else if (topic === 'workspace.service.delete') {
-                    console.log(`[Workspace] Processing Delete for ${correlationId}`);
-                    result = await workspaceService.delete(payload.workspaceId, payload.userId);
-                } else if (topic === 'workspace.service.list') {
-                    console.log(`[Workspace] Processing List for ${correlationId}`);
-                    result = await workspaceService.getUserWorkspaces(payload.userId);
-                } else if (topic === 'workspace.service.get-members') {
-                    console.log(`[Workspace] Processing GetMembers for ${correlationId}`);
-                    result = await workspaceService.getMembers(payload.workspaceId, payload.userId);
-                } else if (topic === 'workspace.service.invite-member') {
-                    console.log(`[Workspace] Processing InviteMember for ${correlationId}`);
-                    result = await workspaceService.inviteMember(payload.workspaceId, payload.userId, payload);
-                } else if (topic === 'workspace.service.remove-member') {
-                    console.log(`[Workspace] Processing RemoveMember for ${correlationId}`);
-                    result = await workspaceService.removeMember(payload.workspaceId, payload.userId, payload.memberId);
-                } else if (topic === 'workspace.service.get-roles') {
-                    console.log(`[Workspace] Processing GetRoles for ${correlationId}`);
-                    result = await workspaceService.getRoles(payload.workspaceId, payload.userId, payload);
-                } else if (topic === 'workspace.service.get-role') {
-                    console.log(`[Workspace] Processing GetRole for ${correlationId}`);
-                    result = await workspaceService.getRole(payload.workspaceId, payload.userId, payload.roleId);
-                } else if (topic === 'workspace.service.create-role') {
-                    console.log(`[Workspace] Processing CreateRole for ${correlationId}`);
-                    result = await workspaceService.createRole(payload.workspaceId, payload.userId, payload);
-                } else if (topic === 'workspace.service.update-role') {
-                    console.log(`[Workspace] Processing UpdateRole for ${correlationId}`);
-                    result = await workspaceService.updateRole(payload.workspaceId, payload.userId, payload.roleId, payload.permissions);
-                } else if (topic === 'workspace.service.assign-role') {
-                    console.log(`[Workspace] Processing AssignRole for ${correlationId}`);
-                    result = await workspaceService.assignRole(payload.workspaceId, payload.userId, payload.memberId, payload.roleId);
-                } else if (topic === 'workspace.service.delete-role') {
-                    console.log(`[Workspace] Processing DeleteRole for ${correlationId}`);
-                    result = await workspaceService.deleteRole(payload.workspaceId, payload.userId, payload.roleId);
-                } else if (topic === 'workspace.service.create') {
-                    console.log(`[Workspace] Processing Create for ${correlationId}`);
-                    result = await workspaceService.create(payload.userId, payload);
-                } else if (topic === 'workspace.service.check-permission') {
-                    console.log(`[Workspace] Processing CheckPermission for ${correlationId}`);
-                    result = await workspaceService.checkPermission(payload.workspaceId, payload.userId, payload.permission);
-                }
+  // Start Scheduled Report Worker and sync repeatable jobs
+  const scheduledReportWorker = new ScheduledReportWorker();
+  await scheduledReportWorker.start();
 
-                // --- Feature Flag Handling ---
-                else if (topic === 'feature-flags.service.get-all') {
-                    console.log(`[FeatureFlags] Processing GetAll for ${correlationId}`);
-                    result = await featureFlagService.getAllFlags();
-                }
+  try {
+    const db = new DatabaseFacade(new PostgresFactory());
+    const transactionRepo = new TransactionRepository(db);
+    const categoryRepo = new CategoryRepository(db);
+    const scheduledReportService = new ScheduledReportService(transactionRepo, categoryRepo);
+    await scheduledReportService.syncAllRepeatableJobs();
+  } catch (error: any) {
+    console.error('[Worker] Failed to sync scheduled report jobs:', error.message);
+  }
 
-                // --- Report Handling (Fire & Forget - No Reply) ---
-                else if (topic === 'reports.export') {
-                    console.log(`[Report] Processing Export request for workspace ${payload.workspaceId}`);
-                    try {
-                        await reportService.handleExportRequest(payload as ExportReportRequest);
-                        console.log(`[Report] Export completed for ${payload.userEmail}`);
-                    } catch (error: any) {
-                        console.error(`[Report] Export failed:`, error);
-                    }
-                    // No reply for fire-and-forget messages
-                }
-
-                // Reply Success (only for RPC requests with replyTo)
-                else if (replyTo && correlationId) {
-                    await producer.send({
-                        topic: replyTo,
-                        messages: [{
-                            value: JSON.stringify(result ?? { success: true }),
-                            headers: { correlationId }
-                        }]
-                    });
-                }
-
-            } catch (error: any) {
-                console.error(`Error processing RPC [${topic}]`, error);
-
-                // Only reply if it's an RPC request
-                if (replyTo && correlationId) {
-                    const errorResponse = {
-                        error: error.message || 'Internal Error',
-                        statusCode: (error instanceof AppError) ? error.statusCode : 500
-                    };
-
-                    await producer.send({
-                        topic: replyTo,
-                        messages: [{
-                            value: JSON.stringify(errorResponse),
-                            headers: { correlationId }
-                        }]
-                    });
-                }
-            }
-        },
-    });
+  console.log('[Worker] All topics subscribed + activity worker + scheduled report worker started');
 };
 
 startWorker().catch(console.error);

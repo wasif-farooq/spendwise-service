@@ -1,11 +1,34 @@
-import { ServiceFactory } from './ServiceFactory';
+import { Container } from '@di/Container';
 import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
 import { WorkspaceRolesController } from '@domains/workspaces/controllers/WorkspaceRolesController';
+import { WorkspaceRequestRepositoryFactory } from '@domains/workspaces/repositories/WorkspaceRequestRepositoryFactory';
+import { SubscriptionRequestRepositoryFactory } from '@domains/subscription/repositories/SubscriptionRequestRepositoryFactory';
 
 export class WorkspaceRolesControllerFactory {
-    constructor(private serviceFactory: ServiceFactory) { }
+  private static instance: WorkspaceRolesController | null = null;
 
-    create(repository?: WorkspaceRequestRepository): WorkspaceRolesController {
-        return new WorkspaceRolesController(repository || new WorkspaceRequestRepository());
+  create(): WorkspaceRolesController {
+    if (WorkspaceRolesControllerFactory.instance) {
+      return WorkspaceRolesControllerFactory.instance;
     }
+
+    const workspaceRequestRepoFactory =
+      Container.getInstance().resolve<WorkspaceRequestRepositoryFactory>(
+        'WorkspaceRequestRepositoryFactory',
+      );
+    const subscriptionRequestRepoFactory =
+      Container.getInstance().resolve<SubscriptionRequestRepositoryFactory>(
+        'SubscriptionRequestRepositoryFactory',
+      );
+
+    const workspaceRequestRepository = workspaceRequestRepoFactory.create();
+    const subscriptionRequestRepository = subscriptionRequestRepoFactory.create();
+
+    WorkspaceRolesControllerFactory.instance = new WorkspaceRolesController(
+      workspaceRequestRepository,
+      subscriptionRequestRepository,
+    );
+
+    return WorkspaceRolesControllerFactory.instance;
+  }
 }

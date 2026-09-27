@@ -23,34 +23,44 @@ export interface ExpenseReportData {
 export class ExpenseReportGenerator {
   constructor(
     private transactionRepo: TransactionRepository,
-    private categoryRepo: CategoryRepository
+    private categoryRepo: CategoryRepository,
   ) {}
 
   async generate(
     workspaceId: string,
     dateRange: DateRangePreset,
-    customDates?: CustomDateRange
+    customDates?: CustomDateRange,
   ): Promise<ExpenseReportData> {
     const { startDate, endDate } = resolveDateRange(dateRange, customDates);
-    
+
     const startDateStr = startDate.toISOString().split('T')[0];
     const endDateStr = endDate.toISOString().split('T')[0];
 
     // Get workspace stats for the period
-    const stats = await this.transactionRepo.getWorkspaceStats(workspaceId, startDateStr, endDateStr);
-    
+    const stats = await this.transactionRepo.getWorkspaceStats(
+      workspaceId,
+      startDateStr,
+      endDateStr,
+    );
+
     // Get account-level stats
-    const accountStats = await this.transactionRepo.getWorkspaceAccountStats(workspaceId, startDateStr, endDateStr);
-    
+    const accountStats = await this.transactionRepo.getWorkspaceAccountStats(
+      workspaceId,
+      startDateStr,
+      endDateStr,
+    );
+
     // Get all transactions for the period (for category/merchant breakdown)
     const transactionsResult = await this.transactionRepo.findByWorkspaceId(workspaceId, {
       startDate: startDateStr,
       endDate: endDateStr,
-      limit: 10000
+      limit: 10000,
     });
 
     // Filter only expenses
-    const expenses = (transactionsResult.transactions || []).filter((t: any) => t.type === 'expense');
+    const expenses = (transactionsResult.transactions || []).filter(
+      (t: any) => t.type === 'expense',
+    );
 
     // Calculate by category
     const categoryMap = new Map<string, number>();
@@ -64,7 +74,7 @@ export class ExpenseReportGenerator {
       .map(([category, amount]) => ({
         category,
         amount,
-        percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0
+        percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
       }))
       .sort((a, b) => b.amount - a.amount);
 
@@ -75,7 +85,7 @@ export class ExpenseReportGenerator {
       const current = merchantMap.get(merchant) || { amount: 0, count: 0 };
       merchantMap.set(merchant, {
         amount: current.amount + tx.amount,
-        count: current.count + 1
+        count: current.count + 1,
       });
     }
 
@@ -83,7 +93,7 @@ export class ExpenseReportGenerator {
       .map(([merchant, data]) => ({
         merchant,
         amount: data.amount,
-        count: data.count
+        count: data.count,
       }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 20);
@@ -96,15 +106,15 @@ export class ExpenseReportGenerator {
         description: tx.description || 'No description',
         amount: tx.amount,
         date: tx.date instanceof Date ? tx.date.toISOString().split('T')[0] : String(tx.date),
-        category: tx.categoryName || 'Uncategorized'
+        category: tx.categoryName || 'Uncategorized',
       }));
 
     // By account
     const byAccount = accountStats
-      .filter(a => a.totalExpense > 0)
-      .map(a => ({
+      .filter((a) => a.totalExpense > 0)
+      .map((a) => ({
         accountName: a.accountName,
-        amount: a.totalExpense
+        amount: a.totalExpense,
       }))
       .sort((a, b) => b.amount - a.amount);
 
@@ -112,13 +122,13 @@ export class ExpenseReportGenerator {
     const periodDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
     const prevStartDate = new Date(startDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
     const prevEndDate = new Date(startDate.getTime() - 24 * 60 * 60 * 1000);
-    
+
     let previousPeriodChange = 0;
     try {
       const prevStats = await this.transactionRepo.getWorkspaceStats(
         workspaceId,
         prevStartDate.toISOString().split('T')[0],
-        prevEndDate.toISOString().split('T')[0]
+        prevEndDate.toISOString().split('T')[0],
       );
       const prevExpenses = prevStats.totalExpense || 0;
       if (prevExpenses > 0 && totalExpenses > 0) {
@@ -131,19 +141,19 @@ export class ExpenseReportGenerator {
     return {
       period: {
         startDate: startDateStr,
-        endDate: endDateStr
+        endDate: endDateStr,
       },
       generatedAt: new Date().toISOString(),
       summary: {
         totalExpenses,
         transactionCount: expenses.length,
         averageTransaction: expenses.length > 0 ? totalExpenses / expenses.length : 0,
-        previousPeriodChange
+        previousPeriodChange,
       },
       byCategory,
       byMerchant,
       topExpenses,
-      byAccount
+      byAccount,
     };
   }
 }

@@ -1,369 +1,485 @@
 import { Request, Response } from 'express';
-import { TransactionService, CreateTransactionDTO, UpdateTransactionDTO, LinkTransactionDTO, TransferDTO } from '../services/TransactionService';
+import { TransactionRequestRepository } from '../repositories/TransactionRequestRepository';
+import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
+import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
 import { AppError } from '@shared/errors/AppError';
-import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
-import { TransactionRepository } from '../repositories/TransactionRepository';
-import { Container } from '@di/Container';
-import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { WorkspaceMembersRepository } from '@domains/workspaces/repositories/WorkspaceMembersRepository';
+import {
+  CreateTransactionDTO,
+  UpdateTransactionDTO,
+  TransferDTO,
+} from '../services/TransactionService';
 
 export class TransactionController {
-    private subscriptionService: SubscriptionService;
-    private transactionRepo: TransactionRepository;
-    private membersRepo: WorkspaceMembersRepository;
+  constructor(
+    private transactionRequestRepository: TransactionRequestRepository,
+    private subscriptionRequestRepository?: SubscriptionRequestRepository,
+    private workspaceRequestRepository?: WorkspaceRequestRepository,
+  ) {}
 
-    constructor(private transactionService: TransactionService) {
-        const db = Container.getInstance().resolve<DatabaseFacade>('Database');
-        this.subscriptionService = Container.getInstance().resolve<SubscriptionService>('SubscriptionService');
-        this.transactionRepo = new TransactionRepository(db);
-        this.membersRepo = new WorkspaceMembersRepository(db);
-    }
+  private getWorkspaceId(req: Request): string {
+    return req.params.workspaceId;
+  }
 
-    private getWorkspaceId(req: Request): string {
-        return req.params.workspaceId;
-    }
+  private getUserId(req: Request): string {
+    return (req as any).user?.userId || (req as any).user?.id || (req as any).user?.sub;
+  }
 
-    async getTransactions(req: Request, res: Response) {
-        try {
-            const workspaceId = this.getWorkspaceId(req);
-            const accountIdFromParams = req.params.accountId; // accountId from URL path
-            
-            // Support both cursor-based and offset-based pagination
-            const { 
-                cursor,           // Cursor-based (new)
-                page,            // Offset-based (deprecated but supported)
-                limit: limitStr, 
-                search, 
-                categoryId, 
-                category,
-                type,
-                startDate, 
-                endDate 
-            } = req.query;
+  async getTransactions(req: Request, res: Response) {
+    try {
+      const workspaceId = this.getWorkspaceId(req);
+      const accountIdFromParams = req.params.accountId;
 
-            if (!workspaceId) {
-                throw new AppError('Workspace not found', 404);
-            }
+      const {
+        cursor,
+        page,
+        limit: limitStr,
+        search,
+        categoryId,
+        category,
+        type,
+        startDate,
+        endDate,
+      } = req.query;
 
-            // Get userId for subscription check
-            const userId = (req as any).user?.userId || (req as any).user?.id;
+      if (!workspaceId) {
+        throw new AppError('Workspace not found', 404);
+      }
 
-            // Check subscription limits for transaction history
-            if (startDate) {
-                await this.subscriptionService.checkTransactionHistoryLimit(userId, startDate as string);
-            }
+      const userId = this.getUserId(req);
 
-            // Determine which pagination method to use
-            const useCursorPagination = cursor !== undefined || page === undefined;
-            
-            // Use accountId from URL path, fallback to query (for backward compatibility)
-            const accountId = accountIdFromParams || (req.query.accountId as string);
-            const limit = Math.min(parseInt(limitStr as string) || 50, 100);
-
-            if (useCursorPagination && accountId) {
-                // Use cursor-based pagination for single account
-                const result = await this.transactionService.getTransactionsByAccountCursor(
-                    accountId,
-                    { limit, cursor: cursor as string },
-                    {
-                        type: type as any,
-                        categoryId: categoryId as string,
-                        startDate: startDate as string,
-                        endDate: endDate as string,
-                        search: search as string,
-                    }
-                );
-                
-                // Transform to expected format
-                return res.json({
-                    transactions: result.data,
-                    pagination: result.pagination,
-                });
-            }
-
-            if (useCursorPagination) {
-                // Use cursor-based pagination for workspace
-                const result = await this.transactionService.getTransactionsByWorkspaceCursor(
-                    workspaceId,
-                    { limit, cursor: cursor as string },
-                    {
-                        accountId: accountId,
-                        categoryId: categoryId as string,
-                        category: category as string,
-                        type: type as string,
-                        startDate: startDate as string,
-                        endDate: endDate as string,
-                        search: search as string,
-                    }
-                );
-                
-                return res.json({
-                    transactions: result.data,
-                    pagination: result.pagination,
-                });
-            }
-
-            // Fallback to offset-based pagination (deprecated but supported)
-            const result = await this.transactionService.getTransactionsByWorkspace(workspaceId, {
-                limit,
-                offset: page ? (parseInt(page as string) - 1) * limit : 0,
-                search: search as string,
-                accountId: accountId,
-                categoryId: categoryId as string,
-                type: type as string,
-                startDate: startDate as string,
-                endDate: endDate as string,
-            });
-
-            res.json(result);
-        } catch (error: any) {
-            res.status(error.statusCode || 500).json({ message: error.message });
+      if (startDate && this.subscriptionRequestRepository) {
+        let ownerId = userId;
+        if (this.workspaceRequestRepository) {
+          const workspaceResult = await this.workspaceRequestRepository.getById(
+            workspaceId,
+            userId,
+          );
+          if (!workspaceResult.error && workspaceResult.data) {
+            ownerId = workspaceResult.data.ownerId;
+          }
         }
-    }
+        await this.subscriptionRequestRepository.checkTransactionHistoryLimit(
+          ownerId,
+          startDate as string,
+        );
+      }
 
-    // Get all transactions for workspace (across all accounts)
-    async getAllTransactions(req: Request, res: Response) {
-        try {
-            const workspaceId = this.getWorkspaceId(req);
-            const { cursor, limit = 50, offset = 0, search, type, categoryId, startDate, endDate } = req.query;
+      const useCursorPagination = cursor !== undefined || page === undefined;
+      const accountId = accountIdFromParams || (req.query.accountId as string);
+      const limit = Math.min(parseInt(limitStr as string) || 50, 100);
 
-            if (!workspaceId) {
-                throw new AppError('Workspace not found', 404);
-            }
+      if (useCursorPagination && accountId) {
+        const result = await this.transactionRequestRepository.getTransactionsByAccountCursor(
+          accountId,
+          workspaceId,
+          { limit, cursor: cursor as string },
+          {
+            type: type as any,
+            categoryId: categoryId as string,
+            startDate: startDate as string,
+            endDate: endDate as string,
+            search: search as string,
+          },
+        );
 
-            // Use cursor pagination if cursor provided, otherwise use offset
-            if (cursor || (offset === 0 && search === undefined)) {
-                const result = await this.transactionService.getTransactionsByWorkspaceCursor(
-                    workspaceId,
-                    { limit: parseInt(limit as string), cursor: cursor as string },
-                    {
-                        search: search as string,
-                        type: type as string,
-                        categoryId: categoryId as string,
-                        startDate: startDate as string,
-                        endDate: endDate as string,
-                    }
-                );
-                
-                return res.json({
-                    transactions: result.data,
-                    pagination: result.pagination,
-                });
-            }
-
-            // Fallback to offset-based (deprecated)
-            const result = await this.transactionService.getTransactionsByWorkspace(workspaceId, {
-                limit: parseInt(limit as string),
-                offset: parseInt(offset as string),
-                search: search as string,
-                type: type as string,
-                categoryId: categoryId as string,
-                startDate: startDate as string,
-                endDate: endDate as string,
-            });
-
-            res.json(result);
-        } catch (error: any) {
-            res.status(error.statusCode || 500).json({ message: error.message });
+        if (result.error) {
+          throw new AppError(result.error, result.statusCode);
         }
-    }
 
-    async getTransactionById(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const workspaceId = this.getWorkspaceId(req);
+        return res.json({
+          transactions: result.data?.data,
+          pagination: result.data?.pagination,
+        });
+      }
 
-            if (!workspaceId) {
-                throw new AppError('Workspace not found', 404);
-            }
+      if (useCursorPagination) {
+        const result = await this.transactionRequestRepository.getTransactionsByWorkspaceCursor(
+          workspaceId,
+          { limit, cursor: cursor as string },
+          {
+            accountId: accountId,
+            categoryId: categoryId as string,
+            category: category as string,
+            type: type as string,
+            startDate: startDate as string,
+            endDate: endDate as string,
+            search: search as string,
+          },
+        );
 
-            const transaction = await this.transactionService.getTransactionWithDetails(id, workspaceId);
-            res.json(transaction);
-        } catch (error: any) {
-            res.status(error.statusCode || 500).json({ message: error.message });
+        if (result.error) {
+          throw new AppError(result.error, result.statusCode);
         }
+
+        return res.json({
+          transactions: result.data?.data,
+          pagination: result.data?.pagination,
+        });
+      }
+
+      const result = await this.transactionRequestRepository.getTransactionsByWorkspace(
+        workspaceId,
+        {
+          limit,
+          offset: page ? (parseInt(page as string) - 1) * limit : 0,
+          search: search as string,
+          accountId: accountId,
+          categoryId: categoryId as string,
+          type: type as string,
+          startDate: startDate as string,
+          endDate: endDate as string,
+        },
+      );
+
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode);
+      }
+
+      res.json(result.data);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ message: error.message });
     }
+  }
 
-    async createTransaction(req: Request, res: Response) {
-        try {
-            const data: CreateTransactionDTO = req.body;
-            const workspaceId = this.getWorkspaceId(req);
-            const userId = (req as any).user?.userId || (req as any).user?.id;
+  async getAllTransactions(req: Request, res: Response) {
+    try {
+      const workspaceId = this.getWorkspaceId(req);
+      const {
+        cursor,
+        limit = 50,
+        offset = 0,
+        search,
+        type,
+        categoryId,
+        startDate,
+        endDate,
+      } = req.query;
 
-            if (!workspaceId) {
-                throw new AppError('Workspace not found', 404);
-            }
+      if (!workspaceId) {
+        throw new AppError('Workspace not found', 404);
+      }
 
-            // Validate type is not transfer (disabled)
-            if ((data.type as string) === 'transfer') {
-                throw new AppError('Transfer type is disabled. Use linked transactions instead.', 400);
-            }
+      if (cursor || (offset === 0 && search === undefined)) {
+        const result = await this.transactionRequestRepository.getTransactionsByWorkspaceCursor(
+          workspaceId,
+          { limit: parseInt(limit as string), cursor: cursor as string },
+          {
+            search: search as string,
+            type: type as string,
+            categoryId: categoryId as string,
+            startDate: startDate as string,
+            endDate: endDate as string,
+          },
+        );
 
-            // Check subscription limits for this account this month
-            const currentMonthCount = await this.transactionRepo.countByAccountThisMonth(data.accountId);
-            await this.subscriptionService.checkAccountTransactionLimit(userId, data.accountId, currentMonthCount);
-
-            const transaction = await this.transactionService.createTransaction(data, userId, workspaceId);
-            res.status(201).json(transaction.toJSON());
-        } catch (error: any) {
-            res.status(error.statusCode || 500).json({ message: error.message });
+        if (result.error) {
+          throw new AppError(result.error, result.statusCode);
         }
+
+        return res.json({
+          transactions: result.data?.data,
+          pagination: result.data?.pagination,
+        });
+      }
+
+      const result = await this.transactionRequestRepository.getTransactionsByWorkspace(
+        workspaceId,
+        {
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string),
+          search: search as string,
+          type: type as string,
+          categoryId: categoryId as string,
+          startDate: startDate as string,
+          endDate: endDate as string,
+        },
+      );
+
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode);
+      }
+
+      res.json(result.data);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ message: error.message });
     }
+  }
 
-    async updateTransaction(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const data: UpdateTransactionDTO = req.body;
-            const workspaceId = this.getWorkspaceId(req);
+  async getTransactionById(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const workspaceId = this.getWorkspaceId(req);
 
-            if (!workspaceId) {
-                throw new AppError('Workspace not found', 404);
-            }
+      if (!workspaceId) {
+        throw new AppError('Workspace not found', 404);
+      }
 
-            // Validate type is not transfer (disabled)
-            if ((data.type as string) === 'transfer') {
-                throw new AppError('Transfer type is disabled. Use linked transactions instead.', 400);
-            }
+      const result = await this.transactionRequestRepository.getTransactionWithDetails(
+        id,
+        workspaceId,
+      );
 
-            const transaction = await this.transactionService.updateTransaction(id, data, workspaceId);
-            res.json(transaction.toJSON());
-        } catch (error: any) {
-            res.status(error.statusCode || 500).json({ message: error.message });
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode);
+      }
+
+      res.json(result.data);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ message: error.message });
+    }
+  }
+
+  async createTransaction(req: Request, res: Response) {
+    try {
+      const workspaceId = this.getWorkspaceId(req);
+      const userId = this.getUserId(req);
+
+      // The path segment is the account the permission check was applied to,
+      // so it wins over anything the body claims.
+      const data: CreateTransactionDTO = {
+        ...req.body,
+        accountId: req.params.accountId || req.body.accountId,
+      };
+
+      if (!workspaceId) {
+        throw new AppError('Workspace not found', 404);
+      }
+
+      if ((data.type as string) === 'transfer') {
+        throw new AppError('Transfer type is disabled. Use linked transactions instead.', 400);
+      }
+
+      if (this.subscriptionRequestRepository) {
+        const currentMonthCount = await this.transactionRequestRepository.countByAccountThisMonth(
+          data.accountId,
+        );
+
+        let ownerId = userId;
+        if (this.workspaceRequestRepository) {
+          const workspaceResult = await this.workspaceRequestRepository.getById(
+            workspaceId,
+            userId,
+          );
+          if (!workspaceResult.error && workspaceResult.data) {
+            ownerId = workspaceResult.data.ownerId;
+          }
         }
+
+        await this.subscriptionRequestRepository.checkAccountTransactionLimit(
+          ownerId,
+          data.accountId,
+          currentMonthCount,
+        );
+      }
+
+      const result = await this.transactionRequestRepository.create(workspaceId, userId, data);
+
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode);
+      }
+
+      res.status(201).json(result.data?.toJSON ? result.data.toJSON() : result.data);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ message: error.message });
     }
+  }
 
-    async deleteTransaction(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const workspaceId = this.getWorkspaceId(req);
+  async updateTransaction(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const data: UpdateTransactionDTO = req.body;
+      const workspaceId = this.getWorkspaceId(req);
+      const userId = this.getUserId(req);
 
-            if (!workspaceId) {
-                throw new AppError('Workspace not found', 404);
-            }
+      if (!workspaceId) {
+        throw new AppError('Workspace not found', 404);
+      }
 
-            await this.transactionService.deleteTransaction(id, workspaceId);
-            res.status(204).send();
-        } catch (error: any) {
-            res.status(error.statusCode || 500).json({ message: error.message });
-        }
+      if ((data.type as string) === 'transfer') {
+        throw new AppError('Transfer type is disabled. Use linked transactions instead.', 400);
+      }
+
+      const result = await this.transactionRequestRepository.update(workspaceId, id, userId, data);
+
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode);
+      }
+
+      res.json(result.data?.toJSON ? result.data.toJSON() : result.data);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ message: error.message });
     }
+  }
 
-    // Link transaction to another transaction
-    async linkTransaction(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const data: LinkTransactionDTO = req.body;
-            const workspaceId = this.getWorkspaceId(req);
+  async deleteTransaction(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const workspaceId = this.getWorkspaceId(req);
+      const userId = this.getUserId(req);
 
-            if (!workspaceId) {
-                throw new AppError('Workspace not found', 404);
-            }
+      if (!workspaceId) {
+        throw new AppError('Workspace not found', 404);
+      }
 
-            const transaction = await this.transactionService.linkTransaction(id, data, workspaceId);
-            res.json(transaction.toJSON());
-        } catch (error: any) {
-            res.status(error.statusCode || 500).json({ message: error.message });
-        }
+      const result = await this.transactionRequestRepository.delete(workspaceId, id, userId);
+
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode);
+      }
+
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ message: error.message });
     }
+  }
 
-    // Unlink transaction
-    async unlinkTransaction(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const workspaceId = this.getWorkspaceId(req);
+  async linkTransaction(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const data = req.body;
+      const workspaceId = this.getWorkspaceId(req);
+      const userId = this.getUserId(req);
 
-            if (!workspaceId) {
-                throw new AppError('Workspace not found', 404);
-            }
+      if (!workspaceId) {
+        throw new AppError('Workspace not found', 404);
+      }
 
-            const dto = { linkedId: req.body.linkedId };
-            const transaction = await this.transactionService.unlinkTransaction(id, dto, workspaceId);
-            res.json(transaction.toJSON());
-        } catch (error: any) {
-            res.status(error.statusCode || 500).json({ message: error.message });
-        }
+      const result = await this.transactionRequestRepository.link(workspaceId, id, userId, data);
+
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode);
+      }
+
+      res.json(result.data?.toJSON ? result.data.toJSON() : result.data);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ message: error.message });
     }
+  }
 
-    // Get account stats
-    async getAccountStats(req: Request, res: Response) {
-        try {
-            const { accountId } = req.params;
-            const { startDate, endDate } = req.query;
+  async unlinkTransaction(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const workspaceId = this.getWorkspaceId(req);
+      const userId = this.getUserId(req);
 
-            const stats = await this.transactionService.getAccountStats(
-                accountId,
-                startDate as string,
-                endDate as string
-            );
+      if (!workspaceId) {
+        throw new AppError('Workspace not found', 404);
+      }
 
-            res.json(stats);
-        } catch (error: any) {
-            res.status(error.statusCode || 500).json({ message: error.message });
-        }
+      const dto = { linkedId: req.body.linkedId };
+      const result = await this.transactionRequestRepository.unlink(workspaceId, id, userId, dto);
+
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode);
+      }
+
+      res.json(result.data?.toJSON ? result.data.toJSON() : result.data);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ message: error.message });
     }
+  }
 
-    // Get all accounts stats for workspace
-    async getWorkspaceAccountStats(req: Request, res: Response) {
-        try {
-            const workspaceId = this.getWorkspaceId(req);
-            const { startDate, endDate } = req.query;
+  async getAccountStats(req: Request, res: Response) {
+    try {
+      const { accountId } = req.params;
+      const { startDate, endDate } = req.query;
+      const workspaceId = this.getWorkspaceId(req);
 
-            if (!workspaceId) {
-                throw new AppError('Workspace not found', 404);
-            }
+      if (!workspaceId) {
+        throw new AppError('Workspace not found', 404);
+      }
 
-            const stats = await this.transactionService.getWorkspaceAccountStats(
-                workspaceId,
-                startDate as string,
-                endDate as string
-            );
+      const result = await this.transactionRequestRepository.getTransactionStats(
+        accountId,
+        workspaceId,
+        startDate as string,
+        endDate as string,
+      );
 
-            res.json({ accounts: stats });
-        } catch (error: any) {
-            res.status(error.statusCode || 500).json({ message: error.message });
-        }
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode);
+      }
+
+      res.json(result.data);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ message: error.message });
     }
+  }
 
-    // Get workspace-wide stats
-    async getWorkspaceStats(req: Request, res: Response) {
-        try {
-            const workspaceId = this.getWorkspaceId(req);
-            const { startDate, endDate } = req.query;
+  async getWorkspaceAccountStats(req: Request, res: Response) {
+    try {
+      const workspaceId = this.getWorkspaceId(req);
+      const { startDate, endDate } = req.query;
 
-            if (!workspaceId) {
-                throw new AppError('Workspace not found', 404);
-            }
+      if (!workspaceId) {
+        throw new AppError('Workspace not found', 404);
+      }
 
-            const stats = await this.transactionService.getWorkspaceStats(
-                workspaceId,
-                startDate as string,
-                endDate as string
-            );
+      const result = await this.transactionRequestRepository.getWorkspaceAccountStats(
+        workspaceId,
+        startDate as string,
+        endDate as string,
+      );
 
-            res.json(stats);
-        } catch (error: any) {
-            res.status(error.statusCode || 500).json({ message: error.message });
-        }
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode);
+      }
+
+      res.json({ accounts: result.data });
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ message: error.message });
     }
+  }
 
-    // Transfer funds between accounts
-    async transfer(req: Request, res: Response) {
-        try {
-            const data: TransferDTO = req.body;
-            const workspaceId = this.getWorkspaceId(req);
-            const userId = (req as any).user?.userId || (req as any).user?.id;
+  async getWorkspaceStats(req: Request, res: Response) {
+    try {
+      const workspaceId = this.getWorkspaceId(req);
+      const { startDate, endDate } = req.query;
 
-            if (!workspaceId) {
-                throw new AppError('Workspace not found', 404);
-            }
+      if (!workspaceId) {
+        throw new AppError('Workspace not found', 404);
+      }
 
-            const result = await this.transactionService.transfer(data, userId, workspaceId);
-            res.status(201).json({
-                withdraw: result.withdraw.toJSON(),
-                deposit: result.deposit.toJSON(),
-            });
-        } catch (error: any) {
-            res.status(error.statusCode || 500).json({ message: error.message });
-        }
+      const result = await this.transactionRequestRepository.getWorkspaceStats(
+        workspaceId,
+        startDate as string,
+        endDate as string,
+      );
+
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode);
+      }
+
+      res.json(result.data);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ message: error.message });
     }
+  }
+
+  async transfer(req: Request, res: Response) {
+    try {
+      const data: TransferDTO = req.body;
+      const workspaceId = this.getWorkspaceId(req);
+      const userId = this.getUserId(req);
+
+      if (!workspaceId) {
+        throw new AppError('Workspace not found', 404);
+      }
+
+      const result = await this.transactionRequestRepository.transfer(workspaceId, userId, data);
+
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode);
+      }
+
+      res.status(201).json({
+        withdraw: result.data?.withdraw?.toJSON
+          ? result.data.withdraw.toJSON()
+          : result.data?.withdraw,
+        deposit: result.data?.deposit?.toJSON ? result.data.deposit.toJSON() : result.data?.deposit,
+      });
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ message: error.message });
+    }
+  }
 }

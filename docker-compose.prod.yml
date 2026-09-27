@@ -1,5 +1,45 @@
 version: '3.8'
 
+# Production overlay. Use with the base stack:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Secrets are read from the host environment (or a .env file next to this one)
+# and have no defaults — config/environments/production.ts refuses to boot
+# without them rather than falling back to development credentials.
+
+x-app-env: &app-env
+  NODE_ENV: production
+  # Database — note the app reads DB_*, not POSTGRES_* (those configure the
+  # postgres image itself, in docker-compose.yml).
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_NAME: ${DB_NAME:?DB_NAME is required}
+  DB_USER: ${DB_USER:?DB_USER is required}
+  DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+  DB_SSL: ${DB_SSL:-false}
+  # Redis
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+  # Auth
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (min 32 chars)}
+  # Allowed browser origins, comma separated
+  CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+  # Reverse proxies in front of the app. Rate limiting keys on the client IP,
+  # so set this to 1 when running behind an ingress or load balancer.
+  TRUST_PROXY: ${TRUST_PROXY:-0}
+  # Object storage
+  STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:?STORAGE_ENDPOINT is required}
+  STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL:?STORAGE_PUBLIC_URL is required}
+  STORAGE_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY_ID:?STORAGE_ACCESS_KEY_ID is required}
+  STORAGE_SECRET_ACCESS_KEY: ${STORAGE_SECRET_ACCESS_KEY:?STORAGE_SECRET_ACCESS_KEY is required}
+  # Payments (optional — billing is feature-flagged)
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+  # Messaging
+  MESSAGE_QUEUE_PROVIDER: ${MESSAGE_QUEUE_PROVIDER:-kafka}
+  KAFKA_BROKERS: kafka:29092
+
 services:
   api:
     build:
@@ -9,21 +49,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - PORT=3000
-      - NODE_ENV=production
-      # Database
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - POSTGRES_DB=${DB_NAME:-antigravity}
-      - POSTGRES_USER=${DB_USER:-antigravity}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-password}
-      # Redis
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      # Kafka
-      - KAFKA_BROKERS=kafka:29092
-      - KAFKA_CLIENT_ID=spendwise-api
-      - KAFKA_GROUP_ID=spendwise-group
+      <<: *app-env
+      PORT: 3000
+      KAFKA_CLIENT_ID: trackmypocket-api
+      KAFKA_GROUP_ID: trackmypocket-group
     depends_on:
       - postgres
       - redis
@@ -37,25 +66,12 @@ services:
       dockerfile: Dockerfile
     command: node -r tsconfig-paths/register dist/processes/worker/index.js
     environment:
-      - NODE_ENV=production
-      # Database
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - POSTGRES_DB=${DB_NAME:-antigravity}
-      - POSTGRES_USER=${DB_USER:-antigravity}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-password}
-      # Redis
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      # Kafka
-      - KAFKA_BROKERS=kafka:29092
-      - KAFKA_CLIENT_ID=spendwise-worker
-      - KAFKA_GROUP_ID=spendwise-worker-group
+      <<: *app-env
+      KAFKA_CLIENT_ID: trackmypocket-worker
+      KAFKA_GROUP_ID: trackmypocket-worker-group
     depends_on:
       - postgres
       - redis
       - kafka
     networks:
       - antigravity-network
-
-

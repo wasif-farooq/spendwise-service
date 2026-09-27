@@ -1,55 +1,83 @@
 import { ExpenseReportData } from './ExpenseReportGenerator';
+import { formatCurrency } from './reportUtils';
 
+/**
+ * Escape a value per RFC 4180:
+ * - If the value contains a comma, double-quote, or newline, wrap it in double quotes
+ * - Any double quotes inside the value are escaped by doubling them
+ * - All values are treated as strings for consistency
+ */
+function escapeCsvField(value: string | number): string {
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function buildCsvRow(fields: (string | number)[]): string {
+  return fields.map(escapeCsvField).join(',');
+}
+
+/**
+ * Generate a flat-tabular, RFC 4180-compliant CSV expense report.
+ *
+ * Structure:
+ *   Section 1: Summary (2 columns)
+ *   Section 2: Expenses by Category (3 columns)
+ *   Section 3: Expenses by Account (2 columns)
+ *   Section 4: Top Merchants (3 columns)
+ *   Section 5: Largest Transactions (4 columns)
+ *
+ * Each section is separated by a blank row for readability in spreadsheet apps,
+ * but the file remains a single valid CSV that tools like pandas, Excel, and
+ * Google Sheets can parse natively.
+ */
 export function generateExpenseReportCsv(data: ExpenseReportData): Buffer {
-  const lines: string[] = [];
-  
-  const formatCurrency = (amount: number) => amount.toFixed(2);
+  const rows: string[] = [];
 
-  // Header
-  lines.push('SpendWise Expense Report');
-  lines.push(`Period: ${data.period.startDate} to ${data.period.endDate}`);
-  lines.push(`Generated: ${data.generatedAt}`);
-  lines.push('');
+  // --- Section 0: Metadata ---
+  rows.push('Key,Value');
+  rows.push(buildCsvRow(['Report', 'SpendWise Expense Report']));
+  rows.push(buildCsvRow(['Period Start', data.period.startDate]));
+  rows.push(buildCsvRow(['Period End', data.period.endDate]));
+  rows.push(buildCsvRow(['Generated At', data.generatedAt]));
+  rows.push('');
 
-  // Summary
-  lines.push('=== SUMMARY ===');
-  lines.push(`Total Expenses,${formatCurrency(data.summary.totalExpenses)}`);
-  lines.push(`Transaction Count,${data.summary.transactionCount}`);
-  lines.push(`Average Transaction,${formatCurrency(data.summary.averageTransaction)}`);
-  lines.push(`Previous Period Change,${data.summary.previousPeriodChange.toFixed(1)}%`);
-  lines.push('');
+  // --- Section 1: Summary ---
+  rows.push('Metric,Value');
+  rows.push(buildCsvRow(['Total Expenses', formatCurrency(data.summary.totalExpenses)]));
+  rows.push(buildCsvRow(['Transaction Count', data.summary.transactionCount]));
+  rows.push(buildCsvRow(['Average Transaction', formatCurrency(data.summary.averageTransaction)]));
+  rows.push(buildCsvRow(['Previous Period Change', `${data.summary.previousPeriodChange.toFixed(1)}%`]));
+  rows.push('');
 
-  // By Category
-  lines.push('=== EXPENSES BY CATEGORY ===');
-  lines.push('Category,Amount,Percentage');
+  // --- Section 2: Expenses by Category ---
+  rows.push('Category,Amount,Percentage');
   for (const cat of data.byCategory) {
-    lines.push(`${cat.category},${formatCurrency(cat.amount)},${cat.percentage.toFixed(1)}%`);
+    rows.push(buildCsvRow([cat.category, formatCurrency(cat.amount), `${cat.percentage.toFixed(1)}%`]));
   }
-  lines.push('');
+  rows.push('');
 
-  // By Merchant
-  lines.push('=== TOP MERCHANTS ===');
-  lines.push('Merchant,Amount,Transaction Count');
-  for (const merch of data.byMerchant) {
-    lines.push(`${merch.merchant},${formatCurrency(merch.amount)},${merch.count}`);
-  }
-  lines.push('');
-
-  // By Account
-  lines.push('=== EXPENSES BY ACCOUNT ===');
-  lines.push('Account,Amount');
+  // --- Section 3: Expenses by Account ---
+  rows.push('Account,Amount');
   for (const acc of data.byAccount) {
-    lines.push(`${acc.accountName},${formatCurrency(acc.amount)}`);
+    rows.push(buildCsvRow([acc.accountName, formatCurrency(acc.amount)]));
   }
-  lines.push('');
+  rows.push('');
 
-  // Top Expenses
-  lines.push('=== LARGEST TRANSACTIONS ===');
-  lines.push('Description,Amount,Date,Category');
+  // --- Section 4: Top Merchants ---
+  rows.push('Merchant,Amount,Transaction Count');
+  for (const merch of data.byMerchant) {
+    rows.push(buildCsvRow([merch.merchant, formatCurrency(merch.amount), merch.count]));
+  }
+  rows.push('');
+
+  // --- Section 5: Largest Transactions ---
+  rows.push('Description,Amount,Date,Category');
   for (const tx of data.topExpenses) {
-    const desc = tx.description.replace(/,/g, ';');
-    lines.push(`${desc},${formatCurrency(tx.amount)},${tx.date},${tx.category}`);
+    rows.push(buildCsvRow([tx.description, formatCurrency(tx.amount), tx.date, tx.category]));
   }
 
-  return Buffer.from(lines.join('\n'), 'utf-8');
+  return Buffer.from(rows.join('\n'), 'utf-8');
 }

@@ -4,133 +4,206 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
 import { CategoryService } from '@domains/categories/services/CategoryService';
 import { AuthService } from '@domains/auth/services/AuthService';
+import { TransactionService } from '@domains/transactions/services/TransactionService';
+import { AnalyticsService } from '@domains/analytics/services/AnalyticsService';
 import { RedisClientType } from 'redis';
 
 export class ServiceFactory {
-    private static redisFactory = new RedisFactory();
-    private static redisClient: ReturnType<RedisFactory['createClient']> | null = null;
-    private static redisConnecting: Promise<void> | null = null;
+  private static redisFactory = new RedisFactory();
+  private static redisClient: ReturnType<RedisFactory['createClient']> | null = null;
+  private static redisConnecting: Promise<void> | null = null;
 
-    constructor(
-        private repositoryFactory: RepositoryFactory,
-        private db: DatabaseFacade
-    ) { }
+  constructor(
+    private repositoryFactory: RepositoryFactory,
+    private db: DatabaseFacade,
+  ) {}
 
-    private async getRedisClient(): Promise<RedisClientType> {
-        if (!ServiceFactory.redisClient) {
-            ServiceFactory.redisClient = ServiceFactory.redisFactory.createClient();
-            ServiceFactory.redisClient.on('error', (err) => console.error('[Redis] Client error:', err));
-            ServiceFactory.redisClient.on('connect', () => console.log('[Redis] Client connected'));
+  /**
+   * The process-wide Redis connection. Exposed so infrastructure outside the
+   * service graph (e.g. rate-limiting middleware) reuses this connection
+   * rather than opening a second one. Returns null if Redis is unreachable.
+   */
+  public static async getSharedRedisClient(): Promise<RedisClientType | null> {
+    return new ServiceFactory(null as any, null as any).getRedisClient();
+  }
 
-            ServiceFactory.redisConnecting = ServiceFactory.redisClient.connect()
-                .then(() => {
-                    console.log('[Redis] Connection established');
-                    ServiceFactory.redisConnecting = null;
-                })
-                .catch((err) => {
-                    console.error('[Redis] Connection error:', err);
-                    ServiceFactory.redisClient = null;
-                    ServiceFactory.redisConnecting = null;
-                });
+  private async getRedisClient(): Promise<RedisClientType> {
+    if (!ServiceFactory.redisClient) {
+      ServiceFactory.redisClient = ServiceFactory.redisFactory.createClient();
+      ServiceFactory.redisClient.on('error', (err) => console.error('[Redis] Client error:', err));
+      ServiceFactory.redisClient.on('connect', () => console.log('[Redis] Client connected'));
 
-            await ServiceFactory.redisConnecting;
-        }
-        return ServiceFactory.redisClient;
+      ServiceFactory.redisConnecting = ServiceFactory.redisClient
+        .connect()
+        .then(() => {
+          console.log('[Redis] Connection established');
+          ServiceFactory.redisConnecting = null;
+        })
+        .catch((err) => {
+          console.error('[Redis] Connection error:', err);
+          ServiceFactory.redisClient = null;
+          ServiceFactory.redisConnecting = null;
+        });
+
+      await ServiceFactory.redisConnecting;
     }
+    return ServiceFactory.redisClient;
+  }
 
-    async createAuthService(): Promise<AuthService> {
-        const { AuthService } = require('@domains/auth/services/AuthService');
-        const { WorkspaceService } = require('@domains/workspaces/services/WorkspaceService');
+  async createAuthService(): Promise<AuthService> {
+    const { AuthService } = require('@domains/auth/services/AuthService');
+    const { WorkspaceService } = require('@domains/workspaces/services/WorkspaceService');
 
-        const categoryRepo = new CategoryRepository(this.db);
-        const categoryService = new CategoryService(categoryRepo, this.repositoryFactory.createTransactionRepository());
-        const wsService = new WorkspaceService(
-            this.repositoryFactory.createWorkspaceRepository(),
-            this.repositoryFactory.createWorkspaceMembersRepository(),
-            this.repositoryFactory.createWorkspaceRoleRepository(),
-            this.repositoryFactory.createWorkspaceInvitationsRepository(),
-            this.repositoryFactory.createUserRepository(),
-            null as any,
-            this.db,
-            this.repositoryFactory.createAccountRepository(),
-            this.repositoryFactory.createTransactionRepository(),
-            categoryRepo,
-            categoryService
-        );
+    const categoryRepo = new CategoryRepository(this.db);
+    const categoryService = new CategoryService(
+      categoryRepo,
+      this.repositoryFactory.createTransactionRepository(),
+    );
+    const wsService = new WorkspaceService(
+      this.repositoryFactory.createWorkspaceRepository(),
+      this.repositoryFactory.createWorkspaceMembersRepository(),
+      this.repositoryFactory.createWorkspaceRoleRepository(),
+      this.repositoryFactory.createWorkspaceInvitationsRepository(),
+      this.repositoryFactory.createUserRepository(),
+      null as any,
+      this.db,
+      this.repositoryFactory.createAccountRepository(),
+      this.repositoryFactory.createTransactionRepository(),
+      categoryRepo,
+      categoryService,
+    );
 
-        const redisClient = await this.getRedisClient();
-        const subscriptionService = this.createSubscriptionService();
+    const redisClient = await this.getRedisClient();
+    const subscriptionService = this.createSubscriptionService();
 
-        return new AuthService(
-            this.db,
-            this.repositoryFactory.createUserRepository(),
-            this.repositoryFactory.createAuthRepository(),
-            this.repositoryFactory.createWorkspaceRepository(),
-            this.repositoryFactory.createWorkspaceRoleRepository(),
-            this.repositoryFactory.createWorkspaceMembersRepository(),
-            wsService,
-            subscriptionService,
-            redisClient
-        );
-    }
+    return new AuthService(
+      this.db,
+      this.repositoryFactory.createUserRepository(),
+      this.repositoryFactory.createAuthRepository(),
+      this.repositoryFactory.createWorkspaceRepository(),
+      this.repositoryFactory.createWorkspaceRoleRepository(),
+      this.repositoryFactory.createWorkspaceMembersRepository(),
+      wsService,
+      subscriptionService,
+      redisClient,
+    );
+  }
 
-    createUserService() {
-        const { UserService } = require('@domains/users/services/UserService');
-        const { StorageService } = require('@domains/storage/services/StorageService');
-        const { StorageRepository } = require('@domains/storage/repositories/StorageRepository');
-        const { ConfigLoader } = require('@config/ConfigLoader');
-        
-        const config = ConfigLoader.getInstance();
-        const storageRepo = new StorageRepository(this.db);
-        const storageService = new StorageService(storageRepo, config);
-        
-        return new UserService(this.repositoryFactory.createUserRepository(), storageService);
-    }
+  createUserService() {
+    const { UserService } = require('@domains/users/services/UserService');
+    const { StorageService } = require('@domains/storage/services/StorageService');
+    const { StorageRepository } = require('@domains/storage/repositories/StorageRepository');
+    const { ConfigLoader } = require('@config/ConfigLoader');
 
-    createWorkspaceService() {
-        const { WorkspaceService } = require('@domains/workspaces/services/WorkspaceService');
-        const { StorageService } = require('@domains/storage/services/StorageService');
-        const { StorageRepository } = require('@domains/storage/repositories/StorageRepository');
-        const { ConfigLoader } = require('@config/ConfigLoader');
+    const config = ConfigLoader.getInstance();
+    const storageRepo = new StorageRepository(this.db);
+    const storageService = new StorageService(storageRepo, config);
 
-        const config = ConfigLoader.getInstance();
-        const storageRepo = new StorageRepository(this.db);
-        const storageService = new StorageService(storageRepo, config);
+    return new UserService(this.repositoryFactory.createUserRepository(), storageService);
+  }
 
-        const categoryRepo = new CategoryRepository(this.db);
-        const categoryService = new CategoryService(categoryRepo, this.repositoryFactory.createTransactionRepository());
+  createWorkspaceService() {
+    const { WorkspaceService } = require('@domains/workspaces/services/WorkspaceService');
+    const { StorageService } = require('@domains/storage/services/StorageService');
+    const { StorageRepository } = require('@domains/storage/repositories/StorageRepository');
+    const { ConfigLoader } = require('@config/ConfigLoader');
 
-        return new WorkspaceService(
-            this.repositoryFactory.createWorkspaceRepository(),
-            this.repositoryFactory.createWorkspaceMembersRepository(),
-            this.repositoryFactory.createWorkspaceRoleRepository(),
-            this.repositoryFactory.createWorkspaceInvitationsRepository(),
-            this.repositoryFactory.createUserRepository(),
-            null as any,
-            this.db,
-            this.repositoryFactory.createAccountRepository(),
-            this.repositoryFactory.createTransactionRepository(),
-            categoryRepo,
-            categoryService,
-            storageService
-        );
-    }
+    const config = ConfigLoader.getInstance();
+    const storageRepo = new StorageRepository(this.db);
+    const storageService = new StorageService(storageRepo, config);
 
-    createUserPreferencesService() {
-        const { UserPreferencesService } = require('@domains/users/services/UserPreferencesService');
-        return new UserPreferencesService(this.repositoryFactory.createUserPreferencesRepository());
-    }
+    const categoryRepo = new CategoryRepository(this.db);
+    const categoryService = new CategoryService(
+      categoryRepo,
+      this.repositoryFactory.createTransactionRepository(),
+    );
 
-    createFeatureFlagService() {
-        const { FeatureFlagService } = require('@domains/feature-flags/services/FeatureFlagService');
-        return new FeatureFlagService(this.repositoryFactory.createFeatureFlagRepository());
-    }
+    return new WorkspaceService(
+      this.repositoryFactory.createWorkspaceRepository(),
+      this.repositoryFactory.createWorkspaceMembersRepository(),
+      this.repositoryFactory.createWorkspaceRoleRepository(),
+      this.repositoryFactory.createWorkspaceInvitationsRepository(),
+      this.repositoryFactory.createUserRepository(),
+      null as any,
+      this.db,
+      this.repositoryFactory.createAccountRepository(),
+      this.repositoryFactory.createTransactionRepository(),
+      categoryRepo,
+      categoryService,
+      storageService,
+    );
+  }
 
-    createSubscriptionService() {
-        const { SubscriptionService } = require('@domains/subscription/services/SubscriptionService');
-        return new SubscriptionService(
-            this.repositoryFactory.createSubscriptionPlanRepository(),
-            this.repositoryFactory.createUserSubscriptionRepository()
-        );
-    }
+  createUserPreferencesService() {
+    const { UserPreferencesService } = require('@domains/users/services/UserPreferencesService');
+    return new UserPreferencesService(this.repositoryFactory.createUserPreferencesRepository());
+  }
+
+  createFeatureFlagService() {
+    const { FeatureFlagService } = require('@domains/feature-flags/services/FeatureFlagService');
+    return new FeatureFlagService(this.repositoryFactory.createFeatureFlagRepository());
+  }
+
+  createSubscriptionService() {
+    const { SubscriptionService } = require('@domains/subscription/services/SubscriptionService');
+    return new SubscriptionService(
+      this.repositoryFactory.createSubscriptionPlanRepository(),
+      this.repositoryFactory.createUserSubscriptionRepository(),
+      this.repositoryFactory.createUserRepository(),
+    );
+  }
+
+  createAccountService() {
+    const { AccountService } = require('@domains/accounts/services/AccountService');
+    return new AccountService(
+      this.repositoryFactory.createAccountRepository(),
+      this.createExchangeRateService(),
+    );
+  }
+
+  async createTransactionService(): Promise<TransactionService> {
+    const { TransactionService } = require('@domains/transactions/services/TransactionService');
+    const exchangeRateService = this.createExchangeRateService();
+    return new TransactionService(
+      this.repositoryFactory.createTransactionRepository(),
+      this.repositoryFactory.createAccountRepository(),
+      this.db,
+      exchangeRateService,
+    );
+  }
+
+  createCategoryService() {
+    const { CategoryService } = require('@domains/categories/services/CategoryService');
+    const categoryRepo = new CategoryRepository(this.db);
+    return new CategoryService(categoryRepo, this.repositoryFactory.createTransactionRepository());
+  }
+
+  createExchangeRateService() {
+    const { ExchangeRateService } = require('@domains/exchange-rates/services/ExchangeRateService');
+    return new ExchangeRateService(this.repositoryFactory.createExchangeRateRepository());
+  }
+
+  createPaymentService() {
+    const { PaymentService } = require('@domains/payment/services/PaymentService');
+    return PaymentService.getInstance();
+  }
+
+  async createAnalyticsService(): Promise<AnalyticsService> {
+    const { AnalyticsService } = require('@domains/analytics/services/AnalyticsService');
+    const exchangeRateService = this.createExchangeRateService();
+    return new AnalyticsService(
+      this.db,
+      this.repositoryFactory.createTransactionRepository(),
+      this.repositoryFactory.createAccountRepository(),
+      exchangeRateService,
+    );
+  }
+
+  createReportService() {
+    const { ReportService } = require('@domains/reports/services/ReportService');
+    return new ReportService(
+      this.repositoryFactory.createTransactionRepository(),
+      this.repositoryFactory.createCategoryRepository(),
+    );
+  }
 }

@@ -1,20 +1,13 @@
 import { Router } from 'express';
-import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
-import { WorkspaceRequestRepository } from  '@domains/workspaces/repositories/WorkspaceRequestRepository';
-import { WorkspaceController } from  '@domains/workspaces/controllers/WorkspaceController';
+import { controllerMiddleware } from '@shared/middlewares/controller.middleware';
 
 const router = Router();
 
-const container = Container.getInstance();
-const factory = container.resolve<any>(TOKENS.WorkspaceControllerFactory);
-const controller = factory.create();
+router.use(controllerMiddleware(TOKENS.WorkspaceControllerFactory));
 
-// GET /accept - lookup invitation by token (for preview before accepting)
-router.get('/accept', controller.getInvitationByToken.bind(controller));
-// POST /accept - accept the invitation
-router.post('/accept', controller.acceptInvitation.bind(controller));
-// POST /decline - decline the invitation
-router.post('/decline', controller.declineInvitation.bind(controller));
+router.get('/accept', (req, res) => req.controller.getInvitationByToken(req, res));
+router.post('/accept', (req, res) => req.controller.acceptInvitation(req, res));
+router.post('/decline', (req, res) => req.controller.declineInvitation(req, res));
 
 export default router;

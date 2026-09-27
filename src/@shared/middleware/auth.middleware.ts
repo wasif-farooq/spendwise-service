@@ -5,21 +5,33 @@ import { StructuredLogger } from '@monitoring/logging/StructuredLogger';
 
 const logger = new StructuredLogger();
 
+const publicPaths = [
+  '/health',
+  '/auth/',
+  '/payment/webhook',
+  '/payment/webhooks',
+  '/metrics',
+  '/favicon.ico',
+];
+
+const isPublicPath = (path: string) => {
+  return publicPaths.some((publicPath) => path.startsWith(publicPath));
+};
+
 export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
 
-  logger.info(`[AuthMiddleware] URL: ${req.method} ${req.url}`);
-  logger.info(`[AuthMiddleware] All Headers: ${JSON.stringify(req.headers)}`);
-  logger.info(`[AuthMiddleware] Auth Header: ${authHeader ? 'Present' : 'Missing'}`);
-
-  if (authHeader) {
-    console.log(`[AuthMiddleware] Token (first 20 chars): ${authHeader.substring(0, 20)}...`);
+  if (isPublicPath(req.path)) {
+    return next();
   }
 
+  // Never log headers or token material — the Authorization header is a
+  // live credential and logs are retained far longer than tokens live.
+  logger.info(
+    `[AuthMiddleware] ${req.method} ${req.url} auth=${authHeader ? 'present' : 'missing'}`,
+  );
+
   if (!authHeader) {
-    console.warn(
-      `[AuthMiddleware] 401 Unauthorized: No token provided for ${req.method} ${req.url}`,
-    );
     return res.status(401).json({ message: 'No token provided' });
   }
 
@@ -38,7 +50,14 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
   try {
     const config = ConfigLoader.getInstance();
     const secret = config.get('auth.jwt.secret');
-    const decoded = jwt.verify(token, secret);
+    const decoded = jwt.verify(token, secret) as any;
+
+    // Tokens minted for another purpose (refresh, password reset, pending 2FA)
+    // share the same signing secret and must not be accepted as a session.
+    // Legacy access tokens carry no purpose claim, so only reject mismatches.
+    if (decoded?.purpose && decoded.purpose !== 'access') {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
 
     (req as any).user = decoded;
 

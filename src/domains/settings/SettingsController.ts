@@ -1,225 +1,226 @@
 import { NextFunction, Request, Response } from 'express';
-import { UserRequestRepository } from '@domains/users/repositories/UserRequestRepository';
-import { AuthRequestRepository } from '@domains/auth/repositories/AuthRequestRepository';
-import { UserPreferencesService } from '@domains/users/services/UserPreferencesService';
-import { ServiceFactory } from '@factories/ServiceFactory';
-import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { Container } from '@di/Container';
-import { TOKENS } from '@di/tokens';
-import { RepositoryFactory } from '@factories/RepositoryFactory';
+import { SettingsRequestRepository } from './repositories/SettingsRequestRepository';
 import { AppError } from '@shared/errors/AppError';
 
-// Create service instances directly using singleton
-const dbFacade = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-const repoFactory = new RepositoryFactory(dbFacade);
-const serviceFactory = new ServiceFactory(repoFactory, dbFacade);
-const userPreferencesService = serviceFactory.createUserPreferencesService();
-
 export class SettingsController {
-    constructor(
-        private userRequestRepository: UserRequestRepository,
-        private authRequestRepository: AuthRequestRepository
-    ) { }
+  constructor(private settingsRequestRepository: SettingsRequestRepository) {}
 
-    async getPreferences(req: Request, res: Response, next: NextFunction) {
-        try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const prefs = await userPreferencesService.getPreferences(userId);
-            res.json({ data: prefs.toDTO() });
-        } catch (error) {
-            next(error);
-        }
+  private getUserId(req: Request): string {
+    return (req as any).user?.userId || (req as any).user?.sub || (req as any).user?.id;
+  }
+
+  async getPreferences(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = this.getUserId(req);
+      const result = await this.settingsRequestRepository.getPreferences(userId);
+
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode || 500);
+      }
+
+      res.json({ data: result.data });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async updatePreferences(req: Request, res: Response, next: NextFunction) {
-        try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const prefs = await userPreferencesService.updatePreferences(userId, req.body);
-            res.json({ data: prefs.toDTO() });
-        } catch (error) {
-            next(error);
-        }
+  async updatePreferences(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = this.getUserId(req);
+      const result = await this.settingsRequestRepository.updatePreferences(userId, req.body);
+
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode || 500);
+      }
+
+      res.json({ data: result.data });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async getSecuritySettings(req: Request, res: Response, next: NextFunction) {
-        try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.authRequestRepository.getMe(userId);
+  async getSecuritySettings(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = this.getUserId(req);
+      const result = await this.settingsRequestRepository.getSecuritySettings(userId);
 
-            if (result.error) {
-                throw new AppError(result.error, result.statusCode || 400);
-            }
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode || 400);
+      }
 
-            // Map backend methods to frontend format
-            const is2FAEnabled = result.twoFactorEnabled || false;
-            const verifiedMethods = result.twoFactorMethods || [];
-            const availableMethods = [
-                {
-                    type: 'authenticator',
-                    enabled: verifiedMethods.some((m: any) => m.type === 'app' && m.verified),
-                    verified: verifiedMethods.some((m: any) => m.type === 'app' && m.verified)
-                },
-                {
-                    type: 'sms',
-                    enabled: verifiedMethods.some((m: any) => m.type === 'sms' && m.verified),
-                    verified: verifiedMethods.some((m: any) => m.type === 'sms' && m.verified)
-                },
-                {
-                    type: 'email',
-                    enabled: verifiedMethods.some((m: any) => m.type === 'email' && m.verified),
-                    verified: verifiedMethods.some((m: any) => m.type === 'email' && m.verified)
-                }
-            ];
+      const is2FAEnabled = result.data?.twoFactorEnabled || false;
+      const verifiedMethods = result.data?.twoFactorMethods || [];
+      const availableMethods = [
+        {
+          type: 'authenticator',
+          enabled: verifiedMethods.some((m: any) => m.type === 'app' && m.verified),
+          verified: verifiedMethods.some((m: any) => m.type === 'app' && m.verified),
+        },
+        {
+          type: 'sms',
+          enabled: verifiedMethods.some((m: any) => m.type === 'sms' && m.verified),
+          verified: verifiedMethods.some((m: any) => m.type === 'sms' && m.verified),
+        },
+        {
+          type: 'email',
+          enabled: verifiedMethods.some((m: any) => m.type === 'email' && m.verified),
+          verified: verifiedMethods.some((m: any) => m.type === 'email' && m.verified),
+        },
+      ];
 
-            res.json({
-                data: {
-                    twoFactorEnabled: is2FAEnabled,
-                    twoFactorMethod: result.twoFactorMethod === 'app' ? 'authenticator' : result.twoFactorMethod,
-                    availableMethods
-                }
-            });
-        } catch (error) {
-            next(error);
-        }
+      res.json({
+        data: {
+          twoFactorEnabled: is2FAEnabled,
+          twoFactorMethod:
+            result.data?.twoFactorMethod === 'app' ? 'authenticator' : result.data?.twoFactorMethod,
+          availableMethods,
+        },
+      });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async changePassword(req: Request, res: Response, next: NextFunction) {
-        try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.authRequestRepository.changePassword(userId, req.body);
+  async changePassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = this.getUserId(req);
+      const result = await this.settingsRequestRepository.changePassword(userId, req.body);
 
-            if (result.error) {
-                throw new AppError(result.error, result.statusCode || 400);
-            }
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode || 400);
+      }
 
-            res.json({ message: 'Password changed successfully' });
-        } catch (error) {
-            next(error);
-        }
+      res.json({ message: 'Password changed successfully' });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async setup2FA(req: Request, res: Response, next: NextFunction) {
-        try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const { method: rawMethod, email } = req.body;
-            const method = rawMethod === 'authenticator' ? 'app' : rawMethod;
-            const result = await this.authRequestRepository.generate2FASecret(userId, method, email);
+  async setup2FA(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = this.getUserId(req);
+      const { method: rawMethod, email } = req.body;
+      const method = rawMethod === 'authenticator' ? 'app' : rawMethod;
+      const result = await this.settingsRequestRepository.setup2FA(userId, { method, email });
 
-            if (result.error) {
-                throw new AppError(result.error, result.statusCode || 400);
-            }
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode || 400);
+      }
 
-            res.json({ data: result });
-        } catch (error) {
-            next(error);
-        }
+      res.json({ data: result.data });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async enable2FA(req: Request, res: Response, next: NextFunction) {
-        try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const method = req.body.method === 'authenticator' ? 'app' : req.body.method;
-            const result = await this.authRequestRepository.enable2FA(userId, req.body.code, method);
+  async enable2FA(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = this.getUserId(req);
+      const method = req.body.method === 'authenticator' ? 'app' : req.body.method;
+      const result = await this.settingsRequestRepository.enable2FA(userId, {
+        code: req.body.code,
+        method,
+      });
 
-            if (result.error) {
-                throw new AppError(result.error, result.statusCode || 400);
-            }
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode || 400);
+      }
 
-            res.json({ message: '2FA enabled successfully' });
-        } catch (error) {
-            next(error);
-        }
+      res.json({ message: '2FA enabled successfully' });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async disable2FA(req: Request, res: Response, next: NextFunction) {
-        try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.authRequestRepository.disable2FA(userId);
+  async disable2FA(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = this.getUserId(req);
+      const result = await this.settingsRequestRepository.disable2FA(userId);
 
-            if (result.error) {
-                throw new AppError(result.error, result.statusCode || 400);
-            }
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode || 400);
+      }
 
-            res.json({ message: '2FA disabled successfully' });
-        } catch (error) {
-            next(error);
-        }
+      res.json({ message: '2FA disabled successfully' });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async delete2FAMethod(req: Request, res: Response, next: NextFunction) {
-        try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const method = req.params.method === 'authenticator' ? 'app' : req.params.method;
-            const result = await this.authRequestRepository.disable2FAMethod(userId, method);
+  async delete2FAMethod(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = this.getUserId(req);
+      const method = req.params.method === 'authenticator' ? 'app' : req.params.method;
+      const result = await this.settingsRequestRepository.disable2FA(userId);
 
-            if (result.error) {
-                throw new AppError(result.error, result.statusCode || 400);
-            }
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode || 400);
+      }
 
-            res.json({ message: `${req.params.method} method removed successfully` });
-        } catch (error) {
-            next(error);
-        }
+      res.json({ message: `${req.params.method} method removed successfully` });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async regenerateBackupCodes(req: Request, res: Response, next: NextFunction) {
-        try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.authRequestRepository.regenerateBackupCodes(userId);
+  async regenerateBackupCodes(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = this.getUserId(req);
+      const result = await this.settingsRequestRepository.regenerateBackupCodes(userId);
 
-            if (result.error) {
-                throw new AppError(result.error, result.statusCode || 400);
-            }
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode || 400);
+      }
 
-            res.json({ data: result });
-        } catch (error) {
-            next(error);
-        }
+      res.json({ data: result.data });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async getActiveSessions(req: Request, res: Response, next: NextFunction) {
-        try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.authRequestRepository.getActiveSessions(userId);
+  async getActiveSessions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = this.getUserId(req);
+      const result = await this.settingsRequestRepository.getActiveSessions(userId);
 
-            if (result.error) {
-                throw new AppError(result.error, result.statusCode || 400);
-            }
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode || 400);
+      }
 
-            res.json({ data: result });
-        } catch (error) {
-            next(error);
-        }
+      res.json({ data: result.data });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async revokeSession(req: Request, res: Response, next: NextFunction) {
-        try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const { sessionId } = req.params;
-            const result = await this.authRequestRepository.revokeSession(userId, sessionId);
+  async revokeSession(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = this.getUserId(req);
+      const { sessionId } = req.params;
+      const result = await this.settingsRequestRepository.revokeSession(userId, sessionId);
 
-            if (result.error) {
-                throw new AppError(result.error, result.statusCode || 400);
-            }
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode || 400);
+      }
 
-            res.json({ message: 'Session revoked successfully' });
-        } catch (error) {
-            next(error);
-        }
+      res.json({ message: 'Session revoked successfully' });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async getLoginHistory(req: Request, res: Response, next: NextFunction) {
-        try {
-            const userId = (req as any).user.userId || (req as any).user.sub || (req as any).user.id;
-            const result = await this.authRequestRepository.getLoginHistory(userId);
+  async getLoginHistory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = this.getUserId(req);
+      const result = await this.settingsRequestRepository.getLoginHistory(userId);
 
-            if (result.error) {
-                throw new AppError(result.error, result.statusCode || 400);
-            }
+      if (result.error) {
+        throw new AppError(result.error, result.statusCode || 400);
+      }
 
-            res.json({ data: result });
-        } catch (error) {
-            next(error);
-        }
+      res.json({ data: result.data });
+    } catch (error) {
+      next(error);
     }
+  }
 }
