@@ -164,6 +164,11 @@ const config = {
         clientId: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         redirectUri: process.env.GOOGLE_REDIRECT_URI,
+        // Extra ID-token audiences for native sign-in (iOS/Android/Expo clients).
+        mobileClientIds: optional('GOOGLE_MOBILE_CLIENT_IDS')
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean),
       },
       apple: {
         clientId: process.env.APPLE_CLIENT_ID,
