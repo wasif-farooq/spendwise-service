@@ -1,6 +1,6 @@
 -- 024_activity_logs.sql - Activity logs with monthly partitions
 CREATE TABLE activity_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID NOT NULL DEFAULT uuid_generate_v4(),
     workspace_id UUID NOT NULL,
     user_id UUID,
     entity_type VARCHAR(50) NOT NULL,
@@ -10,7 +10,9 @@ CREATE TABLE activity_logs (
     new_values JSONB,
     metadata JSONB DEFAULT '{}',
     activity_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    -- A partitioned table's primary key must include the partition column.
+    PRIMARY KEY (id, activity_date)
 ) PARTITION BY RANGE (activity_date);
 
 CREATE INDEX idx_activity_logs_workspace_id ON activity_logs (workspace_id);
@@ -69,15 +71,16 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION ensure_activity_partitions(start_date TIMESTAMP, end_date TIMESTAMP)
 RETURNS VOID AS $$
 DECLARE
-    current_date TIMESTAMP;
+    -- Not `current_date`: that is a reserved SQL keyword and fails to parse.
+    month_cursor TIMESTAMP;
 BEGIN
-    current_date := date_trunc('month', start_date);
-    WHILE current_date < end_date LOOP
+    month_cursor := date_trunc('month', start_date);
+    WHILE month_cursor < end_date LOOP
         PERFORM create_activity_partition(
-            EXTRACT(YEAR FROM current_date)::INT,
-            EXTRACT(MONTH FROM current_date)::INT
+            EXTRACT(YEAR FROM month_cursor)::INT,
+            EXTRACT(MONTH FROM month_cursor)::INT
         );
-        current_date := current_date + INTERVAL '1 month';
+        month_cursor := month_cursor + INTERVAL '1 month';
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;
