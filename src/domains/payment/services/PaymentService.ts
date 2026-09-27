@@ -4,10 +4,13 @@ import {
   PaymentCustomer,
   CheckoutSession,
   SubscriptionDetails,
+  PAYMENT_PROVIDER_FLAGS,
 } from '../interfaces/IPaymentGateway';
 import { StripeGateway } from './StripeGateway';
 import { LemonSqueezyGateway } from './LemonSqueezyGateway';
 import { TwoCheckoutGateway } from './TwoCheckoutGateway';
+import { PaddleGateway } from './PaddleGateway';
+import { AppError } from '@shared/errors/AppError';
 import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
 
@@ -56,6 +59,12 @@ export class PaymentService {
       console.log('[PaymentService] 2Checkout gateway not available:', (error as Error).message);
     }
 
+    try {
+      this.gateways.set('paddle', new PaddleGateway());
+    } catch (error) {
+      console.log('[PaymentService] Paddle gateway not available:', (error as Error).message);
+    }
+
     console.log('[PaymentService] Available gateways:', Array.from(this.gateways.keys()));
     this.initialized = true;
   }
@@ -76,6 +85,16 @@ export class PaymentService {
         } catch (error) {
           console.log(
             `[PaymentService] On-demand Stripe initialization failed:`,
+            (error as Error).message,
+          );
+        }
+      } else if (provider === 'paddle') {
+        try {
+          gateway = new PaddleGateway();
+          this.gateways.set('paddle', gateway);
+        } catch (error) {
+          console.log(
+            `[PaymentService] On-demand Paddle initialization failed:`,
             (error as Error).message,
           );
         }
@@ -102,6 +121,9 @@ export class PaymentService {
     if (await featureFlagService.isEnabled('paymentTwoCheckout')) {
       if (this.gateways.has('twocheckout')) enabledProviders.push('twocheckout');
     }
+    if (await featureFlagService.isEnabled(PAYMENT_PROVIDER_FLAGS.paddle)) {
+      if (this.gateways.has('paddle')) enabledProviders.push('paddle');
+    }
 
     if (enabledProviders.length === 0) {
       throw new Error('No payment gateways are currently available');
@@ -120,7 +142,11 @@ export class PaymentService {
     cancelUrl: string;
     provider?: PaymentProvider;
     userId?: string;
+    currency?: string;
   }): Promise<CheckoutSession> {
+    if (params.provider) {
+      await this.assertProviderEnabled(params.provider);
+    }
     const gateway = params.provider
       ? this.getGateway(params.provider)
       : await this.getActiveGateway();
@@ -134,7 +160,23 @@ export class PaymentService {
       successUrl: params.successUrl,
       cancelUrl: params.cancelUrl,
       userId: params.userId,
+      currency: params.currency,
     });
+  }
+
+  /**
+   * A client-chosen provider must still be switched on. Without this a user could POST
+   * paymentGateway=<anything configured> and bypass the feature flag entirely.
+   */
+  async assertProviderEnabled(provider: PaymentProvider): Promise<void> {
+    const flag = PAYMENT_PROVIDER_FLAGS[provider];
+    if (!flag) {
+      throw new AppError(`Unknown payment gateway '${provider}'`, 400);
+    }
+    const featureFlagService = Container.getInstance().resolve<any>(TOKENS.FeatureFlagService);
+    if (!(await featureFlagService.isEnabled(flag))) {
+      throw new AppError(`Payment gateway '${provider}' is not enabled`, 400);
+    }
   }
 
   async getSubscriptionDetails(

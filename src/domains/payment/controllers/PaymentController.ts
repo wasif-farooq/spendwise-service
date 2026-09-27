@@ -50,8 +50,33 @@ export class PaymentController {
 
       return res.json(result.data);
     } catch (error: any) {
-      console.error('[PaymentController] createCheckout error:', error);
-      return res.status(500).json({ message: error.message });
+      console.error('[PaymentController] createCheckout error:', error?.message);
+      return res.status(error?.statusCode || 500).json({ message: error.message });
+    }
+  }
+
+  /** POST /payment/paddle/confirm { transactionId } */
+  async confirmPaddle(req: Request, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+
+      const transactionId = req.body?.transactionId;
+      if (typeof transactionId !== 'string' || !transactionId) {
+        return res.status(400).json({ message: 'Missing required field: transactionId' });
+      }
+
+      const result = await this.paymentRequestRepository.confirmPaddleTransaction(
+        userId,
+        transactionId,
+      );
+      // 202 while Paddle is still settling, so clients know to ask again.
+      return res.status(result.status === 'pending' ? 202 : 200).json(result);
+    } catch (error: any) {
+      console.error('[PaymentController] confirmPaddle error:', error?.message);
+      return res.status(error?.statusCode || 500).json({ message: error.message });
     }
   }
 }

@@ -6,6 +6,7 @@ import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
 import { UserSubscriptionRepository } from '@domains/subscription/repositories/SubscriptionRepository';
 import { UserRepository } from '@domains/auth/repositories/UserRepository';
+import { SubscriptionActivationService } from '../services/SubscriptionActivationService';
 
 const INVOICES_BUCKET = 'trackmypocket-invoices';
 
@@ -101,8 +102,6 @@ export class StripeWebhookHandler {
 
   private async handleCheckoutSessionCompleted(session: any): Promise<void> {
     const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-    const userRepo = new UserRepository(db);
-    const subRepo = new UserSubscriptionRepository(db);
 
     const customerId = session.customer;
     const subscriptionId = session.subscription;
@@ -131,28 +130,16 @@ export class StripeWebhookHandler {
       return;
     }
 
-    const existingSub = await subRepo.findByUserId(userId);
-    let subId: string;
-    if (existingSub) {
-      await subRepo.update(existingSub.id, {
-        planId: planId,
-        status: 'active',
-        merchantSubscriptionId: subscriptionId,
-        paymentProvider: 'stripe',
-      });
-      console.log(`[StripeWebhook] Updated subscription for user ${userId} to plan ${planId}`);
-      subId = existingSub.id;
-    } else {
-      const newSub = await subRepo.create({
-        userId,
-        planId: planId,
-        status: 'active',
-        merchantSubscriptionId: subscriptionId,
-        paymentProvider: 'stripe',
-      });
-      console.log(`[StripeWebhook] Created subscription for user ${userId} with plan ${planId}`);
-      subId = newSub.id;
-    }
+    const billingPeriod = session.metadata?.billingPeriod;
+    const { subscription } = await new SubscriptionActivationService(db).activatePaidSubscription({
+      userId,
+      planId,
+      provider: 'stripe',
+      merchantSubscriptionId: subscriptionId,
+      billingPeriod:
+        billingPeriod === 'monthly' || billingPeriod === 'yearly' ? billingPeriod : undefined,
+    });
+    const subId = subscription.id;
 
     if (amountTotal && amountTotal > 0) {
       await this.createPaymentRecord(db, {

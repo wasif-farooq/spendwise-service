@@ -11,7 +11,7 @@ import { LogStream } from '@monitoring/logging/LogStream';
 import { versionMiddleware } from '@shared/versioning/middleware/version.middleware';
 import { ApiRouter } from '@shared/ApiRouter';
 import { errorMiddleware } from '@shared/middleware/error.middleware';
-import { STRIPE_WEBHOOK_PATHS } from '@domains/payment/routes/payment.routes';
+import { RAW_BODY_WEBHOOK_PATHS } from '@domains/payment/routes/payment.routes';
 
 export class Server {
   private app: Express;
@@ -47,10 +47,11 @@ export class Server {
     this.app.use(cors(this.config.get('server.cors')));
     this.app.use(compression());
 
-    // Stripe signs the raw request bytes, so its webhook endpoints must see an
-    // unparsed Buffer. This has to run before express.json(): body-parser marks
-    // the request as parsed, so the JSON parser below skips these paths.
-    this.app.use(STRIPE_WEBHOOK_PATHS, express.raw({ type: '*/*' }));
+    // Stripe and Paddle sign the raw request bytes, so their webhook endpoints
+    // must see an unparsed Buffer. This has to run before express.json():
+    // body-parser marks the request as parsed, so the JSON parser below skips
+    // these paths.
+    this.app.use(RAW_BODY_WEBHOOK_PATHS, express.raw({ type: '*/*' }));
 
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));

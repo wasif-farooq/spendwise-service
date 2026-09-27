@@ -5,6 +5,10 @@ import { ServiceFactory } from '@factories/ServiceFactory';
 import { PaymentService } from '../services/PaymentService';
 import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
+import { AppError } from '@shared/errors/AppError';
+import { PaddleGateway } from '../services/PaddleGateway';
+import { PaddleBillingService } from '../services/PaddleBillingService';
+import { PAYMENT_PROVIDER_FLAGS } from '../interfaces/IPaymentGateway';
 
 export class PaymentRequestRepository {
   private config = ConfigLoader.getInstance();
@@ -52,6 +56,13 @@ export class PaymentRequestRepository {
       if (twoCheckoutEnabled) {
         gateways.push({ id: 'twocheckout', name: '2Checkout', enabled: true });
       }
+      // Only offered when it can actually take a payment: flag on AND credentials present.
+      if (
+        (await featureFlagService.isEnabled(PAYMENT_PROVIDER_FLAGS.paddle)) &&
+        service.getAvailableProviders().includes('paddle')
+      ) {
+        gateways.push({ id: 'paddle', name: 'Paddle', enabled: true });
+      }
 
       return { data: gateways, error: null, statusCode: 200 };
     }
@@ -96,15 +107,39 @@ export class PaymentRequestRepository {
         cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/checkout/cancel?planId=${data.planId}`,
         provider: data.paymentGateway as any,
         userId: userId,
+        currency: plan.currency,
       });
 
       return this.wrap(
         Promise.resolve({
           checkoutUrl: checkoutSession.url,
           sessionId: checkoutSession.sessionId,
+          // Overlay providers (Paddle) — the browser opens the checkout itself.
+          ...(checkoutSession.provider && { provider: checkoutSession.provider }),
+          ...(checkoutSession.transactionId && { transactionId: checkoutSession.transactionId }),
+          ...(checkoutSession.clientToken && { clientToken: checkoutSession.clientToken }),
+          ...(checkoutSession.environment && { environment: checkoutSession.environment }),
         }),
       );
     }
     throw new Error('RPC mode not implemented');
+  }
+
+  /**
+   * Browser-side confirmation of a Paddle checkout. Not feature-flag gated on purpose: a
+   * customer who has already paid must be able to get their plan even if the gateway was
+   * switched off in the meantime.
+   */
+  async confirmPaddleTransaction(userId: string, transactionId: string) {
+    if (this.getMode() !== 'direct') throw new Error('RPC mode not implemented');
+
+    let gateway: PaddleGateway;
+    try {
+      gateway = this.getService().getGateway('paddle') as PaddleGateway;
+    } catch {
+      throw new AppError('Paddle is not configured', 503);
+    }
+    const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
+    return new PaddleBillingService(gateway, db).confirmTransaction(userId, transactionId);
   }
 }
