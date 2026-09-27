@@ -145,6 +145,11 @@ export default {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         redirectUri:
           process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/auth/google/callback',
+        // Extra ID-token audiences for native sign-in (iOS/Android/Expo clients).
+        mobileClientIds: (process.env.GOOGLE_MOBILE_CLIENT_IDS || '')
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean),
       },
       apple: {
         clientId: process.env.APPLE_CLIENT_ID,

@@ -15,6 +15,7 @@ import {
   resetPasswordSchema,
   verifyEmailSchema,
   changePasswordSchema,
+  googleLoginSchema,
 } from '../validators/auth.validation';
 
 const router = Router();
@@ -31,7 +32,7 @@ router.post('/register', authRateLimits.register, validate(registerSchema), (req
 router.post('/refresh', authRateLimits.refresh, (req, res, next) =>
   req.controller.refresh(req, res).catch(next),
 );
-router.post('/google', authRateLimits.login, (req, res, next) =>
+router.post('/google', authRateLimits.login, validate(googleLoginSchema), (req, res, next) =>
   req.controller.googleLogin(req, res).catch(next),
 );
 
