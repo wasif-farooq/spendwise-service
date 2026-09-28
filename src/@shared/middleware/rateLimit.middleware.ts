@@ -152,6 +152,32 @@ export const authRateLimits = {
     message: 'Too many code requests. Please wait before requesting another.',
   }),
 
+  /**
+   * Issuing a handoff code needs a session, so it is keyed by user rather
+   * than IP. A user opens checkout a handful of times at most.
+   */
+  handoffIssue: createRateLimiter({
+    bucket: 'handoff-issue',
+    max: 20,
+    windowSeconds: 15 * 60,
+    message: 'Too many handoff requests. Please try again in a few minutes.',
+    keyGenerator: (req) => {
+      const user = (req as any).user;
+      return user?.userId || user?.sub || clientIp(req);
+    },
+  }),
+
+  /**
+   * Exchanging a code mints a session. Codes are 256-bit so guessing is not
+   * realistic, but the endpoint is still bounded per IP.
+   */
+  handoffExchange: createRateLimiter({
+    bucket: 'handoff-exchange',
+    max: 20,
+    windowSeconds: 15 * 60,
+    message: 'Too many sign-in attempts. Please try again in a few minutes.',
+  }),
+
   /** Legitimate clients refresh regularly, so this is generous. */
   refresh: createRateLimiter({
     bucket: 'refresh',

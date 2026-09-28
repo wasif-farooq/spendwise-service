@@ -134,6 +134,35 @@ export class AuthController {
     res.json(result);
   }
 
+  /** Issue a one-time code so the web app can be opened already signed in. */
+  async issueHandoff(req: Request, res: Response) {
+    const userId = (req as any).user?.userId || (req as any).user?.sub;
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    const result = await this.authRequestRepository.issueHandoffCode(userId, req.body);
+    if (result.error) {
+      res.status(result.statusCode || 400).json({ message: result.error });
+      return;
+    }
+    // The code is a credential for the next 60 seconds; keep it out of caches.
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(result);
+  }
+
+  /** Exchange a handoff code for a token pair, in the same shape as login. */
+  async exchangeHandoff(req: Request, res: Response) {
+    const result = await this.authRequestRepository.exchangeHandoffCode(req.body);
+    if (result.error) {
+      res.status(result.statusCode || 401).json({ message: result.error });
+      return;
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(result);
+  }
+
   async googleLogin(req: Request, res: Response) {
     // Web sends an authorization code; native apps send the ID token they got
     // from their own PKCE flow. The code path wins if both are present.
