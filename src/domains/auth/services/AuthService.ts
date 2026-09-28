@@ -16,6 +16,16 @@ import QRCode from 'qrcode';
 import { randomDigits, safeCompare } from '@shared/utils/secureRandom';
 import { BackupCode } from '@shared/types/BackupCode';
 import { issueTwoFactorTempToken, resolveTwoFactorTempToken } from './TwoFactorTempToken';
+import {
+  HANDOFF_INVALID_MESSAGE,
+  HANDOFF_TTL_SECONDS,
+  HandoffRecord,
+  HandoffScope,
+  generateHandoffCode,
+  handoffKey,
+  isHandoffScope,
+  parseHandoffRecord,
+} from './AuthHandoff';
 
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { WorkspaceRepository } from '@domains/workspaces/repositories/WorkspaceRepository';
@@ -661,6 +671,70 @@ export class AuthService {
     } catch (err) {
       throw new AppError('Invalid refresh token', 401);
     }
+  }
+
+  /**
+   * Issue a one-time code that a browser can exchange for a session of the
+   * signed-in user. See AuthHandoff.ts for the security properties.
+   */
+  async issueHandoffCode(
+    userId: string,
+    scope: HandoffScope,
+  ): Promise<{ code: string; expiresIn: number; scope: HandoffScope }> {
+    if (!isHandoffScope(scope)) {
+      throw new AppError('Unsupported handoff scope', 400);
+    }
+    // Codes live only in Redis; without it there is nothing to exchange later.
+    if (!this.cache) {
+      throw new AppError('Handoff is temporarily unavailable', 503);
+    }
+
+    const user = await this.userRepo.findById(userId);
+    if (!user) throw new AppError('Unauthorized', 401);
+
+    const code = generateHandoffCode();
+    const record: HandoffRecord = { userId: user.id, scope, issuedAt: Date.now() };
+    // NX: a 256-bit collision is not a practical concern, but never overwrite.
+    const stored = await this.cache.set(handoffKey(code), JSON.stringify(record), {
+      expiration: { type: 'EX', value: HANDOFF_TTL_SECONDS },
+      condition: 'NX',
+    });
+    if (stored === null) {
+      throw new AppError('Could not issue handoff code', 500);
+    }
+
+    return { code, expiresIn: HANDOFF_TTL_SECONDS, scope };
+  }
+
+  /**
+   * Exchange a handoff code for a normal token pair (the login shape). The
+   * code is read and deleted atomically, so it works at most once. Every
+   * failure returns the same message.
+   */
+  async exchangeHandoffCode(
+    code: string,
+  ): Promise<{ token: string; refreshToken: string; user: User }> {
+    if (!this.cache) {
+      throw new AppError('Handoff is temporarily unavailable', 503);
+    }
+    if (typeof code !== 'string' || code.length === 0) {
+      throw new AppError(HANDOFF_INVALID_MESSAGE, 401);
+    }
+
+    const raw = await this.cache.getDel(handoffKey(code));
+    const record = parseHandoffRecord(raw);
+    if (!record) {
+      throw new AppError(HANDOFF_INVALID_MESSAGE, 401);
+    }
+
+    const user = await this.userRepo.findById(record.userId);
+    if (!user) {
+      throw new AppError(HANDOFF_INVALID_MESSAGE, 401);
+    }
+
+    const token = this.generateAccessToken(user);
+    const refreshToken = this.generateRefreshToken(user);
+    return { token, refreshToken, user };
   }
 
   private generateAccessToken(user: User): string {

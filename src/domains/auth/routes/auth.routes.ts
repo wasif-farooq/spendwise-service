@@ -16,6 +16,8 @@ import {
   verifyEmailSchema,
   changePasswordSchema,
   googleLoginSchema,
+  handoffIssueSchema,
+  handoffExchangeSchema,
 } from '../validators/auth.validation';
 
 const router = Router();
@@ -34,6 +36,23 @@ router.post('/refresh', authRateLimits.refresh, (req, res, next) =>
 );
 router.post('/google', authRateLimits.login, validate(googleLoginSchema), (req, res, next) =>
   req.controller.googleLogin(req, res).catch(next),
+);
+
+// App-to-web handoff: a signed-in client gets a one-time code, the browser
+// exchanges it for a session. The code travels in a URL fragment on the web
+// side, so it never reaches a server log.
+router.post(
+  '/handoff',
+  requireAuth,
+  authRateLimits.handoffIssue,
+  validate(handoffIssueSchema),
+  (req, res, next) => req.controller.issueHandoff(req, res).catch(next),
+);
+router.post(
+  '/handoff/exchange',
+  authRateLimits.handoffExchange,
+  validate(handoffExchangeSchema),
+  (req, res, next) => req.controller.exchangeHandoff(req, res).catch(next),
 );
 
 router.post(

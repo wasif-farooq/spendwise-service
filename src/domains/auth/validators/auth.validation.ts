@@ -112,3 +112,19 @@ export const verifyEmailSchema = z.object({
     code: z.string().length(6),
   }),
 });
+
+// Only 'checkout' today; the scope is stored with the code so later scopes
+// cannot be confused with it.
+export const handoffIssueSchema = z.object({
+  body: z.object({
+    scope: z.enum(['checkout']).default('checkout'),
+  }),
+});
+
+// Deliberately loose: any malformed code gets the same generic 401 from the
+// service as an unknown or expired one, rather than a distinguishable 400.
+export const handoffExchangeSchema = z.object({
+  body: z.object({
+    code: z.string().min(1, 'Code is required').max(256),
+  }),
+});

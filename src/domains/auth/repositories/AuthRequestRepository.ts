@@ -164,6 +164,22 @@ export class AuthRequestRepository {
     throw new Error('RPC mode not implemented in this wrapper');
   }
 
+  async issueHandoffCode(userId: string, dto: any) {
+    if (this.getMode() === 'direct') {
+      const service = await this.getService();
+      return this.wrap(service.issueHandoffCode(userId, dto.scope));
+    }
+    throw new Error('RPC mode not implemented in this wrapper');
+  }
+
+  async exchangeHandoffCode(dto: any) {
+    if (this.getMode() === 'direct') {
+      const service = await this.getService();
+      return this.wrap(service.exchangeHandoffCode(dto.code));
+    }
+    throw new Error('RPC mode not implemented in this wrapper');
+  }
+
   async changePassword(userId: string, dto: any) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
