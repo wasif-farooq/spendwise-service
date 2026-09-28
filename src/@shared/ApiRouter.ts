@@ -17,6 +17,7 @@ import paymentRoutesV1 from '@domains/payment/routes/payment.routes';
 import billingRoutesV1 from '@domains/billing/routes/billing.routes';
 import reportRoutes from '@domains/reports/routes/report.routes';
 import activityRoutesV1 from '@domains/activity/routes/activity.routes';
+import pushTokenRoutesV1 from '@domains/notifications/routes/push-tokens.routes';
 
 export class ApiRouter {
   private router: Router;
@@ -36,6 +37,8 @@ export class ApiRouter {
     this.router.use('/v1/settings', settingsRoutesV1);
     this.router.use('/v1/feature-flags', featureFlagsRoutesV1);
     this.router.use('/v1/subscription', subscriptionRoutesV1);
+    // Mobile push tokens (at /v1/notifications/push-tokens)
+    this.router.use('/v1/notifications/push-tokens', pushTokenRoutesV1);
     // Storage routes (global, at /v1/storage)
     this.router.use('/v1/storage', storageRoutesV1);
     // Account and Transaction routes at /v1/:workspaceId/
