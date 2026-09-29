@@ -38,7 +38,7 @@ export function generateExpenseReportCsv(data: ExpenseReportData): Buffer {
 
   // --- Section 0: Metadata ---
   rows.push('Key,Value');
-  rows.push(buildCsvRow(['Report', 'SpendWise Expense Report']));
+  rows.push(buildCsvRow(['Report', 'TrackMyPocket Expense Report']));
   rows.push(buildCsvRow(['Period Start', data.period.startDate]));
   rows.push(buildCsvRow(['Period End', data.period.endDate]));
   rows.push(buildCsvRow(['Generated At', data.generatedAt]));

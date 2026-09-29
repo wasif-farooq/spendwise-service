@@ -52,7 +52,7 @@ export function generateExpenseReportXlsx(data: ExpenseReportData): Buffer {
   // Sheet 1: Overview
   // ═══════════════════════════════════════════════════════
   const overview: (string | number)[][] = [
-    ['SpendWise Expense Report'],
+    ['TrackMyPocket Expense Report'],
     [`Period: ${formatDate(data.period.startDate)} — ${formatDate(data.period.endDate)}`],
     [`Generated: ${formatDate(data.generatedAt)}`],
   ];

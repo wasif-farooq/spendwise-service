@@ -864,8 +864,8 @@ export class AuthService {
 
     if (method === 'app') {
       const specSecret = speakeasy.generateSecret({
-        name: `SpendWise:${user.email}`,
-        issuer: 'SpendWise',
+        name: `TrackMyPocket:${user.email}`,
+        issuer: 'TrackMyPocket',
       });
       secret = specSecret.base32;
       qrCode = await QRCode.toDataURL(specSecret.otpauth_url || '');

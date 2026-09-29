@@ -105,7 +105,7 @@ describe('PaddleGateway', () => {
     expect(price.unit_price).toEqual({ amount: '999', currency_code: 'USD' });
     expect(price.billing_cycle).toEqual({ interval: 'month', frequency: 1 });
     expect(price.quantity).toEqual({ minimum: 1, maximum: 1 });
-    expect(price.product).toEqual({ name: 'SpendWise Pro Monthly', tax_category: 'standard' });
+    expect(price.product).toEqual({ name: 'TrackMyPocket Pro Monthly', tax_category: 'standard' });
 
     expect(session).toEqual({
       url: '',
@@ -115,6 +115,19 @@ describe('PaddleGateway', () => {
       clientToken: CLIENT_TOKEN,
       environment: 'sandbox',
     });
+  });
+
+  it.each([
+    ['TrackMyPocket Pro Monthly', 'TrackMyPocket Pro Monthly'],
+    ['SpendWise Pro Monthly', 'SpendWise Pro Monthly'],
+  ])('keeps an already-branded plan name (%s) as-is', async (planName, expected) => {
+    responses.push(json(200, { data: [{ id: 'ctm_existing' }] }));
+    responses.push(json(201, { data: { id: 'txn_01abc', status: 'draft' } }));
+
+    await new PaddleGateway().createCheckoutSession({ ...checkoutParams, planName });
+
+    const price = JSON.parse(calls[1].init.body as string).items[0].price;
+    expect(price.product.name).toBe(expected);
   });
 
   it('creates the customer when none exists and bills yearly plans per year', async () => {

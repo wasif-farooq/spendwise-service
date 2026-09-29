@@ -218,7 +218,10 @@ export class PaddleGateway implements IPaymentGateway {
 
     const customerId = await this.findOrCreateCustomer(customer);
 
-    const productName = /^spendwise\b/i.test(planName) ? planName : `SpendWise ${planName}`;
+    // Names already branded (either the current or the legacy SpendWise prefix) are kept as-is.
+    const productName = /^(trackmypocket|spendwise)\b/i.test(planName)
+      ? planName
+      : `TrackMyPocket ${planName}`;
     const customData: PaddleCustomData = { userId, planId, billingPeriod, app: PADDLE_APP_TAG };
 
     const transaction = await this.request<PaddleTransaction>('POST', '/transactions', {

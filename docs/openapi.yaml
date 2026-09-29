@@ -1,8 +1,8 @@
 openapi: 3.0.0
 info:
-  title: SpendWise Backend API
+  title: TrackMyPocket Backend API
   version: 1.0.0
-  description: Antigravity Backend API for SpendWise
+  description: Antigravity Backend API for TrackMyPocket
 servers:
   - url: http://localhost:3000/api/v1
     description: Local Development Server

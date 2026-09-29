@@ -114,7 +114,7 @@ export class PaddleBillingService {
     const userId = custom.userId;
     const planId = custom.planId;
     if (typeof userId !== 'string' || typeof planId !== 'string') {
-      throw new AppError('Paddle transaction is missing SpendWise metadata', 422);
+      throw new AppError('Paddle transaction is missing TrackMyPocket metadata', 422);
     }
 
     const result = await this.activation.activatePaidSubscription({
