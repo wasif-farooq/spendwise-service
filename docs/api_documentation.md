@@ -1,6 +1,6 @@
-# SpendWise API Documentation
+# TrackMyPocket API Documentation
 
-This document outlines the API endpoints available in the SpendWise Backend. All API requests should be prefixed with `/api/v1`.
+This document outlines the API endpoints available in the TrackMyPocket Backend. All API requests should be prefixed with `/api/v1`.
 
 ## Authentication
 

@@ -375,7 +375,7 @@ export class StripeWebhookHandler {
         userEmail: email,
         amount,
         currency,
-        planName: 'SpendWise',
+        planName: 'TrackMyPocket',
         billingUrl: process.env.FRONTEND_URL || 'http://localhost:5173/settings/subscription',
       });
 
