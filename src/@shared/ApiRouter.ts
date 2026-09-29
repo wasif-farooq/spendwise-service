@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRoutesV1 from '@domains/auth/routes/auth.routes';
+import accountDeletionRoutesV1 from '@domains/auth/routes/account-deletion.routes';
 import userRoutesV1 from '@domains/users/routes/user.routes';
 import workspaceRoutesV1 from '@domains/workspaces/routes/workspace.routes';
 import invitationRoutesV1 from '@domains/workspaces/routes/invitation.routes';
@@ -30,6 +31,9 @@ export class ApiRouter {
   private configureRoutes() {
     console.log('[ApiRouter] Configuring routes');
     // V1 Routes
+    // Account deletion (at /v1/auth/account) before the auth router, which would
+    // otherwise run its controller middleware for these paths first.
+    this.router.use('/v1/auth/account', accountDeletionRoutesV1);
     this.router.use('/v1/auth', authRoutesV1);
     this.router.use('/v1/users', userRoutesV1);
     this.router.use('/v1/workspaces', workspaceRoutesV1);

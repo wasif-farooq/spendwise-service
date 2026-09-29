@@ -5,6 +5,8 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   CreateBucketCommand,
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Upload } from '@aws-sdk/lib-storage';
@@ -132,6 +134,57 @@ export class StorageService {
 
     // Delete from database
     await this.repository.delete(attachmentId);
+  }
+
+  /**
+   * Delete objects straight from S3/MinIO, without touching the attachments table
+   * (used after the rows are already gone, e.g. by account deletion). Batches of up to
+   * 1000 keys per bucket, as S3 allows. Returns how many objects were deleted.
+   */
+  async deleteObjects(objects: Array<{ bucket: string; key: string }>): Promise<number> {
+    const byBucket = new Map<string, string[]>();
+    for (const { bucket, key } of objects) {
+      if (!bucket || !key) continue;
+      byBucket.set(bucket, [...(byBucket.get(bucket) ?? []), key]);
+    }
+
+    let deleted = 0;
+    for (const [bucket, keys] of byBucket) {
+      for (let i = 0; i < keys.length; i += 1000) {
+        const batch = keys.slice(i, i + 1000);
+        const result = await this.s3Client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucket,
+            Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+          }),
+        );
+        if (result.Errors?.length) {
+          throw new Error(
+            `Could not delete ${result.Errors.length} object(s) from ${bucket}: ${result.Errors[0].Code}`,
+          );
+        }
+        deleted += batch.length;
+      }
+    }
+    return deleted;
+  }
+
+  /** Delete every object under a key prefix (e.g. `avatars/<userId>/`). */
+  async deletePrefix(bucket: string, prefix: string): Promise<number> {
+    if (!prefix) throw new Error('Refusing to delete an empty prefix');
+    let deleted = 0;
+    let token: string | undefined;
+    do {
+      const page = await this.s3Client.send(
+        new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }),
+      );
+      const keys = (page.Contents ?? []).map((o) => o.Key).filter((k): k is string => !!k);
+      if (keys.length > 0) {
+        deleted += await this.deleteObjects(keys.map((key) => ({ bucket, key })));
+      }
+      token = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (token);
+    return deleted;
   }
 
   /**

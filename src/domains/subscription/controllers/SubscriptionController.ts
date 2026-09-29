@@ -269,10 +269,20 @@ export class SubscriptionController {
         return res.status(500).json({ message: 'Workspace repository not configured' });
       }
 
-      const workspaceResult = await this.workspaceRequestRepository.getById(workspaceId, '');
+      const userId = this.getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+
+      // getById checks membership, so it needs the caller. It used to get '' here,
+      // which never matched a member and turned every request into a 404.
+      const workspaceResult = await this.workspaceRequestRepository.getById(workspaceId, userId);
 
       if (workspaceResult.error || !workspaceResult.data) {
-        return res.status(404).json({ message: 'Workspace not found' });
+        const status = workspaceResult.statusCode === 403 ? 403 : 404;
+        return res
+          .status(status)
+          .json({ message: status === 403 ? workspaceResult.error : 'Workspace not found' });
       }
 
       const workspace = workspaceResult.data;
