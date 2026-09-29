@@ -30,6 +30,9 @@ export interface UserProps {
   emailVerifiedAt?: Date;
 }
 
+/** Stored on the user but never sent to a client (see User.toJSON). */
+const SECRET_USER_PROPS = ['twoFactorSecret', 'backupCodes', 'emailVerificationCode'] as const;
+
 export class User extends Entity<UserProps> {
   private constructor(props: UserProps, id?: string) {
     super(props, id);
@@ -62,6 +65,16 @@ export class User extends Entity<UserProps> {
   // Static restore method to rehydrate from DB without defaults
   public static restore(props: UserProps, id: string): User {
     return new User(props, id);
+  }
+
+  /**
+   * The client-facing shape (API responses, res.json). Leaves out the TOTP secret, the hashed
+   * backup codes and the email verification code; persistence reads the getters, not this.
+   */
+  public toJSON(): any {
+    const safe: Partial<UserProps> = { ...this.props };
+    for (const key of SECRET_USER_PROPS) delete safe[key];
+    return { id: this._id, ...safe };
   }
 
   get email(): string {
