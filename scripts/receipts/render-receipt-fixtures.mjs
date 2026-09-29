@@ -170,37 +170,33 @@ const RECEIPTS = [
       <div class="rule"></div>${row('Total', '£17.98', 'total')}${row('Paid by card', '£17.98')}<div class="rule"></div><div class="c sm">Books are zero-rated for VAT</div>`,
     }),
   },
-  {
-    id: '09-long-grocery-us',
-    note: 'Long receipt: 40 lines, the total at the very bottom',
-    expected: { total: 186.42, currency: 'USD', date: '2026-09-10', merchant: 'Valley Foods', category: ['Food & Dining', 'Groceries'] },
-    html: (() => {
-      const list = [
-        ['APPLES GALA', 4.18], ['AVOCADO 4CT', 5.0], ['BLUEBERRIES', 4.99], ['CARROTS 2LB', 1.89], ['CELERY', 1.99], ['ONIONS 3LB', 3.49], ['POTATOES 5LB', 4.99], ['LEMONS', 2.5],
-        ['GREEK YOGURT', 5.49], ['BUTTER', 4.29], ['MOZZARELLA', 3.99], ['CREAM CHEESE', 2.79], ['ORANGE JUICE', 4.49], ['OAT MILK', 3.99], ['GROUND BEEF 2LB', 11.98], ['SALMON FILLET', 13.47],
-        ['PASTA PENNE', 1.79], ['PASTA SAUCE', 3.49], ['RICE JASMINE 5LB', 7.99], ['BLACK BEANS', 1.29], ['CHICKPEAS', 1.29], ['TORTILLAS', 3.29], ['PEANUT BUTTER', 3.99], ['JAM STRAWBERRY', 3.49],
-        ['CEREAL OATS', 4.29], ['GRANOLA', 5.99], ['COFFEE GROUND', 9.99], ['TEA GREEN', 3.79], ['DARK CHOCOLATE', 2.99], ['CRACKERS', 3.49], ['TORTILLA CHIPS', 3.99], ['SALSA', 3.29],
-        ['PAPER TOWELS', 8.99], ['DISH SOAP', 3.49], ['TRASH BAGS', 7.99], ['LAUNDRY DET', 11.99], ['SPONGES', 2.49], ['FOIL', 4.29], ['FROZEN PEAS', 1.99], ['ICE CREAM', 5.26],
-      ];
-      const sub = list.reduce((s, [, a]) => s + a, 0);
-      const tax = +(186.42 - sub).toFixed(2);
-      return {
-        list,
-        sub,
-        tax,
-        html: page({
-          font: thermal,
-          size: 20,
-          width: 470,
-          surface: '#555',
-          body: `<div class="c b big">VALLEY FOODS</div><div class="c sm">Store 031 · 900 Canyon Rd, Boise ID</div><div class="rule"></div>
-          <div class="sm">09/10/2026 &nbsp; 19:12 &nbsp; LANE 3</div><div class="rule"></div>
-          ${items(list, usd)}<div class="rule"></div>${row('SUBTOTAL', usd(sub))}${row('TAX', usd(tax))}${row('TOTAL', '186.42', 'total')}
-          ${row('CREDIT **** 7781', '186.42')}${row('ITEMS SOLD', String(list.length))}<div class="rule"></div><div class="c sm">YOU SAVED $12.40 TODAY</div>`,
-        }),
-      };
-    })().html,
-  },
+  (() => {
+    const list = [
+      ['APPLES GALA', 4.18], ['AVOCADO 4CT', 5.0], ['BLUEBERRIES', 4.99], ['CARROTS 2LB', 1.89], ['CELERY', 1.99], ['ONIONS 3LB', 3.49], ['POTATOES 5LB', 4.99], ['LEMONS', 2.5],
+      ['GREEK YOGURT', 5.49], ['BUTTER', 4.29], ['MOZZARELLA', 3.99], ['CREAM CHEESE', 2.79], ['ORANGE JUICE', 4.49], ['OAT MILK', 3.99], ['GROUND BEEF 2LB', 11.98], ['SALMON FILLET', 13.47],
+      ['PASTA PENNE', 1.79], ['PASTA SAUCE', 3.49], ['RICE JASMINE 5LB', 7.99], ['BLACK BEANS', 1.29], ['CHICKPEAS', 1.29], ['TORTILLAS', 3.29], ['PEANUT BUTTER', 3.99], ['JAM STRAWBERRY', 3.49],
+      ['CEREAL OATS', 4.29], ['GRANOLA', 5.99], ['COFFEE GROUND', 9.99], ['TEA GREEN', 3.79], ['DARK CHOCOLATE', 2.99], ['CRACKERS', 3.49], ['TORTILLA CHIPS', 3.99], ['SALSA', 3.29],
+      ['PAPER TOWELS', 8.99], ['DISH SOAP', 3.49], ['TRASH BAGS', 7.99], ['LAUNDRY DET', 11.99], ['SPONGES', 2.49], ['FOIL', 4.29], ['FROZEN PEAS', 1.99], ['ICE CREAM', 5.26],
+    ];
+    const sub = +list.reduce((s, [, a]) => s + a, 0).toFixed(2);
+    const tax = +(sub * 0.06).toFixed(2);
+    const total = +(sub + tax).toFixed(2);
+    return {
+      id: '09-long-grocery-us',
+      note: 'Long receipt: 40 lines, the total at the very bottom',
+      expected: { total, currency: 'USD', date: '2026-09-10', merchant: 'Valley Foods', category: ['Food & Dining', 'Groceries'] },
+      html: page({
+        font: thermal,
+        size: 20,
+        width: 470,
+        surface: '#555',
+        body: `<div class="c b big">VALLEY FOODS</div><div class="c sm">Store 031 · 900 Canyon Rd, Boise ID</div><div class="rule"></div>
+        <div class="sm">09/10/2026 &nbsp; 19:12 &nbsp; LANE 3</div><div class="rule"></div>
+        ${items(list, usd)}<div class="rule"></div>${row('SUBTOTAL', usd(sub))}${row('TAX 6%', usd(tax))}${row('TOTAL', usd(total), 'total')}
+        ${row('CREDIT **** 7781', usd(total))}${row('ITEMS SOLD', String(list.length))}<div class="rule"></div><div class="c sm">YOU SAVED $12.40 TODAY</div>`,
+      }),
+    };
+  })(),
   {
     id: '10-faded-thermal-us',
     note: 'Faded thermal paper: low contrast, grey ink',
