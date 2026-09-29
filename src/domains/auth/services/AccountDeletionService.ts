@@ -154,6 +154,14 @@ const isLiveProviderSubscription = (s: DeletableSubscription) =>
   !!s.merchantSubscriptionId &&
   !ENDED_STATUSES.has((s.status ?? '').toLowerCase());
 
+/** Network errors from the AWS SDK are AggregateErrors with an empty message. */
+const describeError = (reason: unknown): string => {
+  const e = reason as { message?: string; code?: string; name?: string; errors?: unknown[] };
+  if (e?.message) return e.message;
+  const inner = e?.errors?.[0] as { message?: string; code?: string } | undefined;
+  return inner?.message || e?.code || inner?.code || e?.name || String(reason);
+};
+
 const methodName = (type: string): 'authenticator' | 'sms' | 'email' =>
   type === 'app' ? 'authenticator' : (type as 'sms' | 'email');
 
@@ -456,6 +464,7 @@ export class AccountDeletionService {
             ...['app', 'sms', 'email'].map((m) => `2fa_pending:${user.id}:${m}`),
             ...['sms', 'email'].map((m) => `2fa_login:${user.id}:${m}`),
             `reset_code:${user.email}`,
+            `ratelimit:account-deletion:${user.id}`,
           ]);
         },
       ],
@@ -474,9 +483,7 @@ export class AccountDeletionService {
       if (result.status === 'rejected') {
         // Logged, not thrown: the account is already gone. No email address in the log.
         this.log.warn(
-          `[AccountDeletion] ${tasks[i][0]} cleanup failed for deleted user ${user.id}: ${
-            (result.reason as Error)?.message ?? result.reason
-          }`,
+          `[AccountDeletion] ${tasks[i][0]} cleanup failed for deleted user ${user.id}: ${describeError(result.reason)}`,
         );
       }
     });
