@@ -270,13 +270,25 @@ export class AuthService {
     }
 
     const googleUser = (await userInfoResponse.json()) as {
-      id: string;
-      email: string;
+      id?: string;
+      email?: string;
+      verified_email?: boolean;
       name?: string;
       given_name?: string;
       family_name?: string;
       picture?: string;
     };
+
+    // completeGoogleLogin links to an existing account by email, so the email must be one
+    // Google has verified. Otherwise anyone could create a Google account on someone
+    // else's (non-Gmail) address and sign in as them. The ID-token path checks
+    // email_verified in verifyGoogleIdToken; this is the same check for userinfo.
+    if (googleUser.verified_email !== true) {
+      throw new AppError('Google account email is not verified', 401);
+    }
+    if (!googleUser.id || !googleUser.email) {
+      throw new AppError('Failed to get user info from Google', 500);
+    }
 
     return this.completeGoogleLogin({
       sub: googleUser.id,
