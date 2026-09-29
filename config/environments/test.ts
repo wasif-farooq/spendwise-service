@@ -104,11 +104,12 @@ export default {
   // AI receipt scanning: no key in tests, so the endpoints answer 503 unless a
   // test injects its own extractor.
   ai: {
-    receiptProvider: 'opencode',
-    baseUrl: 'https://opencode.ai/zen/v1',
+    receiptProvider: 'openrouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
     apiKey: '',
-    receiptModel: 'mimo-v2.5-free',
+    receiptModel: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
     freeScansPerMonth: 5,
-    timeoutMs: 25000,
+    timeoutMs: 45000,
+    maxTokens: 6000,
   },
 };
