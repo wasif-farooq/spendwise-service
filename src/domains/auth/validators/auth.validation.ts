@@ -128,3 +128,19 @@ export const handoffExchangeSchema = z.object({
     code: z.string().min(1, 'Code is required').max(256),
   }),
 });
+
+// DELETE /auth/account. Which fields are required depends on the account (password or
+// Google-only, 2FA on or off), so the service checks that; this only bounds the shapes.
+export const deleteAccountSchema = z.object({
+  body: z
+    .object({
+      password: z.string().min(1).max(256).optional(),
+      confirm: z.string().max(32).optional(),
+      twoFactorCode: z
+        .string()
+        .trim()
+        .regex(/^\d{6}(\d{2})?$/, 'Enter a 6-digit code or an 8-digit backup code')
+        .optional(),
+    })
+    .default({}),
+});

@@ -178,6 +178,22 @@ export const authRateLimits = {
     message: 'Too many sign-in attempts. Please try again in a few minutes.',
   }),
 
+  /**
+   * Deleting the account checks the password and a 2FA code, so it is a guessing
+   * surface behind a session. Keyed by user: someone holding a stolen access token
+   * gets a handful of tries, whatever IPs they use.
+   */
+  accountDeletion: createRateLimiter({
+    bucket: 'account-deletion',
+    max: 5,
+    windowSeconds: 15 * 60,
+    message: 'Too many attempts to delete the account. Please try again in a few minutes.',
+    keyGenerator: (req) => {
+      const user = (req as any).user;
+      return user?.userId || user?.sub || clientIp(req);
+    },
+  }),
+
   /** Legitimate clients refresh regularly, so this is generous. */
   refresh: createRateLimiter({
     bucket: 'refresh',
