@@ -39,7 +39,10 @@ const reply = (
     ok: status >= 200 && status < 300,
     status,
     json: async () => ({ choices: [{ message: { content } }], usage }),
-    text: async () => content,
+    text: async () =>
+      status >= 200 && status < 300
+        ? JSON.stringify({ choices: [{ message: { content } }], usage })
+        : content,
   }) as unknown as Response;
 
 const build = (fetchFn: jest.Mock, extra: Partial<{ timeoutMs: number; now: () => number }> = {}) =>
@@ -136,10 +139,8 @@ describe('OpenAICompatibleReceiptExtractor', () => {
     const upstream = {
       ok: true,
       status: 200,
-      json: async () => ({
-        error: { code: 502, message: 'Upstream error: request limit reached' },
-      }),
-      text: async () => '',
+      text: async () =>
+        JSON.stringify({ error: { code: 502, message: 'Upstream error: request limit reached' } }),
     } as unknown as Response;
     const fetchFn = jest
       .fn()
@@ -169,6 +170,26 @@ describe('OpenAICompatibleReceiptExtractor', () => {
       const fetchFn = jest.fn().mockResolvedValue(reply('nope', status));
       await expect(build(fetchFn).extract(INPUT)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
     }
+  });
+
+  it('the budget covers a body that the provider holds open', async () => {
+    const fetchFn = jest.fn(async (_url: string, init: RequestInit) => ({
+      ok: true,
+      status: 200,
+      text: () =>
+        new Promise<string>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+          );
+        }),
+    }));
+    const started = Date.now();
+    await expect(
+      build(fetchFn as unknown as jest.Mock, { timeoutMs: 50 }).extract(INPUT),
+    ).rejects.toMatchObject({
+      code: 'AI_UNAVAILABLE',
+    });
+    expect(Date.now() - started).toBeLessThan(1000);
   });
 
   it('times out with 503 AI_UNAVAILABLE', async () => {

@@ -130,9 +130,9 @@ export class OpenAICompatibleReceiptExtractor implements ReceiptExtractor {
           model: this.model,
         };
       } catch (error) {
-        // Invalid JSON or wrong shape: one more try while there's time left.
+        // Invalid JSON or wrong shape: one more try while there's time for it.
         lastError = error;
-        if (deadline - this.now() < 3_000) break;
+        if (deadline - this.now() < MIN_RETRY_BUDGET_MS) break;
       }
     }
 
@@ -186,6 +186,7 @@ export class OpenAICompatibleReceiptExtractor implements ReceiptExtractor {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), remaining);
       let response: Response;
+      let text: string;
       try {
         response = await this.fetchFn(url, {
           method: 'POST',
@@ -200,6 +201,9 @@ export class OpenAICompatibleReceiptExtractor implements ReceiptExtractor {
           body: JSON.stringify(this.body(input)),
           signal: controller.signal,
         });
+        // The body counts against the budget too: some providers answer 200 at once and
+        // keep the body open while the model thinks.
+        text = await response.text();
       } catch (error) {
         const aborted = (error as { name?: string })?.name === 'AbortError';
         console.warn(
@@ -211,7 +215,6 @@ export class OpenAICompatibleReceiptExtractor implements ReceiptExtractor {
       }
 
       if (!response.ok) {
-        const text = await response.text().catch(() => '');
         if (this.jsonMode && rejectsJsonMode(response.status, text)) {
           console.warn(
             `[ReceiptScan] ${this.provider}/${this.model} rejects response_format; using the prompt instruction`,
@@ -233,7 +236,7 @@ export class OpenAICompatibleReceiptExtractor implements ReceiptExtractor {
 
       let reply: ChatReply;
       try {
-        reply = (await response.json()) as ChatReply;
+        reply = JSON.parse(text) as ChatReply;
       } catch {
         throw receiptScanError('AI_UNAVAILABLE', 503, usage);
       }
