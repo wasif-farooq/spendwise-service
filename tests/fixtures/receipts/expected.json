@@ -1,0 +1,135 @@
+{
+  "01-grocery-us": {
+    "file": "01-grocery-us.jpg",
+    "note": "US supermarket, thermal print, MM/DD/YYYY",
+    "total": 47.83,
+    "currency": "USD",
+    "date": "2026-09-14",
+    "merchant": "FreshMart",
+    "category": [
+      "Food & Dining",
+      "Groceries"
+    ]
+  },
+  "02-restaurant-tip-us": {
+    "file": "02-restaurant-tip-us.jpg",
+    "note": "Restaurant card slip with a handwritten tip and total",
+    "total": 79.12,
+    "currency": "USD",
+    "date": "2026-09-05",
+    "merchant": "The Olive Table",
+    "category": [
+      "Food & Dining"
+    ]
+  },
+  "03-fuel-us": {
+    "file": "03-fuel-us.jpg",
+    "note": "Fuel pump receipt, narrow thermal",
+    "total": 58.4,
+    "currency": "USD",
+    "date": "2026-08-30",
+    "merchant": "Northside Fuel",
+    "category": [
+      "Transportation"
+    ]
+  },
+  "04-pharmacy-us": {
+    "file": "04-pharmacy-us.jpg",
+    "note": "Pharmacy with a prescription copay and sundries",
+    "total": 23.17,
+    "currency": "USD",
+    "date": "2026-09-02",
+    "merchant": "CareWell Pharmacy",
+    "category": [
+      "Health & Fitness",
+      "Health"
+    ]
+  },
+  "05-cafe-eur-fr": {
+    "file": "05-cafe-eur-fr.jpg",
+    "note": "Paris café, EUR with decimal commas, DD/MM/YYYY",
+    "total": 12.4,
+    "currency": "EUR",
+    "date": "2026-09-18",
+    "merchant": "Café Lumière",
+    "category": [
+      "Food & Dining"
+    ]
+  },
+  "06-supermarket-eur-de": {
+    "file": "06-supermarket-eur-de.jpg",
+    "note": "German supermarket, SUMME, DD.MM.YYYY",
+    "total": 34.56,
+    "currency": "EUR",
+    "date": "2026-09-03",
+    "merchant": "Frischmarkt",
+    "category": [
+      "Food & Dining",
+      "Groceries"
+    ]
+  },
+  "07-pub-gbp": {
+    "file": "07-pub-gbp.jpg",
+    "note": "UK pub, £, DD/MM/YYYY",
+    "total": 28.5,
+    "currency": "GBP",
+    "date": "2026-09-21",
+    "merchant": "The Crown & Anchor",
+    "category": [
+      "Food & Dining"
+    ]
+  },
+  "08-bookshop-gbp": {
+    "file": "08-bookshop-gbp.jpg",
+    "note": "UK bookshop, printed invoice style",
+    "total": 17.98,
+    "currency": "GBP",
+    "date": "2026-08-11",
+    "merchant": "Harbour Books",
+    "category": [
+      "Shopping",
+      "Education",
+      "Entertainment"
+    ]
+  },
+  "09-long-grocery-us": {
+    "file": "09-long-grocery-us.jpg",
+    "note": "Long receipt: 40 lines, the total at the very bottom",
+    "total": 186.42,
+    "currency": "USD",
+    "date": "2026-09-10",
+    "merchant": "Valley Foods",
+    "category": [
+      "Food & Dining",
+      "Groceries"
+    ]
+  },
+  "10-faded-thermal-us": {
+    "file": "10-faded-thermal-us.jpg",
+    "note": "Faded thermal paper: low contrast, grey ink",
+    "total": 9.87,
+    "currency": "USD",
+    "date": "2026-09-25",
+    "merchant": "Quick Stop Market",
+    "category": [
+      "Food & Dining",
+      "Groceries"
+    ]
+  },
+  "11-tilted-blurred-us": {
+    "file": "11-tilted-blurred-us.jpg",
+    "note": "Photo taken at an angle: 7° tilt and a slight blur",
+    "total": 64.29,
+    "currency": "USD",
+    "date": "2026-09-19",
+    "merchant": "Oak & Iron Hardware",
+    "category": [
+      "Home & Garden"
+    ]
+  },
+  "12-not-a-receipt": {
+    "file": "12-not-a-receipt.jpg",
+    "note": "A landscape picture, not a receipt",
+    "error": "NOT_A_RECEIPT"
+  }
+}
