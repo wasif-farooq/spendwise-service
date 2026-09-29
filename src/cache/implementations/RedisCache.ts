@@ -1,6 +1,7 @@
 import { ICache } from '@interfaces/ICache';
 import { createClient } from 'redis';
 import { ConfigLoader } from '@config/ConfigLoader';
+import { redisUrl } from '@database/redisConnection';
 
 export class RedisCache implements ICache {
   private client: any;
@@ -10,10 +11,7 @@ export class RedisCache implements ICache {
     const config = ConfigLoader.getInstance();
     const redisConfig = config.get('database.redis');
 
-    // Redis URL format: redis://[:password@]host[:port][/db-number]
-    const url = `redis://${redisConfig.password ? ':' + redisConfig.password + '@' : ''}${redisConfig.host}:${redisConfig.port}`;
-
-    this.client = createClient({ url });
+    this.client = createClient({ url: redisUrl(redisConfig) });
 
     this.client.on('error', (err: any) => console.error('Redis Client Error', err));
   }

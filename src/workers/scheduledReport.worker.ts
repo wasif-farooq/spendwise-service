@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq';
-import { ConfigLoader } from '@config/ConfigLoader';
+import { bullmqConnection } from '@database/redisConnection';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { PostgresFactory } from '@database/factories/PostgresFactory';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
@@ -19,13 +19,7 @@ export class ScheduledReportWorker {
   }
 
   async start(): Promise<void> {
-    const config = ConfigLoader.getInstance();
-    const bullmqConfig = config.get('messaging.bullmq');
-    const connection = {
-      host: bullmqConfig.connection.host,
-      port: bullmqConfig.connection.port,
-      password: bullmqConfig.connection.password || undefined,
-    };
+    const connection = bullmqConnection();
 
     this.worker = new Worker(
       'scheduled-report',

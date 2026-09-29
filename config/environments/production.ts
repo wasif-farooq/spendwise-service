@@ -47,6 +47,11 @@ if (jwtSecret && jwtSecret.includes('development-secret')) {
   problems.push('JWT_SECRET is still set to the development placeholder');
 }
 
+// One DB index for every Redis client this process opens — the cache, the
+// rate limiter, 2FA/reset codes and the BullMQ queues. Set it when the Redis is
+// shared with another application, so the two keyspaces never meet.
+const redisDb = int('REDIS_DB', 0);
+
 // Comma-separated list of the origins allowed to call the API, e.g.
 // "https://app.trackmypocket.com,https://trackmypocket.com".
 const corsOrigins = required('CORS_ORIGINS')
@@ -105,7 +110,7 @@ const config = {
       host: required('REDIS_HOST'),
       port: int('REDIS_PORT', 6379),
       password: optional('REDIS_PASSWORD'),
-      db: 0,
+      db: redisDb,
     },
   },
 
@@ -114,7 +119,7 @@ const config = {
       host: required('REDIS_HOST'),
       port: int('REDIS_PORT', 6379),
       password: optional('REDIS_PASSWORD'),
-      db: 1,
+      db: redisDb,
     },
   },
 
@@ -138,6 +143,7 @@ const config = {
         host: required('REDIS_HOST'),
         port: int('REDIS_PORT', 6379),
         password: optional('REDIS_PASSWORD'),
+        db: redisDb,
       },
     },
   },

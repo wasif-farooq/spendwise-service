@@ -1,3 +1,4 @@
+import { redisUrl } from '@database/redisConnection';
 import path from 'path';
 
 const CONFIG_DIR = path.resolve(__dirname, '../../../config/environments');
@@ -110,6 +111,22 @@ describe('production config module', () => {
     expect(loadProduction).toThrow(/DB_PORT must be a number/);
   });
 
+  it('puts every Redis client on REDIS_DB', () => {
+    process.env = { ...validEnv(), REDIS_DB: '1' } as any;
+    const config = loadProduction();
+
+    expect(config.database.redis.db).toBe(1);
+    expect(config.cache.redis.db).toBe(1);
+    expect(config.messaging.bullmq.connection.db).toBe(1);
+  });
+
+  it('defaults REDIS_DB to 0', () => {
+    process.env = validEnv() as any;
+    delete (process.env as any).REDIS_DB;
+
+    expect(loadProduction().messaging.bullmq.connection.db).toBe(0);
+  });
+
   it('leaves optional payment config unset without failing', () => {
     process.env = validEnv() as any;
     delete (process.env as any).STRIPE_SECRET_KEY;
@@ -119,5 +136,27 @@ describe('production config module', () => {
 
     expect(config.stripe.secretKey).toBeUndefined();
     expect(config.stripe.webhookSecret).toBeUndefined();
+  });
+});
+
+describe('redisUrl', () => {
+  it('selects the configured DB index', () => {
+    expect(redisUrl({ host: 'redis', port: 6379, db: 1 })).toBe('redis://redis:6379/1');
+  });
+
+  it('defaults to DB 0 when no index is configured', () => {
+    expect(redisUrl({ host: 'localhost', port: 6380 })).toBe('redis://localhost:6380/0');
+  });
+
+  it('includes an encoded password when one is set', () => {
+    expect(redisUrl({ host: 'redis', port: 6379, password: 'p@ss/word', db: 2 })).toBe(
+      'redis://:p%40ss%2Fword@redis:6379/2',
+    );
+  });
+
+  it('omits auth for an empty password', () => {
+    expect(redisUrl({ host: 'redis', port: 6379, password: '', db: 0 })).toBe(
+      'redis://redis:6379/0',
+    );
   });
 });

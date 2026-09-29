@@ -1,21 +1,19 @@
 import { IRpcClient, MessageHandler } from '@messaging/interfaces/IRpcClient';
 import { Queue, Worker, QueueEvents } from 'bullmq';
-import { ConfigLoader } from '@config/ConfigLoader';
+import { BullMQConnection, bullmqConnection } from '@database/redisConnection';
 
 export class BullMQRpcClient implements IRpcClient {
   private queues: Map<string, Queue> = new Map();
   private workers: Map<string, Worker> = new Map();
   private replyQueue: Queue;
   private replyQueueEvents: QueueEvents;
-  private connection: { host: string; port: number; password?: string };
+  private connection: BullMQConnection;
   private connected: boolean = false;
   private handlers: Map<string, MessageHandler> = new Map();
   private replyTopics: Map<string, string> = new Map();
 
   constructor() {
-    const config = ConfigLoader.getInstance();
-    const bullmqConfig = config.get('messaging.bullmq');
-    this.connection = bullmqConfig.connection;
+    this.connection = bullmqConnection();
     this.replyQueue = new Queue('worker.replies', { connection: this.connection });
     this.replyQueueEvents = new QueueEvents('worker.replies', { connection: this.connection });
   }
