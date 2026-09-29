@@ -41,7 +41,7 @@ const buildService = async (): Promise<AccountDeletionService> => {
   const { PaymentService } = require('@domains/payment/services/PaymentService');
   const { StorageService } = require('@domains/storage/services/StorageService');
   const { StorageRepository } = require('@domains/storage/repositories/StorageRepository');
-  const { EmailServiceFactory } = require('@domains/email/EmailService');
+  const { getEmailService } = require('@domains/email/EmailService');
   /* eslint-enable @typescript-eslint/no-var-requires */
 
   const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
@@ -54,7 +54,7 @@ const buildService = async (): Promise<AccountDeletionService> => {
     authRepo: repositories.createAuthRepository(),
     getPaddle: () => PaymentService.getInstance().getGateway('paddle'),
     getStorage: () => new StorageService(new StorageRepository(db), ConfigLoader.getInstance()),
-    mailer: EmailServiceFactory.create(),
+    mailer: getEmailService(),
     cache: await ServiceFactory.getSharedRedisClient(),
   });
 };

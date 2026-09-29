@@ -36,6 +36,24 @@ import { Workspace } from '@domains/workspaces/models/Workspace';
 import { WorkspaceRole } from '@domains/workspaces/models/WorkspaceRole';
 import { WorkspaceMember } from '@domains/workspaces/models/WorkspaceMember';
 import { SubscriptionService } from '@domains/subscription/services/SubscriptionService';
+import {
+  AWAITED_SEND_TIMEOUT_MS,
+  IEmailService,
+  mayLogSecrets,
+  sendEmailSafely,
+} from '@domains/email/EmailService';
+import {
+  generatePasswordResetEmail,
+  generateTwoFactorLoginEmail,
+  generateTwoFactorSetupEmail,
+  generateVerificationEmail,
+} from '@domains/email/EmailTemplates';
+import { verifyEmailLink } from '@domains/email/links';
+
+/** Lifetimes of the emailed codes (cache TTLs), in seconds. */
+const RESET_CODE_TTL_SECONDS = 900;
+const TWO_FACTOR_LOGIN_CODE_TTL_SECONDS = 600;
+const TWO_FACTOR_SETUP_TTL_SECONDS = 600;
 
 /** The subset of a Google profile the login flow needs, from either source. */
 interface GoogleProfile {
@@ -72,6 +90,8 @@ export class AuthService {
     @Inject(TOKENS.SubscriptionService) private subscriptionService: SubscriptionService,
     // Optional Cache Injection (Manual for now in Factory)
     private cache?: any,
+    /** Defaults to the process-wide mailer (MAIL_PROVIDER); tests pass a fake. */
+    private mailer?: IEmailService,
   ) {}
 
   async getUserById(userId: string): Promise<User> {
@@ -117,9 +137,20 @@ export class AuthService {
       throw txError;
     }
 
-    // Mock Send Registration Email
-    console.log(
-      `[Mock Email] Registration verification code for ${user.email}: ${verificationCode}`,
+    // Awaited (with a short timeout) so a broken mail setup shows up in the
+    // logs right away; a failed send never fails the registration.
+    const message = generateVerificationEmail({
+      firstName: user.firstName,
+      code: verificationCode,
+      verifyUrl: verifyEmailLink(user.email, verificationCode),
+    });
+    await sendEmailSafely(
+      { to: user.email, ...message },
+      {
+        context: 'registration verification',
+        timeoutMs: AWAITED_SEND_TIMEOUT_MS,
+        mailer: this.mailer,
+      },
     );
 
     return { user };
@@ -606,13 +637,32 @@ export class AuthService {
     if (!this.cache) {
       throw new AppError('Two-factor verification is temporarily unavailable', 503);
     }
-    await this.cache.set(`2fa_login:${user.id}:${method}`, code, { EX: 600 });
+    await this.cache.set(`2fa_login:${user.id}:${method}`, code, {
+      EX: TWO_FACTOR_LOGIN_CODE_TTL_SECONDS,
+    });
 
     // 3. Send via provider
     const methodInfo = user.twoFactorMethods.find((m) => m.type === method);
-    const target = methodInfo?.target || user.email;
 
-    console.log(`\n[2FA] [Mock] Resending 2FA code to ${target} via ${method}: ${code}\n`);
+    if (method === 'email') {
+      const message = generateTwoFactorLoginEmail({
+        firstName: user.firstName,
+        code,
+        expiresInMinutes: TWO_FACTOR_LOGIN_CODE_TTL_SECONDS / 60,
+      });
+      // Fire-and-forget: the response never waits on SMTP.
+      void sendEmailSafely(
+        { to: methodInfo?.target || user.email, ...message },
+        { context: '2FA sign-in code', mailer: this.mailer },
+      );
+      return;
+    }
+
+    // No SMS provider exists yet: the code can only be read from the dev log.
+    console.log(
+      `[2FA] No SMS provider configured; ${method} code for user ${user.id} not delivered` +
+        (mayLogSecrets() ? ` (dev code: ${code})` : ''),
+    );
   }
 
   async verifyBackupCode(
@@ -764,15 +814,25 @@ export class AuthService {
     // Generate Code
     const code = randomDigits(6);
 
-    // Cache Code (TTL 15m)
-    if (this.cache) {
-      await this.cache.set(`reset_code:${email.raw}`, code, { EX: 900 });
-    } else {
-      console.log('CACHE NOT CONFIGURED, CANNOT STORE RESET CODE');
+    // Cache Code (TTL 15m). Without the cache the code could never be
+    // verified, so don't email one.
+    if (!this.cache) {
+      console.error('[AuthService] Cache not configured: cannot store a password reset code');
+      return;
     }
+    await this.cache.set(`reset_code:${email.raw}`, code, { EX: RESET_CODE_TTL_SECONDS });
 
-    // Mock Send Email
-    console.log(`[Mock Email] Password reset code for ${email.raw}: ${code}`);
+    // Awaited with a short timeout (see register); failures are logged only,
+    // and the response stays the same whether or not the address exists.
+    const message = generatePasswordResetEmail({
+      firstName: user.firstName,
+      code,
+      expiresInMinutes: RESET_CODE_TTL_SECONDS / 60,
+    });
+    await sendEmailSafely(
+      { to: user.email, ...message },
+      { context: 'password reset', timeoutMs: AWAITED_SEND_TIMEOUT_MS, mailer: this.mailer },
+    );
   }
 
   async verifyResetCode(emailStr: string, code: string): Promise<{ resetToken: string }> {
@@ -870,32 +930,8 @@ export class AuthService {
       secret = specSecret.base32;
       qrCode = await QRCode.toDataURL(specSecret.otpauth_url || '');
     } else {
-      // SMS or Email use a 6-digit code
+      // SMS or Email use a 6-digit code, delivered below once it is cached.
       secret = randomDigits(6);
-
-      if (method === 'email') {
-        const targetEmail = providedEmail || user.email;
-        console.log(
-          `\n📧 [2FA Setup] [Mock Email] Sending 2FA setup code to ${targetEmail}: ${secret}\n`,
-        );
-        try {
-          const mockPath = require('path').join(process.cwd(), 'mock_2fa_code.txt');
-          require('fs').writeFileSync(
-            mockPath,
-            `[2FA Setup] Email: ${targetEmail}, Code: ${secret}`,
-          );
-          console.log(`\n📄 [Mock] Code written to: ${mockPath}\n`);
-        } catch (e) {}
-      } else if (method === 'sms') {
-        console.log(
-          `\n📱 [2FA Setup] [Mock SMS] Sending 2FA setup code to user ${userId}: ${secret}\n`,
-        );
-        try {
-          const mockPath = require('path').join(process.cwd(), 'mock_2fa_code.txt');
-          require('fs').writeFileSync(mockPath, `[2FA Setup] SMS: ${userId}, Code: ${secret}`);
-          console.log(`\n📄 [Mock] Code written to: ${mockPath}\n`);
-        } catch (e) {}
-      }
     }
 
     // Only the hashes are persisted (and cached); the plaintext set is
@@ -917,7 +953,7 @@ export class AuthService {
             method,
             target: method === 'email' ? providedEmail : undefined,
           }),
-          { EX: 600 },
+          { EX: TWO_FACTOR_SETUP_TTL_SECONDS },
         );
         console.log(`[AuthService] Successfully cached 2FA pending data`);
       } catch (cacheErr) {
@@ -925,6 +961,24 @@ export class AuthService {
       }
     } else {
       console.log(`[AuthService] Cache is not available!`);
+    }
+
+    if (method === 'email') {
+      const message = generateTwoFactorSetupEmail({
+        firstName: user.firstName,
+        code: secret,
+        expiresInMinutes: TWO_FACTOR_SETUP_TTL_SECONDS / 60,
+      });
+      // Fire-and-forget: the setup response never waits on SMTP.
+      void sendEmailSafely(
+        { to: providedEmail || user.email, ...message },
+        { context: '2FA setup code', mailer: this.mailer },
+      );
+    } else if (method === 'sms') {
+      console.log(
+        `[2FA Setup] No SMS provider configured; code for user ${userId} not delivered` +
+          (mayLogSecrets() ? ` (dev code: ${secret})` : ''),
+      );
     }
 
     return {

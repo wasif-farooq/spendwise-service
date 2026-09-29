@@ -364,28 +364,25 @@ export class StripeWebhookHandler {
     currency: string,
   ): Promise<void> {
     try {
-      const { EmailServiceFactory } = await import('@domains/email');
-      const { generatePaymentFailureEmailHtml, getPaymentFailureSubject } =
-        await import('@domains/email/EmailTemplates');
+      const { sendEmailSafely, generatePaymentFailureEmail, billingLink } =
+        await import('@domains/email');
 
-      const emailService = EmailServiceFactory.create();
-
-      const html = generatePaymentFailureEmailHtml({
-        userName: userName || 'User',
+      const message = generatePaymentFailureEmail({
+        userName: userName || '',
         userEmail: email,
         amount,
         currency,
         planName: 'TrackMyPocket',
-        billingUrl: process.env.FRONTEND_URL || 'http://localhost:5173/settings/subscription',
+        billingUrl: billingLink(),
       });
 
-      await emailService.send({
-        to: email,
-        subject: getPaymentFailureSubject(),
-        html,
-      });
-
-      console.log(`[StripeWebhook] Payment failure email sent to ${email}`);
+      const result = await sendEmailSafely(
+        { to: email, ...message },
+        { context: 'payment failure' },
+      );
+      if (result.success) {
+        console.log(`[StripeWebhook] Payment failure email sent to ${email}`);
+      }
     } catch (error) {
       console.error(`[StripeWebhook] Failed to send payment failure email:`, error);
     }

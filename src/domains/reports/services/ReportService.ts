@@ -1,6 +1,7 @@
-import { EmailServiceFactory, IEmailService } from '@domains/email';
+import { getEmailService, IEmailService } from '@domains/email';
 import {
   generateExpenseReportEmailHtml,
+  generateExpenseReportEmailText,
   getExpenseReportSubject,
 } from '@domains/email/EmailTemplates';
 import { ExpenseReportGenerator, ExpenseReportData } from './ExpenseReportGenerator';
@@ -21,7 +22,7 @@ export class ReportService {
   private reportGenerator: ExpenseReportGenerator;
 
   constructor(transactionRepo: TransactionRepository, categoryRepo: CategoryRepository) {
-    this.emailService = EmailServiceFactory.create();
+    this.emailService = getEmailService();
     this.reportGenerator = new ExpenseReportGenerator(transactionRepo, categoryRepo);
   }
 
@@ -36,9 +37,10 @@ export class ReportService {
   ): Promise<ReportDownloadResult> {
     const reportData = await this.reportGenerator.generate(workspaceId, dateRange, customDates);
 
-    const buffer = format === 'csv'
-      ? generateExpenseReportCsv(reportData)
-      : generateExpenseReportXlsx(reportData);
+    const buffer =
+      format === 'csv'
+        ? generateExpenseReportCsv(reportData)
+        : generateExpenseReportXlsx(reportData);
 
     const startDate = customDates?.startDate || reportData.period.startDate;
     const endDate = customDates?.endDate || reportData.period.endDate;
@@ -71,9 +73,10 @@ export class ReportService {
     const filenameDate = `${startDate}_to_${endDate}`.replace(/-/g, '');
 
     // 3. Send email with attachment
-    await this.emailService.send({
+    const result = await this.emailService.send({
       to: userEmail,
       subject: getExpenseReportSubject(reportData),
+      text: generateExpenseReportEmailText(reportData),
       html: generateExpenseReportEmailHtml(reportData),
       attachments: [
         {
@@ -86,6 +89,14 @@ export class ReportService {
         },
       ],
     });
+
+    if (!result.success) {
+      // Logged, not thrown: the export request answers as it always has.
+      console.error(
+        `[REPORT] Export report email not sent for period ${startDate} to ${endDate}: ${result.error ?? 'unknown error'}`,
+      );
+      return;
+    }
 
     console.log(
       `[REPORT] Export report sent to ${userEmail} for period ${startDate} to ${endDate}`,

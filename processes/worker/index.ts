@@ -7,6 +7,7 @@ import { UserService } from '@domains/users/services/UserService';
 import { WorkspaceService } from '@domains/workspaces/services/WorkspaceService';
 import { FeatureFlagService } from '@domains/feature-flags/services/FeatureFlagService';
 import { AppError } from '@shared/errors/AppError';
+import { logMailProvider } from '@domains/email/EmailService';
 import { ReportService } from '../../src/domains/reports/services/ReportService';
 import { ExportReportRequest } from '../../src/domains/reports/types';
 import { RpcClientFactory } from '../../src/messaging/factories/RpcClientFactory';
@@ -41,6 +42,7 @@ const startWorker = async () => {
   const reportService = serviceFactory.createReportService() as ReportService;
 
   console.log('Unified Worker Listening...');
+  logMailProvider();
 
   const handleMessage = async (payload: any, correlationId?: string): Promise<any> => {
     const topic = payload._topic || '';
