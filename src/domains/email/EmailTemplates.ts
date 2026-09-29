@@ -283,3 +283,59 @@ export function generatePaymentFailureEmailHtml(data: PaymentFailureData): strin
 export function getPaymentFailureSubject(): string {
   return 'Action Required: Payment Failed - TrackMyPocket';
 }
+
+interface AccountDeletedData {
+  firstName?: string;
+  /** Workspaces deleted with the account (names only). */
+  deletedWorkspaces: string[];
+  /** Workspaces the user was removed from. */
+  leftWorkspaces: string[];
+  subscriptionCancelled: boolean;
+}
+
+const escapeHtml = (value: string) =>
+  value.replace(
+    /[&<>"']/g,
+    (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] as string,
+  );
+
+/** Confirmation sent after DELETE /auth/account. Plain text first; the HTML mirrors it. */
+export function generateAccountDeletedEmail(data: AccountDeletedData): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  const greeting = data.firstName ? `Hi ${data.firstName},` : 'Hi,';
+  const lines: string[] = ['Your TrackMyPocket account and your personal data have been deleted.'];
+  if (data.deletedWorkspaces.length > 0) {
+    lines.push(
+      `Deleted with it, including their accounts, transactions, budgets and receipts: ${data.deletedWorkspaces.join(', ')}.`,
+    );
+  }
+  if (data.leftWorkspaces.length > 0) {
+    lines.push(`You were removed from: ${data.leftWorkspaces.join(', ')}.`);
+  }
+  if (data.subscriptionCancelled) {
+    lines.push('Your paid subscription was cancelled and will not renew.');
+  }
+  lines.push(
+    'Payment records are kept, without your name or email, for as long as tax law requires.',
+    "If you didn't ask for this, reply to this email or contact support right away.",
+  );
+
+  const text = [greeting, '', ...lines, '', '— TrackMyPocket'].join('\n');
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Your TrackMyPocket account was deleted</title></head>
+<body style="margin:0;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f9fafb;color:#111827;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px;">
+    <h1 style="margin:0 0 16px;font-size:20px;">Your account was deleted</h1>
+    <p style="margin:0 0 12px;font-size:14px;">${escapeHtml(greeting)}</p>
+    ${lines.map((l) => `<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#374151;">${escapeHtml(l)}</p>`).join('\n    ')}
+    <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;">This is an automated message from TrackMyPocket.</p>
+  </div>
+</body>
+</html>`;
+
+  return { subject: 'Your TrackMyPocket account was deleted', text, html };
+}
