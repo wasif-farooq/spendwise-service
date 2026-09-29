@@ -120,10 +120,7 @@ describe('createRateLimiter', () => {
       },
     };
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    const limiter = createRateLimiter(
-      { bucket: 'test', max: 1, windowSeconds: 60 },
-      brokenStore,
-    );
+    const limiter = createRateLimiter({ bucket: 'test', max: 1, windowSeconds: 60 }, brokenStore);
     const next = jest.fn();
     const res = buildRes();
 
@@ -146,5 +143,31 @@ describe('createRateLimiter', () => {
     await limiter(buildReq(), res, jest.fn());
 
     expect(res.body).toEqual({ message: 'slow down' });
+  });
+
+  it('adds the configured code and keys by user when asked', async () => {
+    const limiter = createRateLimiter(
+      {
+        bucket: 'scan',
+        max: 1,
+        windowSeconds: 3600,
+        message: 'too many scans',
+        code: 'TOO_MANY_SCANS',
+        keyGenerator: (req) => (req as any).user.userId,
+      },
+      memoryStore(),
+    );
+    const as = (userId: string, ip: string) =>
+      ({ ...buildReq(ip), user: { userId } }) as unknown as Request;
+
+    await limiter(as('u1', '198.51.100.1'), buildRes(), jest.fn());
+    const sameUserOtherIp = buildRes();
+    await limiter(as('u1', '198.51.100.2'), sameUserOtherIp, jest.fn());
+    const otherUser = buildRes();
+    await limiter(as('u2', '198.51.100.1'), otherUser, jest.fn());
+
+    expect(sameUserOtherIp.statusCode).toBe(429);
+    expect(sameUserOtherIp.body).toEqual({ message: 'too many scans', code: 'TOO_MANY_SCANS' });
+    expect(otherUser.statusCode).toBe(200);
   });
 });

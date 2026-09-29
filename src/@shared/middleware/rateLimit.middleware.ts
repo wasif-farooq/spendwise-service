@@ -23,6 +23,8 @@ export interface RateLimitOptions {
   windowSeconds: number;
   /** Message returned once the limit is hit. */
   message?: string;
+  /** Machine-readable `code` added to the 429 body, for clients that branch on it. */
+  code?: string;
   /** Derive the identity being limited. Defaults to the client IP. */
   keyGenerator?: (req: Request) => string;
 }
@@ -62,6 +64,7 @@ export const createRateLimiter = (
     max,
     windowSeconds,
     message = 'Too many requests. Please try again later.',
+    code,
     keyGenerator = clientIp,
   } = options;
 
@@ -87,7 +90,7 @@ export const createRateLimiter = (
 
     if (count > max) {
       res.setHeader('Retry-After', windowSeconds);
-      return res.status(429).json({ message });
+      return res.status(429).json(code ? { message, code } : { message });
     }
 
     return next();
