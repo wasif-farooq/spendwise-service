@@ -12,6 +12,7 @@ import { versionMiddleware } from '@shared/versioning/middleware/version.middlew
 import { ApiRouter } from '@shared/ApiRouter';
 import { errorMiddleware } from '@shared/middleware/error.middleware';
 import { RAW_BODY_WEBHOOK_PATHS } from '@domains/payment/routes/payment.routes';
+import { logMailProvider } from '@domains/email/EmailService';
 
 export class Server {
   private app: Express;
@@ -89,6 +90,7 @@ export class Server {
     const port = this.config.get('server.port') || 3000;
     this.app.listen(port, () => {
       this.logger.info(`Server started on port ${port}`);
+      logMailProvider();
     });
   }
 

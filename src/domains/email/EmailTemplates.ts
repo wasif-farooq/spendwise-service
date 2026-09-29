@@ -89,7 +89,7 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
                       (cat) => `
                     <tr>
                       <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
-                        <span style="color: #111827; font-size: 14px;">${cat.category}</span>
+                        <span style="color: #111827; font-size: 14px;">${escapeHtml(cat.category)}</span>
                       </td>
                       <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
                         <span style="color: #111827; font-size: 14px; font-weight: 600;">${formatCurrency(cat.amount)}</span>
@@ -114,7 +114,7 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
                       (merchant) => `
                     <tr>
                       <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
-                        <span style="color: #111827; font-size: 14px;">${merchant.merchant}</span>
+                        <span style="color: #111827; font-size: 14px;">${escapeHtml(merchant.merchant)}</span>
                         <span style="color: #6b7280; font-size: 12px; margin-left: 8px;">(${merchant.count} transactions)</span>
                       </td>
                       <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
@@ -139,8 +139,8 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
                       (tx) => `
                     <tr>
                       <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
-                        <span style="color: #111827; font-size: 14px;">${tx.description || 'No description'}</span>
-                        <span style="color: #6b7280; font-size: 12px; margin-left: 8px;">${tx.category}</span>
+                        <span style="color: #111827; font-size: 14px;">${escapeHtml(tx.description || 'No description')}</span>
+                        <span style="color: #6b7280; font-size: 12px; margin-left: 8px;">${escapeHtml(tx.category)}</span>
                       </td>
                       <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
                         <span style="color: #ef4444; font-size: 14px; font-weight: 600;">${formatCurrency(tx.amount)}</span>
@@ -182,93 +182,118 @@ export function getExpenseReportSubject(data: ExpenseReportData): string {
   return `Expense Report - ${formatDate(data.period.startDate)} to ${formatDate(data.period.endDate)}`;
 }
 
-interface PaymentFailureData {
-  userName: string;
-  userEmail: string;
-  amount: number;
-  currency: string;
-  planName: string;
-  nextBillingDate?: string;
-  billingUrl: string;
+/** Plain-text part of the expense report email (the file is attached). */
+export function generateExpenseReportEmailText(data: ExpenseReportData): string {
+  const money = (amount: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  const lines = [
+    `Your TrackMyPocket expense report for ${data.period.startDate} to ${data.period.endDate} is attached.`,
+    '',
+    `Total expenses: ${money(data.summary.totalExpenses)}`,
+    `Transactions: ${data.summary.transactionCount}`,
+    `Average transaction: ${money(data.summary.averageTransaction)}`,
+  ];
+  if (data.byCategory.length > 0) {
+    lines.push('', 'Top categories:');
+    data.byCategory
+      .slice(0, 5)
+      .forEach((c) =>
+        lines.push(`  ${c.category}: ${money(c.amount)} (${c.percentage.toFixed(1)}%)`),
+      );
+  }
+  lines.push(
+    '',
+    "You're receiving this because you asked for a report export in TrackMyPocket.",
+    '',
+    '— TrackMyPocket',
+  );
+  return lines.join('\n');
 }
 
-export function generatePaymentFailureEmailHtml(data: PaymentFailureData): string {
-  const formatCurrency = (amount: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-    }).format(amount / 100);
-  };
+// ---------------------------------------------------------------------------
+// Shared layout for transactional email.
+//
+// Every template returns { subject, text, html }. The text part carries the
+// same content as the HTML. No images, remote assets or tracking pixels: the
+// HTML is self-contained, and links are plain links to FRONTEND_URL.
+// Subjects never contain a code, so a subject in a log line is safe.
+// ---------------------------------------------------------------------------
 
-  return `
-<!DOCTYPE html>
-<html>
+export interface RenderedEmail {
+  subject: string;
+  text: string;
+  html: string;
+}
+
+export const escapeHtml = (value: string) =>
+  value.replace(
+    /[&<>"']/g,
+    (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] as string,
+  );
+
+const BRAND = {
+  name: 'TrackMyPocket',
+  primary: '#059669',
+  ink: '#111827',
+  muted: '#4b5563',
+  subtle: '#9ca3af',
+  surface: '#f3f4f6',
+  page: '#f9fafb',
+} as const;
+
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
+const greetingFor = (firstName?: string) => {
+  const name = firstName?.trim();
+  return name ? `Hi ${name},` : 'Hi,';
+};
+
+const minutesLabel = (minutes: number) => (minutes === 1 ? '1 minute' : `${minutes} minutes`);
+
+const paragraph = (text: string) =>
+  `<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:${BRAND.muted};">${escapeHtml(text)}</p>`;
+
+const codeBlock = (code: string) =>
+  `<div style="margin:8px 0 24px;padding:20px 12px;background:${BRAND.surface};border-radius:10px;text-align:center;">
+      <span style="font-family:'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:${BRAND.ink};">${escapeHtml(code)}</span>
+    </div>`;
+
+const button = (label: string, url: string) =>
+  `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 24px;"><tr><td style="border-radius:8px;background:${BRAND.primary};">
+      <a href="${escapeHtml(url)}" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">${escapeHtml(label)}</a>
+    </td></tr></table>`;
+
+const notice = (text: string) =>
+  `<p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e5e7eb;font-size:13px;line-height:1.6;color:${BRAND.subtle};">${escapeHtml(text)}</p>`;
+
+/** Wraps body blocks in the branded shell. `preheader` is the inbox preview line. */
+function layout(title: string, preheader: string, blocks: string[]): string {
+  return `<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payment Failed</title>
+  <meta name="color-scheme" content="light">
+  <title>${escapeHtml(title)}</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f9fafb;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9fafb;">
+<body style="margin:0;padding:0;background:${BRAND.page};font-family:${FONT};color:${BRAND.ink};">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.page};">
     <tr>
-      <td align="center" style="padding: 40px 20px;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          <!-- Header -->
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
           <tr>
-            <td style="padding: 32px 40px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 12px 12px 0 0;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">Payment Failed</h1>
-              <p style="margin: 8px 0 0 0; color: rgba(255, 255, 255, 0.9); font-size: 14px;">
-                Action required to continue your subscription
-              </p>
+            <td style="padding:0 4px 16px;font-size:18px;font-weight:700;color:${BRAND.primary};">${BRAND.name}</td>
+          </tr>
+          <tr>
+            <td style="background:#ffffff;border-radius:12px;padding:32px;">
+              <h1 style="margin:0 0 20px;font-size:21px;line-height:1.3;color:${BRAND.ink};">${escapeHtml(title)}</h1>
+              ${blocks.join('\n              ')}
             </td>
           </tr>
-
-          <!-- Content -->
           <tr>
-            <td style="padding: 32px 40px;">
-              <p style="margin: 0 0 16px 0; color: #111827; font-size: 16px;">
-                Hi ${data.userName},
-              </p>
-              <p style="margin: 0 0 16px 0; color: #374151; font-size: 14px; line-height: 1.6;">
-                We attempted to charge your card for your <strong>${data.planName}</strong> subscription 
-                (<strong>${formatCurrency(data.amount, data.currency)}</strong>), but the payment was declined.
-              </p>
-              
-              <div style="margin: 24px 0; padding: 16px; background-color: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
-                <p style="margin: 0; color: #92400e; font-size: 14px; font-weight: 600;">
-                  Don't worry - your access continues during this period
-                </p>
-                <p style="margin: 8px 0 0 0; color: #b45309; font-size: 13px;">
-                  Stripe will automatically retry the payment over the next 7 days. You can also update your payment method below to resolve this immediately.
-                </p>
-              </div>
-
-              <p style="margin: 24px 0 0 0; color: #374151; font-size: 14px; line-height: 1.6;">
-                To ensure uninterrupted service, please update your payment method:
-              </p>
-
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="padding: 24px 0;" align="center">
-                    <a href="${data.billingUrl}" style="display: inline-block; padding: 14px 32px; background-color: #4f46e5; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; border-radius: 8px;">
-                      Update Payment Method
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <p style="margin: 24px 0 0 0; color: #6b7280; font-size: 13px;">
-                If you believe this is an error, please contact our support team.
-              </p>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="padding: 24px 40px; background-color: #f9fafb; border-radius: 0 0 12px 12px; text-align: center;">
-              <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                This is an automated message from TrackMyPocket. Please do not reply to this email.
-              </p>
+            <td style="padding:16px 4px;font-size:12px;line-height:1.6;color:${BRAND.subtle};">
+              This is an automated message from ${BRAND.name}. Please don't reply to it.
             </td>
           </tr>
         </table>
@@ -276,13 +301,264 @@ export function generatePaymentFailureEmailHtml(data: PaymentFailureData): strin
     </tr>
   </table>
 </body>
-</html>
-  `.trim();
+</html>`;
+}
+
+const textEmail = (lines: string[]) =>
+  [
+    ...lines,
+    '',
+    `— ${BRAND.name}`,
+    `This is an automated message from ${BRAND.name}. Please don't reply to it.`,
+  ].join('\n');
+
+// --- Registration: verify your email --------------------------------------
+
+export interface VerificationEmailData {
+  firstName?: string;
+  code: string;
+  /** Web link that fills the code in: FRONTEND_URL/check-email?email=…&code=… */
+  verifyUrl: string;
+}
+
+export function generateVerificationEmail(data: VerificationEmailData): RenderedEmail {
+  const subject = 'Verify your TrackMyPocket email';
+  const intro = 'Welcome to TrackMyPocket. Enter this code to verify your email address:';
+  const validity = 'The code stays valid until your email is verified.';
+  const linkLine = 'Or open this link to verify in one step:';
+  const ignore =
+    "Didn't create a TrackMyPocket account? You can ignore this email; no account is activated without the code.";
+
+  const text = textEmail([
+    greetingFor(data.firstName),
+    '',
+    intro,
+    '',
+    `    ${data.code}`,
+    '',
+    validity,
+    '',
+    linkLine,
+    data.verifyUrl,
+    '',
+    ignore,
+  ]);
+  const html = layout('Verify your email', `Your verification code is inside.`, [
+    paragraph(greetingFor(data.firstName)),
+    paragraph(intro),
+    codeBlock(data.code),
+    paragraph(validity),
+    button('Verify email', data.verifyUrl),
+    notice(ignore),
+  ]);
+  return { subject, text, html };
+}
+
+// --- Forgot password: reset code ------------------------------------------
+
+export interface PasswordResetEmailData {
+  firstName?: string;
+  code: string;
+  expiresInMinutes: number;
+}
+
+export function generatePasswordResetEmail(data: PasswordResetEmailData): RenderedEmail {
+  const subject = 'Reset your TrackMyPocket password';
+  const intro =
+    'We received a request to reset your password. Enter this code in the app to choose a new one:';
+  const validity = `The code expires in ${minutesLabel(data.expiresInMinutes)} and works once.`;
+  const ignore =
+    "Didn't request this? You can ignore this email; your password stays the same. If you keep getting these, consider changing your password.";
+
+  const text = textEmail([
+    greetingFor(data.firstName),
+    '',
+    intro,
+    '',
+    `    ${data.code}`,
+    '',
+    validity,
+    '',
+    ignore,
+  ]);
+  const html = layout('Reset your password', `Your password reset code is inside.`, [
+    paragraph(greetingFor(data.firstName)),
+    paragraph(intro),
+    codeBlock(data.code),
+    paragraph(validity),
+    notice(ignore),
+  ]);
+  return { subject, text, html };
+}
+
+// --- Two-factor: sign-in code ----------------------------------------------
+
+export interface TwoFactorLoginEmailData {
+  firstName?: string;
+  code: string;
+  expiresInMinutes: number;
+}
+
+export function generateTwoFactorLoginEmail(data: TwoFactorLoginEmailData): RenderedEmail {
+  const subject = 'Your TrackMyPocket sign-in code';
+  const intro = 'Use this code to finish signing in to TrackMyPocket:';
+  const validity = `The code expires in ${minutesLabel(data.expiresInMinutes)}.`;
+  const ignore =
+    "Didn't try to sign in? Someone may know your password. Don't share this code, and change your password now.";
+
+  const text = textEmail([
+    greetingFor(data.firstName),
+    '',
+    intro,
+    '',
+    `    ${data.code}`,
+    '',
+    validity,
+    '',
+    ignore,
+  ]);
+  const html = layout('Your sign-in code', `Your sign-in code is inside.`, [
+    paragraph(greetingFor(data.firstName)),
+    paragraph(intro),
+    codeBlock(data.code),
+    paragraph(validity),
+    notice(ignore),
+  ]);
+  return { subject, text, html };
+}
+
+// --- Two-factor: setting up the email method -------------------------------
+
+export interface TwoFactorSetupEmailData {
+  firstName?: string;
+  code: string;
+  expiresInMinutes: number;
+}
+
+export function generateTwoFactorSetupEmail(data: TwoFactorSetupEmailData): RenderedEmail {
+  const subject = 'Confirm email two-factor authentication';
+  const intro =
+    'You are turning on two-factor authentication by email for your TrackMyPocket account. Enter this code to confirm this address:';
+  const validity = `The code expires in ${minutesLabel(data.expiresInMinutes)}.`;
+  const ignore =
+    "Didn't request this? Nothing changes unless the code is entered. If you didn't start this, change your TrackMyPocket password.";
+
+  const text = textEmail([
+    greetingFor(data.firstName),
+    '',
+    intro,
+    '',
+    `    ${data.code}`,
+    '',
+    validity,
+    '',
+    ignore,
+  ]);
+  const html = layout('Confirm two-factor authentication', `Your confirmation code is inside.`, [
+    paragraph(greetingFor(data.firstName)),
+    paragraph(intro),
+    codeBlock(data.code),
+    paragraph(validity),
+    notice(ignore),
+  ]);
+  return { subject, text, html };
+}
+
+// --- Workspace invitation ---------------------------------------------------
+
+export interface WorkspaceInvitationEmailData {
+  workspaceName: string;
+  inviterName?: string;
+  /** FRONTEND_URL/invitations/accept?token=… (a universal link on mobile). */
+  acceptUrl: string;
+  expiresInDays: number;
+}
+
+export function generateWorkspaceInvitationEmail(
+  data: WorkspaceInvitationEmailData,
+): RenderedEmail {
+  const who = data.inviterName?.trim() || 'Someone';
+  const subject = `${who} invited you to ${data.workspaceName} on TrackMyPocket`;
+  const intro = `${who} invited you to join the "${data.workspaceName}" workspace on TrackMyPocket.`;
+  const validity = `The invitation expires in ${data.expiresInDays} days.`;
+  const ignore =
+    "Not expecting this? You can ignore this email; you won't be added to anything unless you accept.";
+
+  const text = textEmail([
+    'Hi,',
+    '',
+    intro,
+    '',
+    'Accept the invitation:',
+    data.acceptUrl,
+    '',
+    validity,
+    '',
+    ignore,
+  ]);
+  const html = layout('You are invited', `Join ${data.workspaceName} on TrackMyPocket.`, [
+    paragraph('Hi,'),
+    paragraph(intro),
+    button('Accept invitation', data.acceptUrl),
+    paragraph(validity),
+    notice(ignore),
+  ]);
+  return { subject, text, html };
+}
+
+// --- Payment failed ---------------------------------------------------------
+
+interface PaymentFailureData {
+  userName: string;
+  userEmail: string;
+  /** Minor units (cents). */
+  amount: number;
+  currency: string;
+  planName: string;
+  nextBillingDate?: string;
+  billingUrl: string;
+}
+
+export function generatePaymentFailureEmail(data: PaymentFailureData): RenderedEmail {
+  const amount = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: (data.currency || 'USD').toUpperCase(),
+  }).format(data.amount / 100);
+
+  const subject = 'Action required: your TrackMyPocket payment failed';
+  const intro = `We couldn't charge ${amount} for your ${data.planName} subscription. Your access continues while the payment is retried over the next few days.`;
+  const action = 'Update your payment method to fix this now:';
+  const ignore = "If you think this is a mistake, contact support and we'll look into it.";
+
+  const text = textEmail([
+    greetingFor(data.userName),
+    '',
+    intro,
+    '',
+    action,
+    data.billingUrl,
+    '',
+    ignore,
+  ]);
+  const html = layout('Your payment failed', 'Update your payment method to keep your plan.', [
+    paragraph(greetingFor(data.userName)),
+    paragraph(intro),
+    paragraph(action),
+    button('Update payment method', data.billingUrl),
+    notice(ignore),
+  ]);
+  return { subject, text, html };
+}
+
+export function generatePaymentFailureEmailHtml(data: PaymentFailureData): string {
+  return generatePaymentFailureEmail(data).html;
 }
 
 export function getPaymentFailureSubject(): string {
-  return 'Action Required: Payment Failed - TrackMyPocket';
+  return 'Action required: your TrackMyPocket payment failed';
 }
+
+// --- Account deleted --------------------------------------------------------
 
 interface AccountDeletedData {
   firstName?: string;
@@ -293,19 +569,9 @@ interface AccountDeletedData {
   subscriptionCancelled: boolean;
 }
 
-const escapeHtml = (value: string) =>
-  value.replace(
-    /[&<>"']/g,
-    (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] as string,
-  );
-
 /** Confirmation sent after DELETE /auth/account. Plain text first; the HTML mirrors it. */
-export function generateAccountDeletedEmail(data: AccountDeletedData): {
-  subject: string;
-  text: string;
-  html: string;
-} {
-  const greeting = data.firstName ? `Hi ${data.firstName},` : 'Hi,';
+export function generateAccountDeletedEmail(data: AccountDeletedData): RenderedEmail {
+  const greeting = greetingFor(data.firstName);
   const lines: string[] = ['Your TrackMyPocket account and your personal data have been deleted.'];
   if (data.deletedWorkspaces.length > 0) {
     lines.push(
@@ -320,22 +586,15 @@ export function generateAccountDeletedEmail(data: AccountDeletedData): {
   }
   lines.push(
     'Payment records are kept, without your name or email, for as long as tax law requires.',
-    "If you didn't ask for this, reply to this email or contact support right away.",
   );
+  const ignore = "If you didn't ask for this, contact support right away.";
 
-  const text = [greeting, '', ...lines, '', '— TrackMyPocket'].join('\n');
-  const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Your TrackMyPocket account was deleted</title></head>
-<body style="margin:0;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f9fafb;color:#111827;">
-  <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px;">
-    <h1 style="margin:0 0 16px;font-size:20px;">Your account was deleted</h1>
-    <p style="margin:0 0 12px;font-size:14px;">${escapeHtml(greeting)}</p>
-    ${lines.map((l) => `<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#374151;">${escapeHtml(l)}</p>`).join('\n    ')}
-    <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;">This is an automated message from TrackMyPocket.</p>
-  </div>
-</body>
-</html>`;
+  const text = [greeting, '', ...lines, '', ignore, '', '— TrackMyPocket'].join('\n');
+  const html = layout('Your account was deleted', 'Your TrackMyPocket account was deleted.', [
+    paragraph(greeting),
+    ...lines.map(paragraph),
+    notice(ignore),
+  ]);
 
   return { subject: 'Your TrackMyPocket account was deleted', text, html };
 }

@@ -27,6 +27,12 @@ import { CategoryRepository } from '@domains/categories/repositories/CategoryRep
 import { CategoryService } from '@domains/categories/services/CategoryService';
 import { StorageService } from '@domains/storage/services/StorageService';
 import { v4 as uuidv4 } from 'uuid';
+import { sendEmailSafely } from '@domains/email/EmailService';
+import { generateWorkspaceInvitationEmail } from '@domains/email/EmailTemplates';
+import { invitationLink } from '@domains/email/links';
+
+/** Invitations (and resent ones) stay valid this long. */
+const INVITATION_TTL_DAYS = 7;
 
 export class WorkspaceService {
   constructor(
@@ -371,7 +377,7 @@ export class WorkspaceService {
 
     const token = this.generateInviteToken();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    expiresAt.setDate(expiresAt.getDate() + INVITATION_TTL_DAYS);
 
     const invitation = WorkspaceInvitation.create({
       workspaceId,
@@ -396,18 +402,38 @@ export class WorkspaceService {
     invitation: WorkspaceInvitation,
     workspaceId: string,
   ): Promise<void> {
+    // The invitation is already saved; nothing here may fail the request.
+    try {
+      await this.queueInvitationEmail(invitation, workspaceId);
+    } catch (error) {
+      console.error(
+        `[WorkspaceService] invitation email not sent: ${(error as Error)?.message ?? error}`,
+      );
+    }
+  }
+
+  private async queueInvitationEmail(
+    invitation: WorkspaceInvitation,
+    workspaceId: string,
+  ): Promise<void> {
     const workspace = await this.workspaceRepository.findById(workspaceId);
     if (!workspace) return;
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const acceptUrl = `${frontendUrl}/invitations/accept?token=${invitation.token}`;
+    const inviter = invitation.invitedBy
+      ? await this.userRepository.findById(invitation.invitedBy).catch(() => null)
+      : null;
+    const inviterName = inviter
+      ? `${inviter.firstName ?? ''} ${inviter.lastName ?? ''}`.trim() || inviter.email
+      : undefined;
 
-    console.log(`
-[Email] Invitation to join workspace "${workspace.name}"
-To: ${invitation.email}
-Click to accept: ${acceptUrl}
-Expires in 7 days.
-        `);
+    const message = generateWorkspaceInvitationEmail({
+      workspaceName: workspace.name,
+      inviterName,
+      acceptUrl: invitationLink(invitation.token),
+      expiresInDays: INVITATION_TTL_DAYS,
+    });
+    // Fire-and-forget: the invitation is saved either way and can be resent.
+    void sendEmailSafely({ to: invitation.email, ...message }, { context: 'workspace invitation' });
   }
 
   async resendInvitation(workspaceId: string, userId: string, invitationId: string): Promise<void> {
@@ -433,7 +459,7 @@ Expires in 7 days.
 
     const newToken = this.generateInviteToken();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    expiresAt.setDate(expiresAt.getDate() + INVITATION_TTL_DAYS);
 
     invitation.regenerateToken(newToken, expiresAt);
     await this.workspaceInvitationsRepository.updateInvitation(invitation);
