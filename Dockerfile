@@ -1,46 +1,68 @@
-FROM node:20-alpine AS builder
+# syntax=docker/dockerfile:1.7
+#
+# TrackMyPocket API — one image, two jobs:
+#
+#   docker run trackmypocket-api                          the API (processes/api-gateway)
+#   docker run trackmypocket-api node-pg-migrate up       the schema migrations
+#
+# The API runs in "direct" mode, the way `pnpm dev:api` does: repositories call Postgres
+# themselves, BullMQ is the queue provider, and there is no Kafka. processes/worker is not
+# needed to serve requests. What it adds is draining two BullMQ queues (activity-log,
+# scheduled-report) and the cron jobs (exchange rates, activity-log partitions); an
+# API-only deployment should set ACTIVITY_LOG_ENABLED=false so jobs do not pile up in
+# Redis with nothing consuming them.
+#
+# pnpm, from pnpm-lock.yaml. package-lock.json is not the source of truth here: CI
+# installs with pnpm --frozen-lockfile, and so does this.
+#
+# Node 20 to match .nvmrc and CI. Bump all three together.
 
-WORKDIR /usr/src/app
+ARG NODE_IMAGE=node:20-alpine
 
-# Copy package files
-COPY package*.json ./
-COPY tsconfig*.json ./
+FROM ${NODE_IMAGE} AS base
+WORKDIR /app
+# The pnpm version comes from package.json's packageManager field.
+RUN corepack enable
+ENV CI=true
 
-# Install dependencies
-RUN npm ci
+# ── build: full install (dev deps included), then tsc + tsc-alias ─────────────────────
+FROM base AS build
+COPY package.json pnpm-lock.yaml ./
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+COPY tsconfig.json tsconfig.build.json ./
+COPY src ./src
+COPY config ./config
+COPY processes ./processes
+COPY scripts ./scripts
+RUN pnpm run build
 
-# Copy source code
-COPY . .
+# ── prod-deps: production dependencies only ────────────────────────────────────────────
+# A separate stage so none of the build toolchain (typescript, jest, eslint…) reaches the
+# final image. bcrypt ships a musl prebuild, so there is no compiler here either.
+FROM base AS prod-deps
+COPY package.json pnpm-lock.yaml ./
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --prod
 
-# Build the application
-RUN npm run build
+# ── runtime ─────────────────────────────────────────────────────────────────────────────
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+ENV NODE_ENV=production \
+    PATH=/app/node_modules/.bin:$PATH
 
-# Production stage
-FROM node:20-alpine
+COPY --from=prod-deps --chown=root:root /app/node_modules ./node_modules
+COPY --from=build --chown=root:root /app/dist ./dist
+COPY package.json .pg-migraterc ./
+# node-pg-migrate reads the SQL files from here (dir: 'migrations' in .pg-migraterc).
+COPY migrations ./migrations
 
-WORKDIR /usr/src/app
-
-# Copy package files for production install
-COPY package*.json ./
-
-# Install only production dependencies
-RUN npm ci --only=production
-
-# Copy built artifacts from builder stage (dist folder contains the compiled js)
-COPY --from=builder /usr/src/app/dist ./dist
-# We might need other folders like processes if they are not compiled into dist/root properly or if we run them via ts-node in dev (but this is prod dockerfile)
-# Ideally 'npm run build' compiles everything to dist.
-# Checking package.json 'build' script: "tsc -p tsconfig.build.json"
-# Assuming tsconfig.build.json includes 'src' and 'processes'
-
-COPY --from=builder /usr/src/app/processes ./processes
-# Check if scripts are needed. Migration scripts are in scripts/
-COPY --from=builder /usr/src/app/scripts ./scripts
-# Config might be needed
-COPY --from=builder /usr/src/app/config ./config
-
-# Expose the API port
+# Owned by root, run as node: the app cannot rewrite its own code. It writes nothing to
+# disk it needs later (logs go to stdout).
+USER node
 EXPOSE 3000
 
-# Default command (can be overridden in docker-compose)
-CMD ["npm", "run", "start:api"]
+# Plain node, no npm wrapper: signals reach the process directly, and there is no extra
+# ~40 MB npm process sitting beside it. Heap is capped by NODE_OPTIONS from the
+# environment (see the compose file), not here, so it can be tuned without a rebuild.
+CMD ["node", "dist/processes/api-gateway/index.js"]

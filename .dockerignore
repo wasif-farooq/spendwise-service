@@ -1,0 +1,27 @@
+# Only what the Dockerfile COPYs matters; everything else is kept out so the context
+# is small and no local secret (.env) or build output can leak into a layer.
+.git
+.github
+.husky
+.vscode
+.claude
+.agents
+.opencode
+.gitnexus
+.planning
+node_modules
+dist
+coverage
+logs
+docs
+tests
+docker
+graphify-out
+.graphify_*
+.env
+.env.*
+!.env.example
+mock_2fa_code.txt
+package-lock.json
+*.log
+docker-compose*.yml
