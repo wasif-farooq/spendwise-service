@@ -1,4 +1,7 @@
-import { OpenAICompatibleReceiptExtractor } from '@domains/ai/receipts/OpenAICompatibleReceiptExtractor';
+import {
+  OpenAICompatibleReceiptExtractor,
+  errorTypeOf,
+} from '@domains/ai/receipts/OpenAICompatibleReceiptExtractor';
 import { createReceiptExtractor } from '@domains/ai/receipts/createReceiptExtractor';
 import { ReceiptSchema, parseReceiptReply } from '@domains/ai/receipts/receiptSchema';
 import { ReceiptScanError } from '@domains/ai/receipts/types';
@@ -25,7 +28,11 @@ const GOOD = {
   confidence: { total: 0.95, date: 0.9, merchant: 0.9 },
 };
 
-const reply = (content: string, status = 200, usage = { prompt_tokens: 900, completion_tokens: 120 }) =>
+const reply = (
+  content: string,
+  status = 200,
+  usage = { prompt_tokens: 900, completion_tokens: 120 },
+) =>
   ({
     ok: status >= 200 && status < 300,
     status,
@@ -102,7 +109,9 @@ describe('OpenAICompatibleReceiptExtractor', () => {
   it('maps a provider 429 to 503 AI_UNAVAILABLE without retrying', async () => {
     const fetchFn = jest.fn().mockResolvedValue(reply('rate limited', 429));
 
-    const error = await build(fetchFn).extract(INPUT).catch((e) => e);
+    const error = await build(fetchFn)
+      .extract(INPUT)
+      .catch((e) => e);
     expect(error).toBeInstanceOf(ReceiptScanError);
     expect(error).toMatchObject({ code: 'AI_UNAVAILABLE', statusCode: 503 });
     expect(fetchFn).toHaveBeenCalledTimes(1);
@@ -125,7 +134,9 @@ describe('OpenAICompatibleReceiptExtractor', () => {
         }),
     );
 
-    await expect(build(fetchFn as jest.Mock, { timeoutMs: 30 }).extract(INPUT)).rejects.toMatchObject({
+    await expect(
+      build(fetchFn as jest.Mock, { timeoutMs: 30 }).extract(INPUT),
+    ).rejects.toMatchObject({
       code: 'AI_UNAVAILABLE',
       statusCode: 503,
     });
@@ -143,6 +154,18 @@ describe('OpenAICompatibleReceiptExtractor', () => {
     expect(result.receipt.total).toBe(23.45);
     expect(JSON.parse(fetchFn.mock.calls[1][1].body).response_format).toBeUndefined();
     expect(extractor.usesJsonMode).toBe(false);
+  });
+});
+
+describe('errorTypeOf', () => {
+  it('keeps only a bare error identifier from provider bodies', () => {
+    expect(
+      errorTypeOf(
+        '{"type":"error","error":{"type":"FreeTierError","message":"free tier only in OpenCode"}}',
+      ),
+    ).toBe('FreeTierError');
+    expect(errorTypeOf('{"error":{"type":"bad thing: data:image/jpeg;base64,AAAA"}}')).toBeNull();
+    expect(errorTypeOf('<html>502</html>')).toBeNull();
   });
 });
 
@@ -169,7 +192,12 @@ describe('ReceiptSchema', () => {
 describe('createReceiptExtractor', () => {
   it('returns null without an API key', () => {
     expect(
-      createReceiptExtractor({ receiptProvider: 'opencode', baseUrl: 'x', receiptModel: 'm', apiKey: '' }),
+      createReceiptExtractor({
+        receiptProvider: 'opencode',
+        baseUrl: 'x',
+        receiptModel: 'm',
+        apiKey: '',
+      }),
     ).toBeNull();
     expect(createReceiptExtractor(undefined)).toBeNull();
   });

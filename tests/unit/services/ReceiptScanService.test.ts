@@ -257,6 +257,10 @@ describe('matchCategory', () => {
     expect(matchCategory('Restaurants', CATEGORIES)?.id).toBe('cat-dining');
     expect(matchCategory('Spaceships', CATEGORIES)).toBeNull();
     expect(matchCategory(null, CATEGORIES)).toBeNull();
+    // A workspace without Groceries (the defaults) lands on Food & Dining.
+    const defaults = CATEGORIES.filter((c) => c.name !== 'Groceries');
+    expect(matchCategory('Groceries', defaults)?.id).toBe('cat-dining');
+    expect(matchCategory('Cafe', defaults)?.id).toBe('cat-dining');
   });
 });
 

@@ -29,6 +29,17 @@ type ChatReply = {
 const rejectsJsonMode = (status: number, body: string) =>
   status === 400 && /response_format|json_object|json mode/i.test(body);
 
+/** `error.type` / `error.code` from an error body, if it is a bare identifier (e.g. FreeTierError). */
+export const errorTypeOf = (body: string): string | null => {
+  try {
+    const parsed = JSON.parse(body);
+    const value = parsed?.error?.type ?? parsed?.error?.code ?? parsed?.type;
+    return typeof value === 'string' && /^[A-Za-z_]{1,40}$/.test(value) ? value : null;
+  } catch {
+    return null;
+  }
+};
+
 const contentOf = (reply: ChatReply): string => {
   const content = reply.choices?.[0]?.message?.content;
   if (typeof content === 'string') return content;
@@ -159,8 +170,11 @@ export class OpenAICompatibleReceiptExtractor implements ReceiptExtractor {
           this.jsonMode = false;
           continue;
         }
-        // Status only: provider error bodies can echo parts of the request.
-        console.warn(`[ReceiptScan] ${this.provider} answered HTTP ${response.status}`);
+        // Status and error type only: provider error bodies can echo parts of the request.
+        const type = errorTypeOf(text);
+        console.warn(
+          `[ReceiptScan] ${this.provider} answered HTTP ${response.status}${type ? ` (${type})` : ''}`,
+        );
         throw receiptScanError('AI_UNAVAILABLE', 503, usage);
       }
 

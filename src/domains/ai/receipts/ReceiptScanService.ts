@@ -84,9 +84,10 @@ export const LOW_CONFIDENCE = 0.6;
  * an exact name from the list, the group lets "Fuel" land on "Transportation".
  */
 const CATEGORY_SYNONYMS: string[][] = [
-  ['groceries', 'grocery', 'supermarket', 'food and groceries'],
+  // Default workspaces have no Groceries: fall back to Food & Dining.
+  ['groceries', 'grocery', 'supermarket', 'food and groceries', 'food and dining'],
   ['food and dining', 'dining', 'restaurant', 'restaurants', 'eating out', 'dining out', 'food'],
-  ['coffee', 'cafe', 'coffee shop', 'coffee shops'],
+  ['coffee', 'cafe', 'coffee shop', 'coffee shops', 'food and dining'],
   ['transportation', 'transport', 'fuel', 'gas', 'petrol', 'auto and transport', 'car', 'parking'],
   ['health', 'health and fitness', 'healthcare', 'medical', 'pharmacy', 'fitness'],
   ['bills and utilities', 'utilities', 'bills', 'phone', 'internet'],
