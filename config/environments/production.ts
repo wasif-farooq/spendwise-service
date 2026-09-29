@@ -255,6 +255,19 @@ const config = {
     environment: process.env.PADDLE_ENV === 'sandbox' ? 'sandbox' : 'production',
   },
 
+  // AI receipt scanning (POST /:workspaceId/ai/receipt-scan). Everything is
+  // optional: without an API key the scan endpoints answer 503 AI_UNAVAILABLE
+  // and the rest of the API boots and runs as usual. The provider speaks the
+  // OpenAI chat-completions protocol, so switching model or vendor is config.
+  ai: {
+    receiptProvider: process.env.AI_RECEIPT_PROVIDER || 'opencode',
+    baseUrl: process.env.AI_BASE_URL || 'https://opencode.ai/zen/v1',
+    apiKey: process.env.OPENCODE_API_KEY || process.env.AI_API_KEY || '',
+    receiptModel: process.env.AI_RECEIPT_MODEL || 'mimo-v2.5-free',
+    freeScansPerMonth: parseInt(process.env.AI_FREE_SCANS_PER_MONTH || '5', 10),
+    timeoutMs: parseInt(process.env.AI_TIMEOUT_MS || '25000', 10),
+  },
+
   activityLog: {
     enabled: process.env.ACTIVITY_LOG_ENABLED !== 'false',
     captureIp: process.env.ACTIVITY_LOG_CAPTURE_IP !== 'false',

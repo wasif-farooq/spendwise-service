@@ -101,4 +101,14 @@ export default {
       enabled: false,
     },
   },
+  // AI receipt scanning: no key in tests, so the endpoints answer 503 unless a
+  // test injects its own extractor.
+  ai: {
+    receiptProvider: 'opencode',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    apiKey: '',
+    receiptModel: 'mimo-v2.5-free',
+    freeScansPerMonth: 5,
+    timeoutMs: 25000,
+  },
 };
