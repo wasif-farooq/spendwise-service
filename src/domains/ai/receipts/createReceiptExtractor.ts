@@ -8,6 +8,7 @@ export interface ReceiptAiConfig {
   receiptModel?: string;
   freeScansPerMonth?: number;
   timeoutMs?: number;
+  maxTokens?: number;
 }
 
 /** Providers that speak the OpenAI chat-completions protocol. */
@@ -31,6 +32,16 @@ export const createReceiptExtractor = (
       apiKey: config.apiKey,
       model: config.receiptModel,
       timeoutMs: config.timeoutMs,
+      maxTokens: config.maxTokens,
+      // OpenRouter's optional app attribution.
+      ...(provider === 'openrouter' || /openrouter\.ai/i.test(config.baseUrl)
+        ? {
+            extraHeaders: {
+              'HTTP-Referer': 'https://trackmypocket.com',
+              'X-Title': 'TrackMyPocket',
+            },
+          }
+        : {}),
     });
   }
 

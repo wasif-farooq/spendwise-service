@@ -1,6 +1,8 @@
 import {
   OpenAICompatibleReceiptExtractor,
+  RECEIPT_SCAN_USER_AGENT,
   errorTypeOf,
+  unavailableReason,
 } from '@domains/ai/receipts/OpenAICompatibleReceiptExtractor';
 import { createReceiptExtractor } from '@domains/ai/receipts/createReceiptExtractor';
 import { ReceiptSchema, parseReceiptReply } from '@domains/ai/receipts/receiptSchema';
@@ -47,6 +49,7 @@ const build = (fetchFn: jest.Mock, extra: Partial<{ timeoutMs: number; now: () =
     apiKey: 'test-key',
     model: 'mimo-v2.5-free',
     fetchFn: fetchFn as unknown as typeof fetch,
+    retryDelayMs: 0,
     ...extra,
   });
 
@@ -65,9 +68,11 @@ describe('OpenAICompatibleReceiptExtractor', () => {
     expect(url).toBe('https://opencode.ai/zen/v1/chat/completions');
     expect(init.method).toBe('POST');
     expect(init.headers.authorization).toBe('Bearer test-key');
+    expect(init.headers['user-agent']).toBe(RECEIPT_SCAN_USER_AGENT);
     const body = JSON.parse(init.body);
     expect(body.model).toBe('mimo-v2.5-free');
     expect(body.response_format).toEqual({ type: 'json_object' });
+    expect(body.max_tokens).toBe(6000);
     expect(body.messages[0].role).toBe('system');
     const parts = body.messages[1].content;
     expect(parts[0].type).toBe('text');
@@ -106,7 +111,7 @@ describe('OpenAICompatibleReceiptExtractor', () => {
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 
-  it('maps a provider 429 to 503 AI_UNAVAILABLE without retrying', async () => {
+  it('retries a provider 429 once, then answers 503 AI_UNAVAILABLE', async () => {
     const fetchFn = jest.fn().mockResolvedValue(reply('rate limited', 429));
 
     const error = await build(fetchFn)
@@ -114,7 +119,49 @@ describe('OpenAICompatibleReceiptExtractor', () => {
       .catch((e) => e);
     expect(error).toBeInstanceOf(ReceiptScanError);
     expect(error).toMatchObject({ code: 'AI_UNAVAILABLE', statusCode: 503 });
-    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('recovers when the retry after a transient failure succeeds', async () => {
+    const fetchFn = jest
+      .fn()
+      .mockResolvedValueOnce(reply('busy', 503))
+      .mockResolvedValueOnce(reply(JSON.stringify(GOOD)));
+    await expect(build(fetchFn).extract(INPUT)).resolves.toMatchObject({
+      receipt: { total: 23.45 },
+    });
+  });
+
+  it('treats HTTP 200 with an upstream error body (OpenRouter) as a transient failure', async () => {
+    const upstream = {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        error: { code: 502, message: 'Upstream error: request limit reached' },
+      }),
+      text: async () => '',
+    } as unknown as Response;
+    const fetchFn = jest
+      .fn()
+      .mockResolvedValueOnce(upstream)
+      .mockResolvedValueOnce(reply(JSON.stringify(GOOD)));
+    await expect(build(fetchFn).extract(INPUT)).resolves.toMatchObject({
+      receipt: { merchant: 'Corner Market' },
+    });
+
+    const always = jest.fn().mockResolvedValue(upstream);
+    await expect(build(always).extract(INPUT)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+    expect(always).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry refusals (bad key, free tier, no funds)', async () => {
+    for (const status of [401, 402, 403]) {
+      const fetchFn = jest
+        .fn()
+        .mockResolvedValue(reply('{"error":{"type":"FreeTierError"}}', status));
+      await expect(build(fetchFn).extract(INPUT)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+    }
   });
 
   it('maps provider 5xx and auth refusals to 503', async () => {
@@ -157,6 +204,29 @@ describe('OpenAICompatibleReceiptExtractor', () => {
   });
 });
 
+describe('unavailableReason', () => {
+  it('names why the provider refused (logged; the client always gets 503)', () => {
+    expect(unavailableReason(403, 'FreeTierError', '')).toBe('free_tier_refused');
+    expect(unavailableReason(402, null, 'Insufficient account funds')).toBe('insufficient_funds');
+    expect(unavailableReason(400, null, 'insufficient credits')).toBe('insufficient_funds');
+    expect(unavailableReason(401, null, '')).toBe('bad_api_key');
+    expect(unavailableReason(403, null, 'Model access is disabled')).toBe('model_disabled');
+    expect(unavailableReason(429, null, '')).toBe('rate_limited');
+    expect(unavailableReason(502, null, '')).toBe('provider_error');
+  });
+
+  it('maps 402 insufficient funds to 503 AI_UNAVAILABLE', async () => {
+    const fetchFn = jest
+      .fn()
+      .mockResolvedValue(reply('{"error":{"message":"Insufficient account funds"}}', 402));
+    await expect(build(fetchFn).extract(INPUT)).rejects.toMatchObject({
+      code: 'AI_UNAVAILABLE',
+      statusCode: 503,
+    });
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('reason=insufficient_funds'));
+  });
+});
+
 describe('errorTypeOf', () => {
   it('keeps only a bare error identifier from provider bodies', () => {
     expect(
@@ -166,6 +236,28 @@ describe('errorTypeOf', () => {
     ).toBe('FreeTierError');
     expect(errorTypeOf('{"error":{"type":"bad thing: data:image/jpeg;base64,AAAA"}}')).toBeNull();
     expect(errorTypeOf('<html>502</html>')).toBeNull();
+  });
+});
+
+describe('reply parsing (model-neutral)', () => {
+  it('drops <think> blocks, fences and chatter, and takes the first balanced object', () => {
+    const noisy = `<think>The total is {maybe} 23.45? Let me check {"isReceipt": false}</think>
+Sure! Here you go:
+\`\`\`json
+${JSON.stringify({ ...GOOD, merchant: 'Brace } Store' })}
+\`\`\`
+Also: {"not": "this one"}`;
+    const parsed = parseReceiptReply(noisy);
+    expect(parsed.merchant).toBe('Brace } Store');
+    expect(parsed.total).toBe(23.45);
+  });
+
+  it('skips a brace block that is not JSON', () => {
+    expect(parseReceiptReply(`Total {approx} → ${JSON.stringify(GOOD)}`).isReceipt).toBe(true);
+  });
+
+  it('ignores an unterminated <think>', () => {
+    expect(() => parseReceiptReply('<think>{"isReceipt": true, "total": 1}')).toThrow();
   });
 });
 
@@ -200,6 +292,22 @@ describe('createReceiptExtractor', () => {
       }),
     ).toBeNull();
     expect(createReceiptExtractor(undefined)).toBeNull();
+  });
+
+  it('adds OpenRouter attribution headers', async () => {
+    const extractor = createReceiptExtractor({
+      receiptProvider: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      receiptModel: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      apiKey: 'k',
+    }) as OpenAICompatibleReceiptExtractor;
+    const fetchFn = jest.fn().mockResolvedValue(reply(JSON.stringify(GOOD)));
+    (extractor as any).fetchFn = fetchFn;
+    await extractor.extract(INPUT);
+    const headers = fetchFn.mock.calls[0][1].headers;
+    expect(headers['HTTP-Referer']).toBe('https://trackmypocket.com');
+    expect(headers['X-Title']).toBe('TrackMyPocket');
+    expect(fetchFn.mock.calls[0][0]).toBe('https://openrouter.ai/api/v1/chat/completions');
   });
 
   it('builds the OpenAI-compatible extractor for opencode', () => {

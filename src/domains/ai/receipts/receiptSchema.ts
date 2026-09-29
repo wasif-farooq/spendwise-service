@@ -59,13 +59,50 @@ export const ReceiptSchema = z.object({
     .transform((c) => c ?? { total: null, date: null, merchant: null }),
 });
 
-/** Pull the JSON object out of a model reply (tolerates ```json fences and chatter). */
+/** The first balanced `{…}` in `text` (braces inside JSON strings don't count), or null. */
+const firstJsonObject = (text: string): string | null => {
+  for (let start = text.indexOf('{'); start !== -1; start = text.indexOf('{', start + 1)) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') inString = false;
+      } else if (ch === '"') inString = true;
+      else if (ch === '{') depth += 1;
+      else if (ch === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          const candidate = text.slice(start, i + 1);
+          try {
+            JSON.parse(candidate);
+            return candidate;
+          } catch {
+            break; // not JSON after all: try the next '{'
+          }
+        }
+      }
+    }
+  }
+  return null;
+};
+
+/**
+ * Pull the JSON object out of a model reply, whatever the model: drops
+ * `<think>…</think>` reasoning (and an unterminated one), ```json fences and any
+ * chatter, then takes the first balanced JSON object.
+ */
 export const extractJsonObject = (content: string): unknown => {
-  const unfenced = content.replace(/```(?:json)?/gi, '');
-  const start = unfenced.indexOf('{');
-  const end = unfenced.lastIndexOf('}');
-  if (start === -1 || end <= start) throw new Error('no JSON object in the reply');
-  return JSON.parse(unfenced.slice(start, end + 1));
+  const cleaned = content
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*$/i, '')
+    .replace(/```(?:json)?/gi, '');
+  const json = firstJsonObject(cleaned);
+  if (!json) throw new Error('no JSON object in the reply');
+  return JSON.parse(json);
 };
 
 export const parseReceiptReply = (content: string): RawReceipt =>
