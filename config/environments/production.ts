@@ -255,6 +255,36 @@ const config = {
     environment: process.env.PADDLE_ENV === 'sandbox' ? 'sandbox' : 'production',
   },
 
+  // AI receipt scanning (POST /:workspaceId/ai/receipt-scan). Everything is
+  // optional: without an API key the scan endpoints answer 503 AI_UNAVAILABLE
+  // and the rest of the API boots and runs as usual. Any OpenAI-compatible
+  // chat-completions provider with image input works; switching is config only
+  // (see .env.example):
+  //   AI_BASE_URL       default https://openrouter.ai/api/v1
+  //   AI_RECEIPT_MODEL  default nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+  //                     (a free model for testing; free providers may log inputs)
+  //   AI_API_KEY        else OPENROUTER_API_KEY on OpenRouter, else OPENCODE_API_KEY
+  //   AI_TIMEOUT_MS     whole scan budget incl. one retry (default 45 s: free
+  //                     reasoning models take ~20-30 s a call)
+  ai: (() => {
+    const baseUrl = process.env.AI_BASE_URL || 'https://openrouter.ai/api/v1';
+    const onOpenRouter = /openrouter\.ai/i.test(baseUrl);
+    return {
+      receiptProvider:
+        process.env.AI_RECEIPT_PROVIDER || (onOpenRouter ? 'openrouter' : 'opencode'),
+      baseUrl,
+      apiKey:
+        process.env.AI_API_KEY ||
+        (onOpenRouter ? process.env.OPENROUTER_API_KEY : process.env.OPENCODE_API_KEY) ||
+        '',
+      receiptModel:
+        process.env.AI_RECEIPT_MODEL || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      freeScansPerMonth: parseInt(process.env.AI_FREE_SCANS_PER_MONTH || '5', 10),
+      timeoutMs: parseInt(process.env.AI_TIMEOUT_MS || '45000', 10),
+      maxTokens: parseInt(process.env.AI_MAX_TOKENS || '6000', 10),
+    };
+  })(),
+
   activityLog: {
     enabled: process.env.ACTIVITY_LOG_ENABLED !== 'false',
     captureIp: process.env.ACTIVITY_LOG_CAPTURE_IP !== 'false',

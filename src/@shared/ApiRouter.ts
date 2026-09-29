@@ -13,6 +13,7 @@ import exchangeRatesRoutesV1 from '@domains/exchange-rates/routes/exchange-rates
 import categoriesRoutesV1 from '@domains/categories/routes/category.routes';
 import analyticsRoutesV1 from '@domains/analytics/routes/analytics.routes';
 import aiRoutesV1 from '@domains/ai/routes/ai.routes';
+import receiptScanRoutesV1 from '@domains/ai/routes/receipt-scan.routes';
 import storageRoutesV1 from '@domains/storage/routes/storage.routes';
 import paymentRoutesV1 from '@domains/payment/routes/payment.routes';
 import billingRoutesV1 from '@domains/billing/routes/billing.routes';
@@ -54,6 +55,8 @@ export class ApiRouter {
     this.router.use('/v1', categoriesRoutesV1);
     // Analytics (at /v1/:workspaceId/analytics)
     this.router.use('/v1', analyticsRoutesV1);
+    // Receipt scanning (at /v1/:workspaceId/ai/receipt-scan)
+    this.router.use('/v1', receiptScanRoutesV1);
     // AI Advisor (at /v1/:workspaceId/ai)
     this.router.use('/v1', aiRoutesV1);
     // Payment (at /v1/payment)

@@ -8,6 +8,8 @@ import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
 import { ServiceFactory } from '@factories/ServiceFactory';
 import { RepositoryFactory } from '@factories/RepositoryFactory';
+import { requireAuth } from '@shared/middleware/auth.middleware';
+import { requirePermission } from '@shared/middleware/permission.middleware';
 
 const WorkspaceIdParamSchema = z.object({
   workspaceId: z.string().uuid(),
@@ -226,8 +228,16 @@ class AIController {
 const router = Router();
 const controller = new AIController();
 
-router.get('/:workspaceId/ai/insights', controller.getInsights.bind(controller));
-router.get('/:workspaceId/ai/recommendations', controller.getRecommendations.bind(controller));
-router.get('/:workspaceId/ai/analysis', controller.getAnalysis.bind(controller));
+// Workspace data: a session alone isn't enough, the caller must be allowed into
+// this workspace's AI advisor (owners have every permission).
+const canView = [requireAuth, requirePermission('aiAdvisor:view')];
+
+router.get('/:workspaceId/ai/insights', ...canView, controller.getInsights.bind(controller));
+router.get(
+  '/:workspaceId/ai/recommendations',
+  ...canView,
+  controller.getRecommendations.bind(controller),
+);
+router.get('/:workspaceId/ai/analysis', ...canView, controller.getAnalysis.bind(controller));
 
 export default router;

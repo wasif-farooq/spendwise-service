@@ -57,6 +57,7 @@
         "stripe:fetch": "ts-node -r tsconfig-paths/register scripts/fetch-stripe-subscription.ts",
         "stripe:simulate": "ts-node -r tsconfig-paths/register scripts/stripe-simulate.ts",
         "stripe:webhook": "ts-node -r tsconfig-paths/register scripts/test-webhook.ts",
+        "eval:receipts": "ts-node -r tsconfig-paths/register scripts/eval-receipt-scan.ts",
         "test:recurring": "ts-node -r tsconfig-paths/register scripts/test-recurring.ts",
         "test:stripe-webhook": "stripe trigger",
         "test:unit": "jest --config jest.unit.config.json"
