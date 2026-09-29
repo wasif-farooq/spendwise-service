@@ -8,6 +8,11 @@ export class StructuredLogger implements ILogger {
   constructor() {
     const config = ConfigLoader.getInstance();
     const level = config.get('monitoring.logging.level') || 'info';
+    // The path always has a default, so `enabled` is what decides. Ignoring it made every
+    // environment write logs/*.log — including production, where the container runs as
+    // an unprivileged user in a read-only app directory and the mkdir crashed the boot.
+    // In a container, logs belong on stdout.
+    const fileEnabled = config.get('monitoring.logging.file.enabled') === true;
     const filePath = config.get('monitoring.logging.file.path');
 
     const transports: any[] = [
@@ -20,7 +25,7 @@ export class StructuredLogger implements ILogger {
       }),
     ];
 
-    if (filePath) {
+    if (fileEnabled && filePath) {
       transports.push(
         new winston.transports.File({
           filename: filePath,

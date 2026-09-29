@@ -1,6 +1,6 @@
 import { IMessageQueue } from '@interfaces/IMessageQueue';
 import { Queue, Worker, QueueEvents } from 'bullmq';
-import { ConfigLoader } from '@config/ConfigLoader';
+import { BullMQConnection, bullmqConnection } from '@database/redisConnection';
 
 export class BullMQClient implements IMessageQueue {
   private queues: Map<string, Queue> = new Map();
@@ -9,16 +9,10 @@ export class BullMQClient implements IMessageQueue {
   private connected: boolean = false;
 
   constructor() {
-    const config = ConfigLoader.getInstance();
-    const bullmqConfig = config.get('messaging.bullmq');
-    this.connection = bullmqConfig.connection;
+    this.connection = bullmqConnection();
   }
 
-  private connection: {
-    host: string;
-    port: number;
-    password?: string;
-  };
+  private connection: BullMQConnection;
 
   async connect(): Promise<void> {
     this.connected = true;

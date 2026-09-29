@@ -1,5 +1,5 @@
 import { Queue, QueueEvents } from 'bullmq';
-import { ConfigLoader } from '@config/ConfigLoader';
+import { bullmqConnection } from '@database/redisConnection';
 
 export interface ActivityLogJobData {
   workspaceId: string;
@@ -20,13 +20,7 @@ export class ActivityQueue {
   private connection: any;
 
   private constructor() {
-    const config = ConfigLoader.getInstance();
-    const bullmqConfig = config.get('messaging.bullmq');
-    this.connection = {
-      host: bullmqConfig.connection.host,
-      port: bullmqConfig.connection.port,
-      password: bullmqConfig.connection.password || undefined,
-    };
+    this.connection = bullmqConnection();
 
     this.queue = new Queue('activity-log', {
       connection: this.connection,
