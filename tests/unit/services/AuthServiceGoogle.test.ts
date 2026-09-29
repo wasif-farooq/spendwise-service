@@ -334,7 +334,12 @@ describe('AuthService.loginWithGoogle (authorization code)', () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ access_token: 'access-123', id_token: 'x' }))
       .mockResolvedValueOnce(
-        jsonResponse({ id: GOOGLE_SUB, email: 'user@example.com', given_name: 'Jane' }),
+        jsonResponse({
+          id: GOOGLE_SUB,
+          email: 'user@example.com',
+          verified_email: true,
+          given_name: 'Jane',
+        }),
       );
 
     const result = await service.loginWithGoogle('auth-code');
@@ -356,6 +361,33 @@ describe('AuthService.loginWithGoogle (authorization code)', () => {
     expect(result.user).toBe(existing);
     expect(typeof result.token).toBe('string');
     expect(subOf(savedIdentities[0])).toBe(GOOGLE_SUB);
+  });
+
+  it.each([
+    ['false', { verified_email: false }],
+    ['missing', {}],
+    ['a truthy non-boolean', { verified_email: 'true' }],
+  ])('refuses an unverified Google email (%s) without touching any account', async (_label, extra) => {
+    const { service, userRepo, savedIdentities } = buildService(buildUser());
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'access-123', id_token: 'x' }))
+      .mockResolvedValueOnce(jsonResponse({ id: GOOGLE_SUB, email: 'user@example.com', ...extra }));
+
+    await expect(service.loginWithGoogle('auth-code')).rejects.toMatchObject({
+      message: 'Google account email is not verified',
+      statusCode: 401,
+    });
+    expect(userRepo.findByEmail).not.toHaveBeenCalled();
+    expect(savedIdentities).toHaveLength(0);
+  });
+
+  it('rejects userinfo without an id or email', async () => {
+    const { service } = buildService(buildUser());
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'access-123', id_token: 'x' }))
+      .mockResolvedValueOnce(jsonResponse({ verified_email: true, email: 'user@example.com' }));
+
+    await expect(service.loginWithGoogle('auth-code')).rejects.toMatchObject({ statusCode: 500 });
   });
 
   it('rejects a bad authorization code with 400', async () => {
