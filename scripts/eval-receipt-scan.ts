@@ -21,6 +21,8 @@
  *                                       SCAN_WORKSPACE_ID; API_URL (default :3000/api/v1)
  *
  * Other env: SCAN_ONLY=01-grocery-us,12-not-a-receipt · SCAN_DELAY_MS (default 2000) ·
+ * SCAN_RETRIES=n to retry a 503 (provider unavailable) up to n times, SCAN_RETRY_DELAY_MS
+ * apart (default 30000), so accuracy is measured on replies and availability separately ·
  * SCAN_JSON=1 to print every result.
  */
 import { readFileSync } from 'fs';
@@ -57,6 +59,8 @@ const expected: Record<string, Expected> = JSON.parse(
 const viaApi = process.argv.includes('--api');
 const only = process.env.SCAN_ONLY ? new Set(process.env.SCAN_ONLY.split(',')) : null;
 const delayMs = Number(process.env.SCAN_DELAY_MS ?? 2000);
+const retries = Number(process.env.SCAN_RETRIES ?? 0);
+const retryDelayMs = Number(process.env.SCAN_RETRY_DELAY_MS ?? 30000);
 
 /** The categories a new workspace starts with. */
 const DEFAULT_CATEGORIES = [
@@ -200,15 +204,26 @@ async function main() {
   const raw: Record<string, Outcome> = {};
   const rows: string[] = [];
   const times: number[] = [];
+  let attemptsTotal = 0;
+  let unavailableTotal = 0;
 
   const entries = Object.entries(expected).filter(([id]) => !only || only.has(id));
   for (const [i, [id, want]] of entries.entries()) {
     if (i > 0 && delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
-    const out = await scanner.scan(readFileSync(join(dir, want.file)), want.file);
+    const image = readFileSync(join(dir, want.file));
+    let out = await scanner.scan(image, want.file);
+    let attempts = 1;
+    for (; out.status === 503 && attempts <= retries; attempts++) {
+      unavailableTotal += 1;
+      await new Promise((r) => setTimeout(r, retryDelayMs));
+      out = await scanner.scan(image, want.file);
+    }
+    if (out.status === 503) unavailableTotal += 1;
+    attemptsTotal += attempts;
     raw[id] = out;
     statuses[out.status] = (statuses[out.status] ?? 0) + 1;
     times.push(out.ms);
-    const head = `  ${id.padEnd(24)} HTTP ${out.status}  ${String(out.ms).padStart(6)} ms`;
+    const head = `  ${id.padEnd(24)} HTTP ${out.status}  ${String(out.ms).padStart(6)} ms  x${attempts}`;
 
     if (want.error) {
       notReceipt.of += 1;
@@ -272,6 +287,9 @@ async function main() {
     `  latency     median ${sorted[Math.floor(sorted.length / 2)] ?? 0} ms, max ${sorted[sorted.length - 1] ?? 0} ms`,
   );
   console.log(`  statuses    ${JSON.stringify(statuses)}`);
+  console.log(
+    `  provider    ${attemptsTotal - unavailableTotal}/${attemptsTotal} attempts answered (${unavailableTotal} × 503 AI_UNAVAILABLE)`,
+  );
   if (process.env.SCAN_JSON) console.log(JSON.stringify(raw, null, 2));
 }
 
