@@ -1,0 +1,22 @@
+{
+  "bitcoin": { "usd": 64000 },
+  "ethereum": { "usd": 3200.5 },
+  "tether": { "usd": 1.0002 },
+  "usd-coin": { "usd": 0.9999 },
+  "binancecoin": { "usd": 580.12 },
+  "solana": { "usd": 145.3 },
+  "ripple": { "usd": 0.52 },
+  "cardano": { "usd": 0.35 },
+  "dogecoin": { "usd": 0.11 },
+  "tron": { "usd": 0.16 },
+  "the-open-network": { "usd": 5.4 },
+  "polkadot": { "usd": 4.2 },
+  "polygon-ecosystem-token": { "usd": 0.38 },
+  "litecoin": { "usd": 66.1 },
+  "avalanche-2": { "usd": 25.6 },
+  "chainlink": { "usd": 11.2 },
+  "bitcoin-cash": { "usd": 330 },
+  "stellar": { "usd": 0.09 },
+  "shiba-inu": { "usd": 0.0000165 },
+  "dai": { "usd": "not-a-number" }
+}

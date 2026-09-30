@@ -49,13 +49,17 @@ export function generateExpenseReportCsv(data: ExpenseReportData): Buffer {
   rows.push(buildCsvRow(['Total Expenses', formatCurrency(data.summary.totalExpenses)]));
   rows.push(buildCsvRow(['Transaction Count', data.summary.transactionCount]));
   rows.push(buildCsvRow(['Average Transaction', formatCurrency(data.summary.averageTransaction)]));
-  rows.push(buildCsvRow(['Previous Period Change', `${data.summary.previousPeriodChange.toFixed(1)}%`]));
+  rows.push(
+    buildCsvRow(['Previous Period Change', `${data.summary.previousPeriodChange.toFixed(1)}%`]),
+  );
   rows.push('');
 
   // --- Section 2: Expenses by Category ---
   rows.push('Category,Amount,Percentage');
   for (const cat of data.byCategory) {
-    rows.push(buildCsvRow([cat.category, formatCurrency(cat.amount), `${cat.percentage.toFixed(1)}%`]));
+    rows.push(
+      buildCsvRow([cat.category, formatCurrency(cat.amount), `${cat.percentage.toFixed(1)}%`]),
+    );
   }
   rows.push('');
 

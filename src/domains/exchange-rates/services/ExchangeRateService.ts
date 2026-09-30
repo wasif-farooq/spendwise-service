@@ -4,7 +4,6 @@ import { ConfigLoader } from '@config/ConfigLoader';
 import { isCrypto, SUPPORTED_FIAT_CURRENCIES } from '@domains/currencies/currencies';
 import { CryptoFetchResult, CryptoRateProvider } from './CryptoRateProvider';
 
-
 export class ExchangeRateService {
   private repository: ExchangeRateRepository;
   private config = ConfigLoader.getInstance();

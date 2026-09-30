@@ -1,12 +1,10 @@
 import { ServiceBootstrap } from '../../src/bootstrap/ServiceBootstrap';
-import { ConfigLoader } from '@config/ConfigLoader';
 import { TOKENS } from '@di/tokens';
 import { Container } from '@di/Container';
 import { AuthService } from '@domains/auth/services/AuthService';
 import { UserService } from '@domains/users/services/UserService';
 import { WorkspaceService } from '@domains/workspaces/services/WorkspaceService';
 import { FeatureFlagService } from '@domains/feature-flags/services/FeatureFlagService';
-import { AppError } from '@shared/errors/AppError';
 import { logMailProvider } from '@domains/email/EmailService';
 import { ReportService } from '../../src/domains/reports/services/ReportService';
 import { ExportReportRequest } from '../../src/domains/reports/types';

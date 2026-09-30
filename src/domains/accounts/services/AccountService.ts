@@ -1,7 +1,6 @@
 import { Inject } from '@di/decorators/inject.decorator';
-import { TOKENS } from '@di/tokens';
 import { IAccountRepository } from '../repositories/IAccountRepository';
-import { Account, AccountType } from '../models/Account';
+import { Account } from '../models/Account';
 import { AppError } from '@shared/errors/AppError';
 import { CreateAccountDto, UpdateAccountDto } from '../dto';
 import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';

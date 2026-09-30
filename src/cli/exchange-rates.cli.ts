@@ -32,7 +32,8 @@ async function main() {
           `  crypto (CoinGecko): ${cryptoResult.count} rates - ${cryptoResult.success ? '✅' : '❌'}`,
         );
         (cryptoResult.errors || []).forEach((e) => console.log(`    - ${e}`));
-        if (cryptoResult.missing) console.log(`    - not priced: ${cryptoResult.missing.join(', ')}`);
+        if (cryptoResult.missing)
+          console.log(`    - not priced: ${cryptoResult.missing.join(', ')}`);
 
         console.log(`\n✅ Fetch complete!`);
         break;
