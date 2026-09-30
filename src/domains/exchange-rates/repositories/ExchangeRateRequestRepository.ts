@@ -5,29 +5,7 @@ import { ServiceFactory } from '@factories/ServiceFactory';
 import { ExchangeRateService } from '../services/ExchangeRateService';
 import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
-
-const SUPPORTED_CURRENCIES = [
-  'USD',
-  'EUR',
-  'GBP',
-  'JPY',
-  'AUD',
-  'CAD',
-  'CHF',
-  'CNY',
-  'INR',
-  'MXN',
-  'BRL',
-  'KRW',
-  'SGD',
-  'HKD',
-  'NOK',
-  'SEK',
-  'DKK',
-  'NZD',
-  'ZAR',
-  'RUB',
-];
+import { CRYPTO_CURRENCIES, SUPPORTED_FIAT_CURRENCIES } from '@domains/currencies/currencies';
 
 export class ExchangeRateRequestRepository {
   private config = ConfigLoader.getInstance();
@@ -78,6 +56,11 @@ export class ExchangeRateRequestRepository {
   }
 
   getSupportedCurrencies(): string[] {
-    return SUPPORTED_CURRENCIES;
+    return [...SUPPORTED_FIAT_CURRENCIES];
+  }
+
+  /** Crypto codes the rates cover (listed whether or not the `crypto` flag is on). */
+  getSupportedCryptoCurrencies(): string[] {
+    return CRYPTO_CURRENCIES.map((c) => c.code);
   }
 }

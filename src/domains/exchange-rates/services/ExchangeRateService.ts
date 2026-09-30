@@ -1,30 +1,8 @@
 import { ExchangeRateRepository } from '../repositories/ExchangeRateRepository';
 import { ExchangeRate } from '../models/ExchangeRate';
 import { ConfigLoader } from '@config/ConfigLoader';
+import { SUPPORTED_FIAT_CURRENCIES } from '@domains/currencies/currencies';
 
-// List of supported currencies
-const SUPPORTED_CURRENCIES = [
-  'USD',
-  'EUR',
-  'GBP',
-  'JPY',
-  'AUD',
-  'CAD',
-  'CHF',
-  'CNY',
-  'INR',
-  'MXN',
-  'BRL',
-  'KRW',
-  'SGD',
-  'HKD',
-  'NOK',
-  'SEK',
-  'DKK',
-  'NZD',
-  'ZAR',
-  'RUB',
-];
 
 export class ExchangeRateService {
   private repository: ExchangeRateRepository;
@@ -249,6 +227,6 @@ export class ExchangeRateService {
 
   // Get supported currencies
   getSupportedCurrencies(): string[] {
-    return SUPPORTED_CURRENCIES;
+    return [...SUPPORTED_FIAT_CURRENCIES];
   }
 }

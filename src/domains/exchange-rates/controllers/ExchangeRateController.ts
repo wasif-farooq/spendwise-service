@@ -67,7 +67,8 @@ export class ExchangeRateController {
   async getSupportedCurrencies(req: Request, res: Response) {
     try {
       const currencies = this.exchangeRateRequestRepository.getSupportedCurrencies();
-      res.json({ currencies });
+      const crypto = this.exchangeRateRequestRepository.getSupportedCryptoCurrencies();
+      res.json({ currencies, crypto });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
