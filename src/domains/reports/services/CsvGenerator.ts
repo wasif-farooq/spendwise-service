@@ -76,7 +76,9 @@ export function generateExpenseReportCsv(data: ExpenseReportData): Buffer {
   // --- Section 5: Largest Transactions ---
   rows.push('Description,Amount,Date,Category');
   for (const tx of data.topExpenses) {
-    rows.push(buildCsvRow([tx.description, formatCurrency(tx.amount), tx.date, tx.category]));
+    rows.push(
+      buildCsvRow([tx.description, formatCurrency(tx.amount, tx.currency), tx.date, tx.category]),
+    );
   }
 
   return Buffer.from(rows.join('\n'), 'utf-8');

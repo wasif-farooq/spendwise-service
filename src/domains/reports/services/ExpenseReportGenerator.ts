@@ -16,7 +16,13 @@ export interface ExpenseReportData {
   };
   byCategory: Array<{ category: string; amount: number; percentage: number }>;
   byMerchant: Array<{ merchant: string; amount: number; count: number }>;
-  topExpenses: Array<{ description: string; amount: number; date: string; category: string }>;
+  topExpenses: Array<{
+    description: string;
+    amount: number;
+    currency?: string;
+    date: string;
+    category: string;
+  }>;
   byAccount: Array<{ accountName: string; amount: number }>;
 }
 
@@ -105,6 +111,7 @@ export class ExpenseReportGenerator {
       .map((tx: any) => ({
         description: tx.description || 'No description',
         amount: tx.amount,
+        currency: tx.currency,
         date: tx.date instanceof Date ? tx.date.toISOString().split('T')[0] : String(tx.date),
         category: tx.categoryName || 'Uncategorized',
       }));

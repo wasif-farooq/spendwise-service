@@ -6,6 +6,8 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
 import { CursorPaginationOptions, CursorFilters, PaginatedResult } from '../repositories/types';
 import { ActivityCaptureService } from '@shared/ActivityCaptureService';
+import { roundAmount } from '@domains/currencies/currencies';
+import { TotalsConverter } from '@domains/currencies/TotalsConverter';
 
 export interface CreateTransactionDTO {
   accountId: string;
@@ -167,7 +169,7 @@ export class TransactionService {
     if (data.exchangeRate) {
       // Use provided exchange rate
       exchangeRate = data.exchangeRate;
-      convertedAmount = data.amount * exchangeRate;
+      convertedAmount = roundAmount(data.amount * exchangeRate, toAccount.currency);
     } else if (this.exchangeRateService) {
       // Fetch from exchange rate service
       const conversion = await this.exchangeRateService.convert(
@@ -176,7 +178,7 @@ export class TransactionService {
         toAccount.currency,
       );
       exchangeRate = conversion.rate;
-      convertedAmount = conversion.convertedAmount;
+      convertedAmount = roundAmount(conversion.convertedAmount, toAccount.currency);
     } else if (fromAccount.currency === toAccount.currency) {
       // Same currency - no conversion needed
       exchangeRate = 1;
@@ -710,7 +712,69 @@ export class TransactionService {
     return this.transactionRepo.getWorkspaceAccountStats(workspaceId, startDate, endDate);
   }
 
-  async getWorkspaceStats(workspaceId: string, startDate?: string, endDate?: string) {
-    return this.transactionRepo.getWorkspaceStats(workspaceId, startDate, endDate);
+  /**
+   * Workspace totals in one currency: `currency` if given, else the workspace
+   * owner's preferred currency, else USD. Sums are taken per currency and
+   * converted; currencies with no rate are left out and listed in
+   * `unconvertedCurrencies`.
+   */
+  async getWorkspaceStats(
+    workspaceId: string,
+    startDate?: string,
+    endDate?: string,
+    currency?: string,
+  ): Promise<{
+    totalIncome: number;
+    totalExpense: number;
+    balance: number;
+    transactionCount: number;
+    currency: string;
+    unconvertedCurrencies: string[];
+  }> {
+    const target = (currency || (await this.ownerCurrency(workspaceId)) || 'USD').toUpperCase();
+    const rows = await this.transactionRepo.getWorkspaceStatsByCurrency(
+      workspaceId,
+      startDate,
+      endDate,
+    );
+    const service = this.exchangeRateService;
+    const converter = new TotalsConverter(
+      target,
+      service ? async (from, to) => (await service.convert(1, from, to)).rate : undefined,
+    );
+
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let transactionCount = 0;
+    for (const row of rows) {
+      transactionCount += row.transactionCount;
+      const income = await converter.convert(row.totalIncome, row.currency);
+      const expense = await converter.convert(row.totalExpense, row.currency);
+      if (income !== null) totalIncome += income;
+      if (expense !== null) totalExpense += expense;
+    }
+
+    return {
+      totalIncome: roundAmount(totalIncome, target),
+      totalExpense: roundAmount(totalExpense, target),
+      balance: roundAmount(totalIncome - totalExpense, target),
+      transactionCount,
+      currency: target,
+      unconvertedCurrencies: converter.unconvertedCurrencies(),
+    };
+  }
+
+  private async ownerCurrency(workspaceId: string): Promise<string | null> {
+    try {
+      const result = await this.db.query(
+        `SELECT p.currency FROM workspaces w
+           JOIN user_preferences p ON p.user_id = w.owner_id
+          WHERE w.id = $1`,
+        [workspaceId],
+      );
+      return result.rows[0]?.currency || null;
+    } catch {
+      return null;
+    }
   }
 }
