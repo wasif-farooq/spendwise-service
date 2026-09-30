@@ -157,6 +157,13 @@ const config = {
     baseUrl: optional('EXCHANGE_RATE_BASE_URL', 'https://api.exchangerate-api.com/v4/latest'),
     cronEnabled: process.env.CRON_EXCHANGE_RATES_ENABLED !== 'false',
     cronSchedule: optional('CRON_EXCHANGE_RATES_SCHEDULE', '0 2 * * *'),
+    crypto: {
+      baseUrl: optional('COINGECKO_BASE_URL', 'https://api.coingecko.com/api/v3'),
+      apiKey: optional('COINGECKO_API_KEY'),
+      timeoutMs: int('COINGECKO_TIMEOUT_MS', 10000),
+      cronEnabled: process.env.CRON_CRYPTO_RATES_ENABLED !== 'false',
+      intervalMinutes: int('CRON_CRYPTO_RATES_INTERVAL_MINUTES', 10),
+    },
   },
 
   auth: {

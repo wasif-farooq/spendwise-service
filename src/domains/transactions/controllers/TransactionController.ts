@@ -434,7 +434,7 @@ export class TransactionController {
   async getWorkspaceStats(req: Request, res: Response) {
     try {
       const workspaceId = this.getWorkspaceId(req);
-      const { startDate, endDate } = req.query;
+      const { startDate, endDate, currency } = req.query;
 
       if (!workspaceId) {
         throw new AppError('Workspace not found', 404);
@@ -444,6 +444,7 @@ export class TransactionController {
         workspaceId,
         startDate as string,
         endDate as string,
+        typeof currency === 'string' && /^[A-Za-z]{3,10}$/.test(currency) ? currency : undefined,
       );
 
       if (result.error) {

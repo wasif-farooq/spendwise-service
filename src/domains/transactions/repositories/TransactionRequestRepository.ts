@@ -189,10 +189,15 @@ export class TransactionRequestRepository {
     throw new Error('RPC mode not implemented');
   }
 
-  async getWorkspaceStats(workspaceId: string, startDate?: string, endDate?: string) {
+  async getWorkspaceStats(
+    workspaceId: string,
+    startDate?: string,
+    endDate?: string,
+    currency?: string,
+  ) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
-      return this.wrap(service.getWorkspaceStats(workspaceId, startDate, endDate));
+      return this.wrap(service.getWorkspaceStats(workspaceId, startDate, endDate, currency));
     }
     throw new Error('RPC mode not implemented');
   }

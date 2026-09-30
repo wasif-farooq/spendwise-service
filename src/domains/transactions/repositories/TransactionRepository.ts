@@ -614,6 +614,8 @@ export class TransactionRepository {
     Array<{
       accountId: string;
       accountName: string;
+      /** The account's currency: each row's figures are in it. */
+      currency: string;
       totalIncome: number;
       totalExpense: number;
       balance: number;
@@ -639,12 +641,13 @@ export class TransactionRepository {
       `SELECT 
                 t.account_id,
                 a.name as account_name,
+                a.currency as currency,
                 COALESCE(SUM(CASE WHEN t.type = 'income' THEN t.amount ELSE 0 END), 0) as total_income,
                 COALESCE(SUM(CASE WHEN t.type = 'expense' THEN t.amount ELSE 0 END), 0) as total_expense
              FROM transactions t
              JOIN accounts a ON t.account_id = a.id
              ${whereClause}
-             GROUP BY t.account_id, a.name
+             GROUP BY t.account_id, a.name, a.currency
              ORDER BY a.name`,
       params,
     );
@@ -652,13 +655,56 @@ export class TransactionRepository {
     return result.rows.map((row: any) => ({
       accountId: row.account_id,
       accountName: row.account_name,
+      currency: row.currency,
       totalIncome: parseFloat(row.total_income),
       totalExpense: parseFloat(row.total_expense),
       balance: parseFloat(row.total_income) - parseFloat(row.total_expense),
     }));
   }
 
-  // Get workspace-wide stats
+  /**
+   * Workspace income/expense summed per currency. Totals across currencies
+   * must be converted (TransactionService.getWorkspaceStats), never summed.
+   */
+  async getWorkspaceStatsByCurrency(
+    workspaceId: string,
+    startDate?: string,
+    endDate?: string,
+  ): Promise<
+    Array<{ currency: string; totalIncome: number; totalExpense: number; transactionCount: number }>
+  > {
+    const params: any[] = [workspaceId];
+    let whereClause = 'WHERE workspace_id = $1';
+    if (startDate) {
+      params.push(startDate);
+      whereClause += ` AND date >= $${params.length}`;
+    }
+    if (endDate) {
+      params.push(endDate);
+      whereClause += ` AND date <= $${params.length}`;
+    }
+
+    const result = await this.dbToUse.query(
+      `SELECT
+                COALESCE(currency, 'USD') as currency,
+                COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as total_income,
+                COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) as total_expense,
+                COUNT(*) as transaction_count
+             FROM transactions ${whereClause}
+             GROUP BY COALESCE(currency, 'USD')
+             ORDER BY 1`,
+      params,
+    );
+
+    return result.rows.map((row: any) => ({
+      currency: row.currency,
+      totalIncome: parseFloat(row.total_income || '0'),
+      totalExpense: parseFloat(row.total_expense || '0'),
+      transactionCount: parseInt(row.transaction_count || '0'),
+    }));
+  }
+
+  // Get workspace-wide stats (single-currency sum; used by the expense report)
   async getWorkspaceStats(
     workspaceId: string,
     startDate?: string,

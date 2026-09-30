@@ -1,30 +1,8 @@
 import { ExchangeRateRepository } from '../repositories/ExchangeRateRepository';
 import { ExchangeRate } from '../models/ExchangeRate';
 import { ConfigLoader } from '@config/ConfigLoader';
-
-// List of supported currencies
-const SUPPORTED_CURRENCIES = [
-  'USD',
-  'EUR',
-  'GBP',
-  'JPY',
-  'AUD',
-  'CAD',
-  'CHF',
-  'CNY',
-  'INR',
-  'MXN',
-  'BRL',
-  'KRW',
-  'SGD',
-  'HKD',
-  'NOK',
-  'SEK',
-  'DKK',
-  'NZD',
-  'ZAR',
-  'RUB',
-];
+import { isCrypto, SUPPORTED_FIAT_CURRENCIES } from '@domains/currencies/currencies';
+import { CryptoFetchResult, CryptoRateProvider } from './CryptoRateProvider';
 
 export class ExchangeRateService {
   private repository: ExchangeRateRepository;
@@ -32,8 +10,11 @@ export class ExchangeRateService {
   private apiKey: string;
   private baseUrl = 'https://api.exchangerate-api.com/v4/latest';
 
-  constructor(repository: ExchangeRateRepository) {
+  private cryptoProvider: CryptoRateProvider;
+
+  constructor(repository: ExchangeRateRepository, cryptoProvider?: CryptoRateProvider) {
     this.repository = repository;
+    this.cryptoProvider = cryptoProvider ?? new CryptoRateProvider(repository);
     this.apiKey =
       this.config.get('exchangeRates.apiKey') || process.env.EXCHANGE_RATE_API_KEY || '';
   }
@@ -63,6 +44,8 @@ export class ExchangeRateService {
       // Save to database
       let count = 0;
       for (const [targetCurrency, rate] of Object.entries(rates)) {
+        // Crypto rates come from CoinGecko only (fetchCryptoRates).
+        if (isCrypto(targetCurrency)) continue;
         try {
           const exchangeRate = ExchangeRate.create({
             baseCurrency,
@@ -121,6 +104,11 @@ export class ExchangeRateService {
     };
   }
 
+  /** USD -> coin rates for every listed crypto currency, from CoinGecko. */
+  async fetchCryptoRates(): Promise<CryptoFetchResult> {
+    return this.cryptoProvider.fetchAndStoreRates();
+  }
+
   // Get all stored rates
   async getRates(baseCurrency?: string): Promise<ExchangeRate[]> {
     return this.repository.findAll(baseCurrency);
@@ -149,21 +137,14 @@ export class ExchangeRateService {
       };
     }
 
-    // Try to get rate from database
-    let rate = await this.getRate(fromCurrency, toCurrency);
+    // Stored directly, or stored the other way round.
+    let rate = await this.getRateEitherWay(fromCurrency, toCurrency);
 
-    // If not found, try reverse
-    if (!rate) {
-      const reverseRate = await this.getRate(toCurrency, fromCurrency);
-      if (reverseRate && reverseRate > 0) {
-        rate = 1 / reverseRate;
-      }
-    }
-
-    // If still not found, try USD as intermediate
+    // Else through USD: fiat rates are stored from USD/EUR/GBP and crypto
+    // rates as USD -> coin, so BTC -> PKR is (USD -> BTC)^-1 * (USD -> PKR).
     if (!rate && fromCurrency !== 'USD' && toCurrency !== 'USD') {
-      const fromToUSD = await this.getRate(fromCurrency, 'USD');
-      const usdToTo = await this.getRate('USD', toCurrency);
+      const fromToUSD = await this.getRateEitherWay(fromCurrency, 'USD');
+      const usdToTo = await this.getRateEitherWay('USD', toCurrency);
       if (fromToUSD && usdToTo) {
         rate = fromToUSD * usdToTo;
       }
@@ -180,6 +161,13 @@ export class ExchangeRateService {
       fromCurrency,
       toCurrency,
     };
+  }
+
+  private async getRateEitherWay(from: string, to: string): Promise<number | null> {
+    const direct = await this.getRate(from, to);
+    if (direct) return direct;
+    const reverse = await this.getRate(to, from);
+    return reverse && reverse > 0 ? 1 / reverse : null;
   }
 
   // Get single rate
@@ -249,6 +237,6 @@ export class ExchangeRateService {
 
   // Get supported currencies
   getSupportedCurrencies(): string[] {
-    return SUPPORTED_CURRENCIES;
+    return [...SUPPORTED_FIAT_CURRENCIES];
   }
 }

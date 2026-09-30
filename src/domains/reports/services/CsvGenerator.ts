@@ -49,13 +49,17 @@ export function generateExpenseReportCsv(data: ExpenseReportData): Buffer {
   rows.push(buildCsvRow(['Total Expenses', formatCurrency(data.summary.totalExpenses)]));
   rows.push(buildCsvRow(['Transaction Count', data.summary.transactionCount]));
   rows.push(buildCsvRow(['Average Transaction', formatCurrency(data.summary.averageTransaction)]));
-  rows.push(buildCsvRow(['Previous Period Change', `${data.summary.previousPeriodChange.toFixed(1)}%`]));
+  rows.push(
+    buildCsvRow(['Previous Period Change', `${data.summary.previousPeriodChange.toFixed(1)}%`]),
+  );
   rows.push('');
 
   // --- Section 2: Expenses by Category ---
   rows.push('Category,Amount,Percentage');
   for (const cat of data.byCategory) {
-    rows.push(buildCsvRow([cat.category, formatCurrency(cat.amount), `${cat.percentage.toFixed(1)}%`]));
+    rows.push(
+      buildCsvRow([cat.category, formatCurrency(cat.amount), `${cat.percentage.toFixed(1)}%`]),
+    );
   }
   rows.push('');
 
@@ -76,7 +80,9 @@ export function generateExpenseReportCsv(data: ExpenseReportData): Buffer {
   // --- Section 5: Largest Transactions ---
   rows.push('Description,Amount,Date,Category');
   for (const tx of data.topExpenses) {
-    rows.push(buildCsvRow([tx.description, formatCurrency(tx.amount), tx.date, tx.category]));
+    rows.push(
+      buildCsvRow([tx.description, formatCurrency(tx.amount, tx.currency), tx.date, tx.category]),
+    );
   }
 
   return Buffer.from(rows.join('\n'), 'utf-8');

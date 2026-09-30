@@ -27,8 +27,25 @@ async function main() {
           }
         });
 
+        const cryptoResult = await service.fetchCryptoRates();
+        console.log(
+          `  crypto (CoinGecko): ${cryptoResult.count} rates - ${cryptoResult.success ? '✅' : '❌'}`,
+        );
+        (cryptoResult.errors || []).forEach((e) => console.log(`    - ${e}`));
+        if (cryptoResult.missing)
+          console.log(`    - not priced: ${cryptoResult.missing.join(', ')}`);
+
         console.log(`\n✅ Fetch complete!`);
         break;
+
+      case 'fetch:crypto': {
+        console.log('📥 Fetching crypto rates from CoinGecko...');
+        const result = await service.fetchCryptoRates();
+        console.log(`✅ Stored ${result.count} USD -> coin rates`);
+        (result.errors || []).forEach((e) => console.log(`    - ${e}`));
+        if (result.missing) console.log(`    - not priced: ${result.missing.join(', ')}`);
+        break;
+      }
 
       case 'fetch:usd':
         console.log('📥 Fetching USD rates...');
@@ -64,7 +81,8 @@ async function main() {
         console.log(`
 🪙 Exchange Rates CLI Commands:
 
-  fetch           Fetch rates for all base currencies (USD, EUR, GBP)
+  fetch           Fetch rates for all base currencies (USD, EUR, GBP) + crypto
+  fetch:crypto    Fetch crypto rates only (CoinGecko, stored as USD -> coin)
   fetch:usd      Fetch rates for USD only
   rates [base]   Show stored rates (default: USD)
   convert <amount> <from> <to>

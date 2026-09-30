@@ -8,6 +8,11 @@ export interface AccountWithBalance {
   currency: string;
 }
 
+export interface CurrencyTotal {
+  currency: string;
+  total: number;
+}
+
 export interface IAccountRepository {
   findById(id: string): Promise<Account | null>;
   findByWorkspaceId(workspaceId: string): Promise<Account[]>;
@@ -16,7 +21,8 @@ export interface IAccountRepository {
   update(account: Account): Promise<Account>;
   delete(id: string): Promise<void>;
   deleteByWorkspaceId(workspaceId: string): Promise<void>;
-  getTotalBalance(workspaceId: string): Promise<number>;
+  /** Balances summed per currency (never across currencies). */
+  getBalancesByCurrency(workspaceId: string): Promise<CurrencyTotal[]>;
   findAllWithBalancesForWorkspace(workspaceId: string): Promise<AccountWithBalance[]>;
   updateBalance(id: string, balance: number): Promise<void>;
   updateIncomeExpense(id: string, totalIncome: number, totalExpense: number): Promise<void>;

@@ -1,12 +1,10 @@
 import { ServiceBootstrap } from '../../src/bootstrap/ServiceBootstrap';
-import { ConfigLoader } from '@config/ConfigLoader';
 import { TOKENS } from '@di/tokens';
 import { Container } from '@di/Container';
 import { AuthService } from '@domains/auth/services/AuthService';
 import { UserService } from '@domains/users/services/UserService';
 import { WorkspaceService } from '@domains/workspaces/services/WorkspaceService';
 import { FeatureFlagService } from '@domains/feature-flags/services/FeatureFlagService';
-import { AppError } from '@shared/errors/AppError';
 import { logMailProvider } from '@domains/email/EmailService';
 import { ReportService } from '../../src/domains/reports/services/ReportService';
 import { ExportReportRequest } from '../../src/domains/reports/types';
@@ -19,6 +17,7 @@ import { TransactionRepository } from '../../src/domains/transactions/repositori
 import { CategoryRepository } from '../../src/domains/categories/repositories/CategoryRepository';
 import { DatabaseFacade } from '../../src/facades/DatabaseFacade';
 import { PostgresFactory } from '../../src/database/factories/PostgresFactory';
+import { cronScheduler } from '../../src/workers/scheduler';
 
 // Consolidate Worker Logic
 const startWorker = async () => {
@@ -283,7 +282,13 @@ const startWorker = async () => {
     console.error('[Worker] Failed to sync scheduled report jobs:', error.message);
   }
 
-  console.log('[Worker] All topics subscribed + activity worker + scheduled report worker started');
+  // Exchange rates: fiat on start and daily at 02:00; crypto every 10 minutes
+  // while the `crypto` flag is on. Activity partitions on the 1st.
+  cronScheduler.start();
+
+  console.log(
+    '[Worker] All topics subscribed + activity worker + scheduled report worker + cron scheduler started',
+  );
 };
 
 startWorker().catch(console.error);

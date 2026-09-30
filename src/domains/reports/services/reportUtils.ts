@@ -1,9 +1,11 @@
+import { decimalsOf, roundAmount } from '@domains/currencies/currencies';
+
 /**
- * Format a number as a fixed-point string with 2 decimal places.
- * Used by both CSV and XLSX report generators.
+ * Format a number as a fixed-point string with the currency's decimals
+ * (2 for fiat and when unknown, 8 for crypto). Used by the CSV report.
  */
-export function formatCurrency(amount: number): string {
-  return amount.toFixed(2);
+export function formatCurrency(amount: number, currency?: string): string {
+  return roundAmount(amount, currency).toFixed(decimalsOf(currency));
 }
 
 /**
