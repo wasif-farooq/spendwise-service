@@ -57,6 +57,7 @@ const build = (
     plan?: 'Free' | 'Pro Monthly';
     extractor?: ReceiptExtractor | null;
     failWith?: Error;
+    flag?: boolean | (() => Promise<boolean>);
   } = {},
 ) => {
   let used = 0;
@@ -116,6 +117,7 @@ const build = (
     '/v1',
     createReceiptScanRouter(async () => service, {
       limiter: createReceiptScanLimiter(memoryStore()),
+      isEnabled: typeof opts.flag === 'function' ? opts.flag : async () => opts.flag ?? true,
     }),
   );
   return { app, repository };
@@ -270,6 +272,77 @@ describe('GET /v1/:workspaceId/ai/receipt-scan/usage', () => {
       .get(`/v1/${WS}/ai/receipt-scan/usage`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.body.data.limit).toBeNull();
+  });
+});
+
+describe('receiptScan feature flag', () => {
+  const usage = (app: express.Express) =>
+    request(app).get(`/v1/${WS}/ai/receipt-scan/usage`).set('Authorization', `Bearer ${token}`);
+
+  it('flag off: scan answers 404 FEATURE_DISABLED without touching the provider', async () => {
+    const extract = jest.fn();
+    const { app, repository } = build({
+      flag: false,
+      extractor: { provider: 'opencode', model: 'm', extract },
+    });
+    const res = await post(app);
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({
+      message: 'Receipt scanning is not available.',
+      code: 'FEATURE_DISABLED',
+    });
+    expect(extract).not.toHaveBeenCalled();
+    expect(repository.findAllowance).not.toHaveBeenCalled();
+    expect(repository.record).not.toHaveBeenCalled();
+  });
+
+  it('flag off: usage answers 404 FEATURE_DISABLED', async () => {
+    const res = await usage(build({ flag: false }).app);
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('FEATURE_DISABLED');
+  });
+
+  it('flag off: 404 comes before the session check', async () => {
+    const res = await request(build({ flag: false }).app).post(`/v1/${WS}/ai/receipt-scan`);
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('FEATURE_DISABLED');
+  });
+
+  it('a failed flag lookup counts as off', async () => {
+    const { app } = build({
+      flag: async () => {
+        throw new Error('db down');
+      },
+    });
+    expect((await post(app)).status).toBe(404);
+    expect((await usage(app)).body.code).toBe('FEATURE_DISABLED');
+  });
+
+  it('by default reads `receiptScan` from the registered FeatureFlagService', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Container } = require('@di/Container');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { TOKENS } = require('@di/tokens');
+    const isEnabled = jest.fn(async () => false);
+    Container.getInstance().registerInstance(TOKENS.FeatureFlagService, { isEnabled });
+    const app = express();
+    app.use(
+      '/v1',
+      createReceiptScanRouter(async () => ({}) as ReceiptScanService),
+    );
+    const res = await request(app)
+      .get(`/v1/${WS}/ai/receipt-scan/usage`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(404);
+    expect(isEnabled).toHaveBeenCalledWith('receiptScan');
+  });
+
+  it('reads the flag on every request, so turning it on needs no restart', async () => {
+    let on = false;
+    const { app } = build({ flag: async () => on });
+    expect((await usage(app)).status).toBe(404);
+    on = true;
+    expect((await usage(app)).status).toBe(200);
   });
 });
 

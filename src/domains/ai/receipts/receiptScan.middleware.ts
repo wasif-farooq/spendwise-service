@@ -19,6 +19,33 @@ const userKey = (req: Request) => {
   return user?.userId || user?.sub || req.ip || 'unknown';
 };
 
+/** The feature flag (GET /api/v1/feature-flags) that switches receipt scanning on. */
+export const RECEIPT_SCAN_FLAG = 'receiptScan';
+
+/**
+ * 404 FEATURE_DISABLED while the `receiptScan` flag is off. Runs first, so a
+ * disabled feature looks like a route that doesn't exist. A failed flag lookup
+ * counts as off.
+ */
+export const requireReceiptScanFlag =
+  (isEnabled: () => Promise<boolean>): RequestHandler =>
+  async (_req, res, next) => {
+    let enabled = false;
+    try {
+      enabled = await isEnabled();
+    } catch {
+      enabled = false;
+    }
+    if (!enabled) {
+      res.status(404).json({
+        message: 'Receipt scanning is not available.',
+        code: 'FEATURE_DISABLED',
+      });
+      return;
+    }
+    next();
+  };
+
 /**
  * 503 when scanning isn't configured, 402 SCAN_LIMIT_REACHED when the owner's
  * monthly allowance is used up. Runs before the upload so a refused scan never
