@@ -5,6 +5,12 @@ import { requireAuth } from '@shared/middleware/auth.middleware';
 import { requirePermission } from '@shared/middleware/permission.middleware';
 import { validateBody, validateParams } from '@shared/middleware/validateBody.middleware';
 import { z } from 'zod';
+import { currencyCode } from '@domains/currencies/currencyCode';
+import {
+  accountCurrencyLookup,
+  isCryptoFlagOn,
+  requireCryptoFlagForCurrency,
+} from '@domains/currencies/cryptoFlag.middleware';
 
 const router = Router();
 
@@ -32,7 +38,7 @@ export const CreateTransactionSchema = z.object({
   accountId: z.string().uuid().optional(),
   type: z.enum(['income', 'expense']),
   amount: z.number().positive('Amount must be positive'),
-  currency: z.string().length(3, 'Currency must be 3 characters'),
+  currency: currencyCode(),
   description: z.string().optional(),
   date: z.string(),
   categoryId: z.string().uuid().optional(),
@@ -47,7 +53,7 @@ export const UpdateTransactionSchema = z.object({
   accountId: z.string().uuid().optional(),
   type: z.enum(['income', 'expense']).optional(),
   amount: z.number().positive().optional(),
-  currency: z.string().length(3).optional(),
+  currency: currencyCode().optional(),
   description: z.string().optional(),
   date: z.string().optional(),
   categoryId: z.string().uuid().optional(),
@@ -70,13 +76,22 @@ const TransferSchema = z.object({
   fromAccountId: z.string().uuid('Invalid source account ID'),
   toAccountId: z.string().uuid('Invalid destination account ID'),
   amount: z.number().positive('Amount must be positive'),
-  currency: z.string().length(3, 'Currency must be 3 characters'),
+  currency: currencyCode(),
   exchangeRate: z.number().positive().optional(),
   date: z.string(),
   description: z.string().optional(),
 });
 
 router.use(requireAuth);
+
+// While the `crypto` flag is off, a crypto currency is only accepted when it is
+// already the account's own (existing crypto accounts keep working).
+const cryptoOnPathAccount = requireCryptoFlagForCurrency(isCryptoFlagOn, {
+  existingCurrency: accountCurrencyLookup((req) => req.params.accountId),
+});
+const cryptoOnSourceAccount = requireCryptoFlagForCurrency(isCryptoFlagOn, {
+  existingCurrency: accountCurrencyLookup((req) => req.body?.fromAccountId),
+});
 
 router.get(
   '/:workspaceId/accounts/:accountId/transactions',
@@ -101,6 +116,7 @@ router.post(
   validateParams(AccountIdParamSchema),
   validateBody(CreateTransactionSchema),
   requirePermission('transaction:create'),
+  cryptoOnPathAccount,
   (req, res) => req.controller.createTransaction(req, res),
 );
 
@@ -111,6 +127,7 @@ router.put(
   validateParams(TransactionIdParamSchema),
   validateBody(UpdateTransactionSchema),
   requirePermission('transaction:edit'),
+  cryptoOnPathAccount,
   (req, res) => req.controller.updateTransaction(req, res),
 );
 
@@ -170,6 +187,7 @@ router.post(
   validateParams(WorkspaceIdParamSchema),
   validateBody(TransferSchema),
   requirePermission('transaction:create'),
+  cryptoOnSourceAccount,
   (req, res) => req.controller.transfer(req, res),
 );
 

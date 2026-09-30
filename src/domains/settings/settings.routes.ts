@@ -4,6 +4,7 @@ import { validate } from '@shared/middleware/validate.middleware';
 import { authRateLimits } from '@shared/middleware/rateLimit.middleware';
 import { changePasswordSchema } from '@domains/auth/validators/auth.validation';
 import { SettingsControllerFactory } from '@factories/SettingsControllerFactory';
+import { rejectCryptoBaseCurrency } from '@domains/currencies/cryptoFlag.middleware';
 
 const router = Router();
 
@@ -13,7 +14,7 @@ const controller = factory.create();
 router.use(requireAuth);
 
 router.get('/preferences', controller.getPreferences.bind(controller));
-router.put('/preferences', controller.updatePreferences.bind(controller));
+router.put('/preferences', rejectCryptoBaseCurrency, controller.updatePreferences.bind(controller));
 router.get('/security', controller.getSecuritySettings.bind(controller));
 // Same endpoint as PUT /auth/change-password — both reach
 // AuthRequestRepository.changePassword, so both enforce the same policy.
