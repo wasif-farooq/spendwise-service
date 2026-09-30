@@ -2,6 +2,8 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { AccountRepository } from '@domains/accounts/repositories/AccountRepository';
+import { roundAmount } from '@domains/currencies/currencies';
+import { roundPercent, TotalsConverter } from '@domains/currencies/TotalsConverter';
 
 export interface AnalyticsOverview {
   monthlyIncome: number;
@@ -16,6 +18,10 @@ export interface AnalyticsOverview {
     incomeChange: number;
     expenseChange: number;
   };
+  /** The currency every figure is in. */
+  currency: string;
+  /** Currencies with no rate to `currency`: left out of the totals, not counted at 1. */
+  unconvertedCurrencies: string[];
 }
 
 export interface CategoryTrend {
@@ -110,25 +116,15 @@ export class AnalyticsService {
     return 'USD';
   }
 
-  private async getExchangeRate(fromCurrency: string, toCurrency: string): Promise<number> {
-    if (fromCurrency === toCurrency) return 1;
-    try {
-      const result = await this.exchangeRateService.convert(1, fromCurrency, toCurrency);
+  /**
+   * A converter into `currency` for one request. Amounts without a rate are
+   * skipped (a missing rate used to count as 1, so 1 BTC counted as 1 USD).
+   */
+  private converter(currency: string): TotalsConverter {
+    return new TotalsConverter(currency, async (from, to) => {
+      const result = await this.exchangeRateService.convert(1, from, to);
       return result.rate;
-    } catch (error) {
-      console.warn('Could not get exchange rate:', error);
-      return 1;
-    }
-  }
-
-  private async convertAmount(
-    amount: number,
-    fromCurrency: string,
-    toCurrency: string,
-  ): Promise<number> {
-    if (fromCurrency === toCurrency) return amount;
-    const rate = await this.getExchangeRate(fromCurrency, toCurrency);
-    return amount * rate;
+    });
   }
 
   async getOverview(
@@ -170,14 +166,12 @@ export class AnalyticsService {
     const prevResult = await this.db.query(prevQuery, prevParams);
 
     // Calculate totals with conversion
+    const converter = this.converter(preferredCurrency);
     let currIncome = 0,
       currExpense = 0;
     for (const tx of currResult.rows) {
-      const converted = await this.convertAmount(
-        parseFloat(tx.amount || '0'),
-        tx.currency || 'USD',
-        preferredCurrency,
-      );
+      const converted = await converter.convert(parseFloat(tx.amount || '0'), tx.currency);
+      if (converted === null) continue;
       if (tx.type === 'income') currIncome += converted;
       else currExpense += converted;
     }
@@ -185,11 +179,8 @@ export class AnalyticsService {
     let prevIncome = 0,
       prevExpense = 0;
     for (const tx of prevResult.rows) {
-      const converted = await this.convertAmount(
-        parseFloat(tx.amount || '0'),
-        tx.currency || 'USD',
-        preferredCurrency,
-      );
+      const converted = await converter.convert(parseFloat(tx.amount || '0'), tx.currency);
+      if (converted === null) continue;
       if (tx.type === 'income') prevIncome += converted;
       else prevExpense += converted;
     }
@@ -209,18 +200,20 @@ export class AnalyticsService {
     );
 
     return {
-      monthlyIncome: Math.round(currIncome * 100) / 100,
-      monthlyExpenses: Math.round(currExpense * 100) / 100,
-      totalBalance: Math.round((currIncome - currExpense) * 100) / 100,
-      savingsRate: Math.max(0, Math.round(savingsRate * 100) / 100),
+      monthlyIncome: roundAmount(currIncome, preferredCurrency),
+      monthlyExpenses: roundAmount(currExpense, preferredCurrency),
+      totalBalance: roundAmount(currIncome - currExpense, preferredCurrency),
+      savingsRate: Math.max(0, roundPercent(savingsRate)),
       accountsCount: parseInt(accountsResult.rows[0]?.count || '0'),
       transactionsCount: parseInt(transactionsResult.rows[0]?.count || '0'),
       topCategory: null,
-      biggestExpense: Math.round(currExpense * 100) / 100,
+      biggestExpense: roundAmount(currExpense, preferredCurrency),
       periodComparison: {
-        incomeChange: Math.round(incomeChange * 100) / 100,
-        expenseChange: Math.round(expenseChange * 100) / 100,
+        incomeChange: roundPercent(incomeChange),
+        expenseChange: roundPercent(expenseChange),
       },
+      currency: preferredCurrency,
+      unconvertedCurrencies: converter.unconvertedCurrencies(),
     };
   }
 
@@ -265,19 +258,17 @@ export class AnalyticsService {
 
     const result = await this.db.query(query, params);
 
+    const converter = this.converter(preferredCurrency);
     const categoryData: Record<string, number> = {};
     for (const tx of result.rows) {
-      const converted = await this.convertAmount(
-        parseFloat(tx.amount || '0'),
-        tx.currency || 'USD',
-        preferredCurrency,
-      );
+      const converted = await converter.convert(parseFloat(tx.amount || '0'), tx.currency);
+      if (converted === null) continue;
       categoryData[tx.category] = (categoryData[tx.category] || 0) + converted;
     }
 
     return Object.entries(categoryData).map(([category, amount]) => ({
       category,
-      amount: Math.round(amount * 100) / 100,
+      amount: roundAmount(amount, preferredCurrency),
       percentage: 0,
       trend: 'stable' as const,
       transactionCount: 0,
@@ -327,15 +318,13 @@ export class AnalyticsService {
 
     const result = await this.db.query(query, params);
 
+    const converter = this.converter(preferredCurrency);
     const periodData: Record<string, { income: number; expense: number; label: string }> = {};
     for (const tx of result.rows) {
       if (!periodData[tx.period_key])
         periodData[tx.period_key] = { income: 0, expense: 0, label: tx.period_label };
-      const converted = await this.convertAmount(
-        parseFloat(tx.amount || '0'),
-        tx.currency || 'USD',
-        preferredCurrency,
-      );
+      const converted = await converter.convert(parseFloat(tx.amount || '0'), tx.currency);
+      if (converted === null) continue;
       if (tx.type === 'income') periodData[tx.period_key].income += converted;
       else periodData[tx.period_key].expense += converted;
     }
@@ -344,9 +333,9 @@ export class AnalyticsService {
       .map(([period, data]) => ({
         period,
         periodLabel: data.label,
-        income: Math.round(data.income * 100) / 100,
-        expense: Math.round(data.expense * 100) / 100,
-        savings: Math.round((data.income - data.expense) * 100) / 100,
+        income: roundAmount(data.income, preferredCurrency),
+        expense: roundAmount(data.expense, preferredCurrency),
+        savings: roundAmount(data.income - data.expense, preferredCurrency),
       }))
       .sort((a, b) => a.period.localeCompare(b.period));
   }
@@ -407,24 +396,22 @@ export class AnalyticsService {
 
     const result = await this.db.query(query, params);
 
+    const converter = this.converter(preferredCurrency);
     const periodData: Record<string, { income: number; expense: number }> = {};
     for (const tx of result.rows) {
       const periodKey = this.formatPeriodKey(tx.period, period);
       if (!periodData[periodKey]) periodData[periodKey] = { income: 0, expense: 0 };
-      const converted = await this.convertAmount(
-        parseFloat(tx.amount || '0'),
-        tx.currency || 'USD',
-        preferredCurrency,
-      );
+      const converted = await converter.convert(parseFloat(tx.amount || '0'), tx.currency);
+      if (converted === null) continue;
       if (tx.type === 'income') periodData[periodKey].income += converted;
       else periodData[periodKey].expense += converted;
     }
 
     return Object.entries(periodData).map(([period, data]) => ({
       period,
-      income: Math.round(data.income * 100) / 100,
-      expense: Math.round(data.expense * 100) / 100,
-      balance: Math.round((data.income - data.expense) * 100) / 100,
+      income: roundAmount(data.income, preferredCurrency),
+      expense: roundAmount(data.expense, preferredCurrency),
+      balance: roundAmount(data.income - data.expense, preferredCurrency),
     }));
   }
 
@@ -503,8 +490,10 @@ export class AnalyticsService {
     const preferredCurrency =
       filters?.preferredCurrency || (await this.getUserPreferredCurrency(undefined, workspaceId));
 
-    const params: any[] = [workspaceId, startDate.toISOString(), limit];
-    let query = `SELECT COALESCE(description, 'Unknown') as merchant, SUM(amount) as total, COUNT(id) as transaction_count, MAX(date) as last_transaction FROM transactions WHERE workspace_id = $1 AND type = 'expense' AND date >= $2 AND date <= NOW() AND description IS NOT NULL`;
+    // Summed per merchant *and currency*, then converted: summing across
+    // currencies in SQL (then converting the sum as if it were USD) was wrong.
+    const params: any[] = [workspaceId, startDate.toISOString()];
+    let query = `SELECT COALESCE(description, 'Unknown') as merchant, currency, SUM(amount) as total, COUNT(id) as transaction_count, MAX(date) as last_transaction FROM transactions WHERE workspace_id = $1 AND type = 'expense' AND date >= $2 AND date <= NOW() AND description IS NOT NULL`;
 
     if (filters?.accounts?.length) {
       query += ` AND account_id = ANY($${params.length + 1})`;
@@ -514,27 +503,41 @@ export class AnalyticsService {
       query += ` AND category_id = ANY($${params.length + 1})`;
       params.push(filters.categories);
     }
-    query += ` GROUP BY description ORDER BY total DESC LIMIT $3`;
+    query += ` GROUP BY description, currency`;
 
     const result = await this.db.query(query, params);
 
-    const returnData = await Promise.all(
-      result.rows.map(async (row: any) => {
-        const convertedAmount = await this.convertAmount(
-          parseFloat(row.total || '0'),
-          'USD',
-          preferredCurrency,
-        );
-        return {
-          merchant: row.merchant,
-          amount: convertedAmount,
-          transactionCount: parseInt(row.transaction_count || '0'),
-          category: 'Uncategorized',
-          lastTransaction: row.last_transaction,
-        };
-      }),
-    );
-    return returnData;
+    const converter = this.converter(preferredCurrency);
+    const merchants = new Map<
+      string,
+      { amount: number; transactionCount: number; lastTransaction: any }
+    >();
+    for (const row of result.rows) {
+      const converted = await converter.convert(parseFloat(row.total || '0'), row.currency);
+      if (converted === null) continue;
+      const current = merchants.get(row.merchant) ?? {
+        amount: 0,
+        transactionCount: 0,
+        lastTransaction: row.last_transaction,
+      };
+      current.amount += converted;
+      current.transactionCount += parseInt(row.transaction_count || '0');
+      if (new Date(row.last_transaction) > new Date(current.lastTransaction)) {
+        current.lastTransaction = row.last_transaction;
+      }
+      merchants.set(row.merchant, current);
+    }
+
+    return [...merchants.entries()]
+      .map(([merchant, data]) => ({
+        merchant,
+        amount: roundAmount(data.amount, preferredCurrency),
+        transactionCount: data.transactionCount,
+        category: 'Uncategorized',
+        lastTransaction: data.lastTransaction,
+      }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, limit);
   }
 
   private getDateRange(
