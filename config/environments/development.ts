@@ -132,6 +132,16 @@ export default {
     // Cron job settings
     cronEnabled: process.env.CRON_EXCHANGE_RATES_ENABLED !== 'false',
     cronSchedule: process.env.CRON_EXCHANGE_RATES_SCHEDULE || '0 2 * * *', // Daily at 2 AM
+    // Crypto rates (CoinGecko /simple/price, stored as USD -> coin). The key is
+    // optional: without it the keyless public endpoint is used. A demo key goes
+    // in the x-cg-demo-api-key header.
+    crypto: {
+      baseUrl: process.env.COINGECKO_BASE_URL || 'https://api.coingecko.com/api/v3',
+      apiKey: process.env.COINGECKO_API_KEY || '',
+      timeoutMs: parseInt(process.env.COINGECKO_TIMEOUT_MS || '10000', 10),
+      cronEnabled: process.env.CRON_CRYPTO_RATES_ENABLED !== 'false',
+      intervalMinutes: parseInt(process.env.CRON_CRYPTO_RATES_INTERVAL_MINUTES || '10', 10),
+    },
   },
 
   auth: {
