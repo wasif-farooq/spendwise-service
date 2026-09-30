@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { ExchangeRateControllerFactory } from '@factories/ExchangeRateControllerFactory';
 import { requireAuth } from '@shared/middleware/auth.middleware';
+import { requireAdmin } from '@shared/middleware/admin.middleware';
 
 const router = Router();
 const factory = new ExchangeRateControllerFactory();
@@ -18,8 +19,9 @@ router.get('/latest', controller.getRates.bind(controller));
 // GET /exchange-rates/supported - Get supported currencies
 router.get('/supported', controller.getSupportedCurrencies.bind(controller));
 
-// POST /exchange-rates/fetch - Manually fetch latest rates
-router.post('/fetch', controller.fetchRates.bind(controller));
+// POST /exchange-rates/fetch - Manually fetch latest fiat (?base=USD) and crypto
+// rates. Admins only: it calls the paid/rate-limited upstream APIs.
+router.post('/fetch', requireAdmin(), controller.fetchRates.bind(controller));
 
 // GET /exchange-rates/convert?amount=100&from=USD&to=EUR
 router.get('/convert', controller.convert.bind(controller));

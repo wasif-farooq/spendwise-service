@@ -3,10 +3,9 @@ import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
 import type { DatabaseFacade } from '@facades/DatabaseFacade';
 import type { FeatureFlagService } from '@domains/feature-flags/services/FeatureFlagService';
-import { isCrypto } from './currencies';
+import { CRYPTO_FLAG, isCrypto } from './currencies';
 
-/** The feature flag (GET /api/v1/feature-flags) that offers crypto currencies. */
-export const CRYPTO_FLAG = 'crypto';
+export { CRYPTO_FLAG };
 
 export const CURRENCY_NOT_SUPPORTED = 'CURRENCY_NOT_SUPPORTED';
 

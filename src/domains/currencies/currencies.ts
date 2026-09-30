@@ -10,6 +10,9 @@
  * registry itself is flag-free so existing crypto accounts keep working.
  */
 
+/** The feature flag (GET /api/v1/feature-flags) that offers crypto currencies. */
+export const CRYPTO_FLAG = 'crypto';
+
 export type CurrencyKind = 'fiat' | 'crypto';
 
 export interface CryptoCurrency {

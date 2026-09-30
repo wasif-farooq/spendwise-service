@@ -50,7 +50,13 @@ export class ExchangeRateRequestRepository {
   async fetchRates(baseCurrency?: string) {
     if (this.getMode() === 'direct') {
       const service = this.getService();
-      return this.wrap(service.fetchAndStoreRates(baseCurrency || 'USD'));
+      return this.wrap(
+        (async () => {
+          const fiat = await service.fetchAndStoreRates(baseCurrency || 'USD');
+          const crypto = await service.fetchCryptoRates();
+          return { ...fiat, crypto };
+        })(),
+      );
     }
     throw new Error('RPC mode not implemented');
   }

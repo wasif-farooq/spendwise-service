@@ -19,6 +19,7 @@ import { TransactionRepository } from '../../src/domains/transactions/repositori
 import { CategoryRepository } from '../../src/domains/categories/repositories/CategoryRepository';
 import { DatabaseFacade } from '../../src/facades/DatabaseFacade';
 import { PostgresFactory } from '../../src/database/factories/PostgresFactory';
+import { cronScheduler } from '../../src/workers/scheduler';
 
 // Consolidate Worker Logic
 const startWorker = async () => {
@@ -283,7 +284,13 @@ const startWorker = async () => {
     console.error('[Worker] Failed to sync scheduled report jobs:', error.message);
   }
 
-  console.log('[Worker] All topics subscribed + activity worker + scheduled report worker started');
+  // Exchange rates: fiat on start and daily at 02:00; crypto every 10 minutes
+  // while the `crypto` flag is on. Activity partitions on the 1st.
+  cronScheduler.start();
+
+  console.log(
+    '[Worker] All topics subscribed + activity worker + scheduled report worker + cron scheduler started',
+  );
 };
 
 startWorker().catch(console.error);
