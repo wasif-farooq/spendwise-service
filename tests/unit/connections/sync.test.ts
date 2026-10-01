@@ -1,5 +1,5 @@
 import { RateLimitedError } from '@domains/connections/providers/errors';
-import { FIRST_IMPORT_CAP } from '@domains/connections/services/ConnectionSyncService';
+import { FIRST_IMPORT_CAP, SYNC_CLAIM_STALE_MINUTES } from '@domains/connections/services/ConnectionSyncService';
 import { Store, build, movement } from './fakes';
 
 /**
@@ -133,16 +133,68 @@ describe('ConnectionSyncService', () => {
     expect(store.accounts.get(link.accountId)!.balance).toBe('3.00000000');
   });
 
-  it('answers 409 SYNC_IN_PROGRESS while another run holds the lock', async () => {
+  it('answers 409 SYNC_IN_PROGRESS while another run holds a live claim, and leaves it alone', async () => {
     const store = new Store();
     const ctx = build(store);
     const { conn } = await connectAndLink(store, ctx, { syncMode: 'from_today' });
-    store.lockHeld = true;
+    const row = store.connections.get(conn.id)!;
+    const startedAt = new Date(Date.now() - 2 * 60_000);
+    Object.assign(row, { status: 'syncing', syncStartedAt: startedAt });
     await expect(ctx.sync.syncConnection(conn.id, { trigger: 'manual' })).rejects.toMatchObject({
       statusCode: 409,
       code: 'SYNC_IN_PROGRESS',
     });
-    expect(store.connections.get(conn.id)!.consecutiveFailures).toBe(0);
+    expect(row).toMatchObject({ status: 'syncing', syncStartedAt: startedAt, consecutiveFailures: 0 });
+  });
+
+  it('takes over a stale claim left by a crashed run', async () => {
+    const store = new Store();
+    const ctx = build(store);
+    ctx.provider.balanceValue = '1';
+    const { conn } = await connectAndLink(store, ctx, { syncMode: 'from_today' });
+    Object.assign(store.connections.get(conn.id)!, {
+      status: 'syncing',
+      syncStartedAt: new Date(Date.now() - (SYNC_CLAIM_STALE_MINUTES + 1) * 60_000),
+    });
+    ctx.provider.balanceValue = '2';
+    const result = await ctx.sync.syncConnection(conn.id, { trigger: 'scheduled' });
+    expect(result.links[0].providerBalance).toBe('2.00000000');
+    expect(store.connections.get(conn.id)).toMatchObject({ status: 'active', syncStartedAt: null });
+  });
+
+  it('calls the provider with no DB transaction open, then writes in short transactions', async () => {
+    const store = new Store();
+    const ctx = build(store);
+    ctx.provider.movements = [movement('t1', '2026-03-01', 'income', '0.5')];
+    ctx.provider.balanceValue = '0.5';
+    const { conn } = await connectAndLink(store, ctx, { syncMode: 'history' });
+    ctx.provider.callsInTx = 0;
+    ctx.provider.callsTotal = 0;
+    store.transactionsRun = 0;
+    await ctx.sync.syncConnection(conn.id, { trigger: 'manual' });
+    expect(ctx.provider.callsTotal).toBeGreaterThanOrEqual(2); // transactions + balance
+    expect(ctx.provider.callsInTx).toBe(0);
+    expect(store.transactionsRun).toBe(1); // one write transaction for the one link
+    expect(store.inTx).toBe(false);
+  });
+
+  it('never moves a cursor back when an overlapping run advanced it during the fetch', async () => {
+    const store = new Store();
+    const ctx = build(store);
+    ctx.provider.movements = [movement('t1', '2026-03-01', 'income', '0.5'), movement('t2', '2026-04-01', 'income', '0.25')];
+    ctx.provider.balanceValue = '0.75';
+    const { conn, link } = await connectAndLink(store, ctx, { syncMode: 'history' });
+    const advanced = { p: 99, done: true, imported: 2, opened: true };
+    ctx.provider.duringFetch = () => {
+      // Another (taken-over) run commits a newer cursor while this one is fetching.
+      store.links.get(link.id)!.cursor = advanced;
+    };
+    const rowsBefore = store.txns.length;
+    const result = await ctx.sync.syncConnection(conn.id, { trigger: 'scheduled' });
+    expect(result.links[0]).toMatchObject({ imported: 0, adjustment: null });
+    expect(store.links.get(link.id)!.cursor).toEqual(advanced);
+    expect(store.txns.length).toBe(rowsBefore);
+    expect(store.connections.get(conn.id)!.status).toBe('active');
   });
 
   it('stores the error code and backs off exponentially; a success clears it', async () => {
@@ -163,9 +215,11 @@ describe('ConnectionSyncService', () => {
       expect.anything(),
     );
 
+    // The claim is released on failure: the next run isn't refused.
+    expect(store.connections.get(conn.id)!.syncStartedAt).toBeNull();
     ctx.provider.failWith = null;
     await ctx.sync.syncConnection(conn.id, { trigger: 'manual' });
-    expect(store.connections.get(conn.id)).toMatchObject({ status: 'active', lastErrorCode: null, consecutiveFailures: 0 });
+    expect(store.connections.get(conn.id)).toMatchObject({ status: 'active', lastErrorCode: null, consecutiveFailures: 0, syncStartedAt: null });
   });
 });
 

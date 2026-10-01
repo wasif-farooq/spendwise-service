@@ -13,6 +13,7 @@ const mapRow = (row: any): ConnectionRow => ({
   credentialsEnc: row.credentials_enc ?? null,
   metadata: row.metadata ?? {},
   status: row.status,
+  syncStartedAt: row.sync_started_at ?? null,
   lastSyncedAt: row.last_synced_at ?? null,
   nextSyncAt: row.next_sync_at ?? null,
   lastError: row.last_error ?? null,
@@ -105,30 +106,66 @@ export class ConnectionRepository {
     return { ownerId: row.owner_id, planName: row.plan_name ?? null, limits: row.limits ?? {} };
   }
 
-  async markSynced(id: string, nextSyncAt: Date): Promise<void> {
+  /**
+   * Claims the connection for one sync run: status 'syncing' + sync_started_at, in one
+   * atomic UPDATE. Returns the claim token (sync_started_at as text, full precision), or
+   * null when another run holds a claim younger than `staleMinutes` (a crashed run's
+   * claim is taken over once it's older). No lock or connection is held in between.
+   */
+  async claimSync(id: string, staleMinutes: number): Promise<string | null> {
+    const result = await this.db.query(
+      `UPDATE connections
+          SET status = 'syncing', sync_started_at = NOW(), updated_at = NOW()
+        WHERE id = $1
+          AND status <> 'disconnected'
+          AND (status <> 'syncing'
+               OR sync_started_at IS NULL
+               OR sync_started_at < NOW() - make_interval(mins => $2::int))
+        RETURNING sync_started_at::text AS claim`,
+      [id, staleMinutes],
+    );
+    return result.rows[0]?.claim ?? null;
+  }
+
+  /** Releases a claim after success. A no-op when the claim was taken over meanwhile. */
+  async markSynced(id: string, nextSyncAt: Date, claim: string): Promise<void> {
     await this.db.query(
       `UPDATE connections
-          SET status = 'active', last_synced_at = NOW(), next_sync_at = $2,
+          SET status = 'active', sync_started_at = NULL, last_synced_at = NOW(), next_sync_at = $2,
               last_error = NULL, last_error_code = NULL, consecutive_failures = 0,
               updated_at = NOW()
-        WHERE id = $1`,
-      [id, nextSyncAt],
+        WHERE id = $1 AND sync_started_at = $3::timestamptz`,
+      [id, nextSyncAt, claim],
     );
   }
 
+  /** Releases a claim after a failure, storing the error and the backoff. */
   async markFailed(
     id: string,
     code: ConnectionErrorCode,
     message: string,
     nextSyncAt: Date,
+    claim: string,
   ): Promise<void> {
     await this.db.query(
       `UPDATE connections
           SET status = CASE WHEN $2 = 'REAUTH_REQUIRED' THEN 'reauth_required' ELSE 'error' END,
+              sync_started_at = NULL,
               last_error = $3, last_error_code = $2, next_sync_at = $4,
               consecutive_failures = consecutive_failures + 1, updated_at = NOW()
-        WHERE id = $1`,
-      [id, code, message.slice(0, 500), nextSyncAt],
+        WHERE id = $1 AND sync_started_at = $5::timestamptz`,
+      [id, code, message.slice(0, 500), nextSyncAt, claim],
+    );
+  }
+
+  /** Last resort (markSynced/markFailed didn't run): drop the claim, keep the last outcome. */
+  async releaseClaim(id: string, claim: string): Promise<void> {
+    await this.db.query(
+      `UPDATE connections
+          SET status = CASE WHEN last_error_code IS NULL THEN 'active' ELSE 'error' END,
+              sync_started_at = NULL, updated_at = NOW()
+        WHERE id = $1 AND sync_started_at = $2::timestamptz`,
+      [id, claim],
     );
   }
 

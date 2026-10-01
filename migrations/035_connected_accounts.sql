@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS connections (
     credentials_enc BYTEA,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     status VARCHAR(20) NOT NULL DEFAULT 'active',
+    -- A sync run claims the row (status 'syncing' + this time) instead of holding a
+    -- lock; a claim older than the stale timeout (10 min) can be taken over.
+    sync_started_at TIMESTAMPTZ,
     last_synced_at TIMESTAMPTZ,
     next_sync_at TIMESTAMPTZ,
     last_error TEXT,

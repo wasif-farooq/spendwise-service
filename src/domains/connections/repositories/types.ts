@@ -14,6 +14,8 @@ export interface ConnectionRow {
   credentialsEnc: Buffer | null;
   metadata: Record<string, any>;
   status: ConnectionStatus;
+  /** Set while a sync run holds the claim. */
+  syncStartedAt: Date | null;
   lastSyncedAt: Date | null;
   nextSyncAt: Date | null;
   lastError: string | null;

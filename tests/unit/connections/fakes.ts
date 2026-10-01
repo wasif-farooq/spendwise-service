@@ -31,7 +31,9 @@ export class Store {
   txns: Array<Omit<FakeTxn, 'connectionAccountId' | 'externalId'> & { connectionAccountId: string | null; externalId: string | null }> = [];
   accounts = new Map<string, { id: string; workspaceId: string; name: string; currency: string; type: string; balance: string }>();
   limits: OwnerLimits = { ownerId: 'owner-1', planName: 'Pro Monthly', limits: { connectedWallets: -1, hasPaymentConnections: true, connectionSyncIntervalMinutes: 60, transactionHistoryMonths: 12 } };
-  lockHeld = false;
+  /** True while a (fake) DB transaction is open. */
+  inTx = false;
+  transactionsRun = 0;
   workspaceOwner = 'owner-1';
 
   addAccount(workspaceId: string, name: string, currency: string, manual: Array<[('income' | 'expense'), string]> = []) {
@@ -68,11 +70,13 @@ export class Store {
 export const fakeDb = (store: Store) => {
   const trx: any = {
     query: async (sql: string) => {
-      if (sql.includes('pg_try_advisory_xact_lock')) return { rows: [{ locked: !store.lockHeld }] };
       throw new Error(`Unexpected SQL in fake: ${sql}`);
     },
   };
   trx.transaction = async (cb: (t: any) => Promise<any>) => {
+    if (store.inTx) throw new Error('nested transaction in fake');
+    store.inTx = true;
+    store.transactionsRun++;
     // Roll back on error: snapshot and restore.
     const snapshot = {
       txns: store.txns.map((t) => ({ ...t })),
@@ -83,11 +87,14 @@ export const fakeDb = (store: Store) => {
     try {
       return await cb(trx);
     } catch (error) {
+      store.inTx = false;
       store.txns = snapshot.txns;
       store.links = snapshot.links;
       store.accounts = snapshot.accounts;
       store.connections = snapshot.connections;
       throw error;
+    } finally {
+      store.inTx = false;
     }
   };
   return trx;
@@ -103,7 +110,7 @@ export const fakeConnections = (store: Store): any => {
         }
       }
       const row: ConnectionRow = {
-        id: randomUUID(), ...data, status: 'active', lastSyncedAt: null, nextSyncAt: new Date(),
+        id: randomUUID(), ...data, status: 'active', syncStartedAt: null, lastSyncedAt: null, nextSyncAt: new Date(),
         lastError: null, lastErrorCode: null, consecutiveFailures: 0, createdAt: new Date(), updatedAt: new Date(),
       };
       store.connections.set(row.id, row);
@@ -118,17 +125,35 @@ export const fakeConnections = (store: Store): any => {
     countWalletsForOwner: async () =>
       [...store.connections.values()].filter((c) => c.kind === 'crypto_wallet' && c.status !== 'disconnected').length,
     findOwnerLimits: async () => store.limits,
-    async markSynced(id: string, next: Date) {
-      Object.assign(store.connections.get(id)!, {
-        status: 'active', lastSyncedAt: new Date(), nextSyncAt: next, lastError: null, lastErrorCode: null, consecutiveFailures: 0,
+    /** Same rule as the SQL: a live claim blocks, a stale one (> staleMinutes) is taken over. */
+    async claimSync(id: string, staleMinutes: number) {
+      const c = store.connections.get(id);
+      if (!c || c.status === 'disconnected') return null;
+      const live = c.status === 'syncing' && c.syncStartedAt && Date.now() - c.syncStartedAt.getTime() < staleMinutes * 60_000;
+      if (live) return null;
+      c.status = 'syncing';
+      c.syncStartedAt = new Date();
+      return c.syncStartedAt.toISOString();
+    },
+    async markSynced(id: string, next: Date, claim: string) {
+      const c = store.connections.get(id);
+      if (!c || c.syncStartedAt?.toISOString() !== claim) return;
+      Object.assign(c, {
+        status: 'active', syncStartedAt: null, lastSyncedAt: new Date(), nextSyncAt: next, lastError: null, lastErrorCode: null, consecutiveFailures: 0,
       });
     },
-    async markFailed(id: string, code: string, message: string, next: Date) {
-      const c = store.connections.get(id)!;
+    async markFailed(id: string, code: string, message: string, next: Date, claim: string) {
+      const c = store.connections.get(id);
+      if (!c || c.syncStartedAt?.toISOString() !== claim) return;
       Object.assign(c, {
-        status: code === 'REAUTH_REQUIRED' ? 'reauth_required' : 'error', lastErrorCode: code, lastError: message,
+        status: code === 'REAUTH_REQUIRED' ? 'reauth_required' : 'error', syncStartedAt: null, lastErrorCode: code, lastError: message,
         nextSyncAt: next, consecutiveFailures: c.consecutiveFailures + 1,
       });
+    },
+    async releaseClaim(id: string, claim: string) {
+      const c = store.connections.get(id);
+      if (!c || c.syncStartedAt?.toISOString() !== claim) return;
+      Object.assign(c, { status: c.lastErrorCode ? 'error' : 'active', syncStartedAt: null });
     },
     findDue: async (limit: number, now: Date) =>
       [...store.connections.values()]
@@ -161,6 +186,10 @@ export const fakeLinks = (store: Store): any => {
       return row;
     },
     findById: async (id: string) => store.links.get(id) ?? null,
+    findByIdForUpdate: async (id: string) => {
+      const l = store.links.get(id);
+      return l ? { ...l, cursor: l.cursor === null ? null : JSON.parse(JSON.stringify(l.cursor)) } : null;
+    },
     findByConnection: async (id: string) => [...store.links.values()].filter((l) => l.connectionId === id).map(withCounts),
     findByConnections: async (ids: string[]) => [...store.links.values()].filter((l) => ids.includes(l.connectionId)).map(withCounts),
     linkedAccountIds: async () => new Set([...store.links.values()].map((l) => l.accountId)),
@@ -228,6 +257,17 @@ export class FakeProvider implements ConnectionProvider {
   pageSize = 2;
   failWith: Error | null = null;
   skipped = 0;
+  /** Set by build(): provider calls made while a DB transaction was open. */
+  store: Store | null = null;
+  callsInTx = 0;
+  callsTotal = 0;
+  /** Runs inside fetchTransactions (e.g. another run committing meanwhile). */
+  duringFetch: (() => void) | null = null;
+
+  private observe() {
+    this.callsTotal++;
+    if (this.store?.inTx) this.callsInTx++;
+  }
 
   isAvailable() {
     return { available: true };
@@ -252,11 +292,14 @@ export class FakeProvider implements ConnectionProvider {
       : null;
   }
   async fetchBalance() {
+    this.observe();
     if (this.failWith) throw this.failWith;
     return this.balanceValue;
   }
   /** Cursor = index into the oldest-first list of what's been seen. */
   async fetchTransactions(_c: unknown, _l: unknown, cursor: unknown, options: FetchOptions) {
+    this.observe();
+    this.duringFetch?.();
     if (this.failWith) throw this.failWith;
     const oldestFirst = [...this.movements]
       .filter((m) => !options.since || m.date >= options.since)
@@ -267,6 +310,7 @@ export class FakeProvider implements ConnectionProvider {
     return { items, nextCursor: from + items.length, hasMore: from + items.length < oldestFirst.length };
   }
   async skipBackfill() {
+    this.observe();
     this.skipped++;
     return this.movements.length;
   }
@@ -278,6 +322,7 @@ export const build = (store: Store, provider = new FakeProvider(), now = () => n
   const links = fakeLinks(store);
   const transactions = fakeTransactions(store);
   const registry = new ProviderRegistry([provider]);
+  provider.store = store;
   const secretBox = SecretBox.fromConfig(`1:${Buffer.alloc(32, 7).toString('base64')}`);
   const recomputeBalance = async (accountId: string) => store.recompute(accountId);
   const activity = { log: jest.fn(async () => undefined) };

@@ -50,6 +50,15 @@ export class ConnectionAccountRepository {
     return result.rows[0] ? mapRow(result.rows[0]) : null;
   }
 
+  /** The link, row-locked for the rest of the caller's (short) write transaction. */
+  async findByIdForUpdate(id: string): Promise<LinkRow | null> {
+    const result = await this.db.query(
+      'SELECT * FROM connection_accounts WHERE id = $1 FOR UPDATE',
+      [id],
+    );
+    return result.rows[0] ? mapRow(result.rows[0]) : null;
+  }
+
   async findByConnection(connectionId: string): Promise<LinkRow[]> {
     const result = await this.db.query(
       `SELECT l.*, a.name AS account_name,
