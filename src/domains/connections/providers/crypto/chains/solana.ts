@@ -19,7 +19,7 @@ import type { ChainAdapter, ChainAdapterFactory } from '../types';
  */
 
 const PUBLIC_RPC = 'https://api.mainnet-beta.solana.com';
-const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGqPxH4bRfE8XvJ6YzF5wM8d';
+const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const LAMPORT_DECIMALS = 9;
 const MAX_UNSUPPORTED = 5;
 
