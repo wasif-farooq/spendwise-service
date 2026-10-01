@@ -124,6 +124,18 @@ describe('transaction schemas accept the real client payload', () => {
     ).not.toThrow();
   });
 
+  it('treats an empty categoryId as no category', () => {
+    // The forms send "" when no category is picked; the uuid check used to
+    // reject it with a 400.
+    const created = CreateTransactionSchema.parse({ ...createPayload, categoryId: '' });
+    expect(created.categoryId).toBeUndefined();
+    expect(UpdateTransactionSchema.parse({ categoryId: '' }).categoryId).toBeUndefined();
+  });
+
+  it('still rejects a categoryId that is not a uuid', () => {
+    expect(() => CreateTransactionSchema.parse({ ...createPayload, categoryId: 'food' })).toThrow();
+  });
+
   it('accepts moving a transaction to another account', () => {
     const parsed = UpdateTransactionSchema.parse({
       accountId: '44444444-4444-4444-8444-444444444444',

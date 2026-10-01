@@ -31,6 +31,14 @@ const TransactionIdParamSchema = z.object({
 // validateBody replaces req.body with the parsed result, so these schemas are
 // the complete set of fields the endpoints accept — anything omitted here is
 // stripped before the controller sees it.
+// The web and mobile forms send `categoryId: ""` when no category is picked
+// (the shared CreateTransactionRequest type requires a string). Treat it as
+// "no category" rather than failing the uuid check with a 400.
+const optionalCategoryId = z.preprocess(
+  (v) => (v === '' ? undefined : v),
+  z.string().uuid().optional(),
+);
+
 export const CreateTransactionSchema = z.object({
   // Accepted for backwards compatibility, but the controller takes the
   // authoritative account from the :accountId path segment, which is what the
@@ -41,7 +49,7 @@ export const CreateTransactionSchema = z.object({
   currency: currencyCode(),
   description: z.string().optional(),
   date: z.string(),
-  categoryId: z.string().uuid().optional(),
+  categoryId: optionalCategoryId,
   linkedTransactionIds: z.array(z.string().uuid()).nullable().optional(),
   receiptIds: z.array(z.string().uuid()).optional(),
   exchangeRate: z.number().optional(),
@@ -56,7 +64,7 @@ export const UpdateTransactionSchema = z.object({
   currency: currencyCode().optional(),
   description: z.string().optional(),
   date: z.string().optional(),
-  categoryId: z.string().uuid().optional(),
+  categoryId: optionalCategoryId,
   category: z.string().optional(),
   // The client clears links by sending null.
   linkedTransactionIds: z.array(z.string().uuid()).nullable().optional(),
