@@ -5,7 +5,8 @@ import { ProviderDownError, ProviderError, RateLimitedError } from './errors';
  *   - a timeout per request and an explicit User-Agent (Cloudflare-fronted
  *     explorers reject the default fetch agent)
  *   - 429 and 5xx (and network errors) retried up to 3 times with growing waits,
- *     honouring a short Retry-After
+ *     honouring a short Retry-After; so is a 200 whose body the provider uses to
+ *     say "rate limited" (isRateLimitedBody), as Etherscan does
  *   - an in-process request-rate cap per provider (requests are spaced out)
  *   - typed errors: RateLimited, ProviderDown; adapters raise InvalidAddress
  *     and AuthRevoked from the bodies they understand
@@ -29,6 +30,8 @@ export interface HttpClientOptions {
   timeoutMs?: number;
   /** Requests per second this provider allows (spaced evenly). */
   maxPerSecond?: number;
+  /** A 200 whose body means "rate limited" (retried like a 429). */
+  isRateLimitedBody?: (body: any) => boolean;
   retries?: number;
   headers?: Record<string, string>;
   fetchImpl?: FetchLike;
@@ -122,11 +125,17 @@ export class HttpClient {
           // 4xx other than 429: the adapter decides (bad address, bad key...).
           throw new HttpStatusError(this.name, response.status, text);
         }
+        let parsed: T;
         try {
-          return (text ? JSON.parse(text) : null) as T;
+          parsed = (text ? JSON.parse(text) : null) as T;
         } catch {
           throw new ProviderDownError(`${this.name} answered with something that isn't JSON`);
         }
+        if (this.options.isRateLimitedBody?.(parsed)) {
+          lastError = new RateLimitedError(`${this.name} rate limited the request`, 429);
+          continue;
+        }
+        return parsed;
       } catch (error) {
         // Answers we understood (a 4xx, a body that isn't JSON) aren't retried.
         if (error instanceof HttpStatusError || error instanceof ProviderError) throw error;
