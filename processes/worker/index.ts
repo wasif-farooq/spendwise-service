@@ -15,6 +15,8 @@ import { ScheduledReportWorker } from '../../src/workers/scheduledReport.worker'
 import { ScheduledReportService } from '../../src/domains/reports/services/ScheduledReportService';
 import { TransactionRepository } from '../../src/domains/transactions/repositories/TransactionRepository';
 import { CategoryRepository } from '../../src/domains/categories/repositories/CategoryRepository';
+import { ExchangeRateRepository } from '../../src/domains/exchange-rates/repositories/ExchangeRateRepository';
+import { ExchangeRateService } from '../../src/domains/exchange-rates/services/ExchangeRateService';
 import { DatabaseFacade } from '../../src/facades/DatabaseFacade';
 import { PostgresFactory } from '../../src/database/factories/PostgresFactory';
 import { cronScheduler } from '../../src/workers/scheduler';
@@ -276,7 +278,11 @@ const startWorker = async () => {
     const db = new DatabaseFacade(new PostgresFactory());
     const transactionRepo = new TransactionRepository(db);
     const categoryRepo = new CategoryRepository(db);
-    const scheduledReportService = new ScheduledReportService(transactionRepo, categoryRepo);
+    const scheduledReportService = new ScheduledReportService(
+      transactionRepo,
+      categoryRepo,
+      new ExchangeRateService(new ExchangeRateRepository(db)),
+    );
     await scheduledReportService.syncAllRepeatableJobs();
   } catch (error: any) {
     console.error('[Worker] Failed to sync scheduled report jobs:', error.message);

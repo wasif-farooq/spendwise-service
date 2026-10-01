@@ -4,6 +4,8 @@ import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { PostgresFactory } from '@database/factories/PostgresFactory';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
+import { ExchangeRateRepository } from '@domains/exchange-rates/repositories/ExchangeRateRepository';
+import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
 import { ScheduledReportService } from '@domains/reports/services/ScheduledReportService';
 import { ScheduledReportJobData } from '@messaging/queues/ScheduledReportQueue';
 
@@ -15,7 +17,11 @@ export class ScheduledReportWorker {
     const db = new DatabaseFacade(new PostgresFactory());
     const transactionRepo = new TransactionRepository(db);
     const categoryRepo = new CategoryRepository(db);
-    this.service = new ScheduledReportService(transactionRepo, categoryRepo);
+    this.service = new ScheduledReportService(
+      transactionRepo,
+      categoryRepo,
+      new ExchangeRateService(new ExchangeRateRepository(db)),
+    );
   }
 
   async start(): Promise<void> {

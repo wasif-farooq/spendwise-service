@@ -7,13 +7,22 @@ import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
+import { ExchangeRateRepository } from '@domains/exchange-rates/repositories/ExchangeRateRepository';
+import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
 
 const router = Router();
 
 // Resolve dependencies
 const transactionRepo = Container.getInstance().resolve<TransactionRepository>(TOKENS.TransactionRepository);
 const categoryRepo = Container.getInstance().resolve<CategoryRepository>(TOKENS.CategoryRepository);
-const service = new ScheduledReportService(transactionRepo, categoryRepo);
+const exchangeRateRepo = Container.getInstance().resolve<ExchangeRateRepository>(
+  TOKENS.ExchangeRateRepository,
+);
+const service = new ScheduledReportService(
+  transactionRepo,
+  categoryRepo,
+  new ExchangeRateService(exchangeRateRepo),
+);
 const controller = new ScheduledReportController(service);
 
 // All routes require authentication

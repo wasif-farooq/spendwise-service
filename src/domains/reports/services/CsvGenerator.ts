@@ -42,13 +42,26 @@ export function generateExpenseReportCsv(data: ExpenseReportData): Buffer {
   rows.push(buildCsvRow(['Period Start', data.period.startDate]));
   rows.push(buildCsvRow(['Period End', data.period.endDate]));
   rows.push(buildCsvRow(['Generated At', data.generatedAt]));
+  rows.push(buildCsvRow(['Currency', data.currency]));
+  if (data.unconvertedCurrencies.length) {
+    rows.push(
+      buildCsvRow(['Not included (no exchange rate)', data.unconvertedCurrencies.join(' ')]),
+    );
+  }
   rows.push('');
 
   // --- Section 1: Summary ---
   rows.push('Metric,Value');
-  rows.push(buildCsvRow(['Total Expenses', formatCurrency(data.summary.totalExpenses)]));
+  rows.push(
+    buildCsvRow(['Total Expenses', formatCurrency(data.summary.totalExpenses, data.currency)]),
+  );
   rows.push(buildCsvRow(['Transaction Count', data.summary.transactionCount]));
-  rows.push(buildCsvRow(['Average Transaction', formatCurrency(data.summary.averageTransaction)]));
+  rows.push(
+    buildCsvRow([
+      'Average Transaction',
+      formatCurrency(data.summary.averageTransaction, data.currency),
+    ]),
+  );
   rows.push(
     buildCsvRow(['Previous Period Change', `${data.summary.previousPeriodChange.toFixed(1)}%`]),
   );
@@ -58,7 +71,11 @@ export function generateExpenseReportCsv(data: ExpenseReportData): Buffer {
   rows.push('Category,Amount,Percentage');
   for (const cat of data.byCategory) {
     rows.push(
-      buildCsvRow([cat.category, formatCurrency(cat.amount), `${cat.percentage.toFixed(1)}%`]),
+      buildCsvRow([
+        cat.category,
+        formatCurrency(cat.amount, data.currency),
+        `${cat.percentage.toFixed(1)}%`,
+      ]),
     );
   }
   rows.push('');
@@ -66,22 +83,30 @@ export function generateExpenseReportCsv(data: ExpenseReportData): Buffer {
   // --- Section 3: Expenses by Account ---
   rows.push('Account,Amount');
   for (const acc of data.byAccount) {
-    rows.push(buildCsvRow([acc.accountName, formatCurrency(acc.amount)]));
+    rows.push(buildCsvRow([acc.accountName, formatCurrency(acc.amount, data.currency)]));
   }
   rows.push('');
 
   // --- Section 4: Top Merchants ---
   rows.push('Merchant,Amount,Transaction Count');
   for (const merch of data.byMerchant) {
-    rows.push(buildCsvRow([merch.merchant, formatCurrency(merch.amount), merch.count]));
+    rows.push(
+      buildCsvRow([merch.merchant, formatCurrency(merch.amount, data.currency), merch.count]),
+    );
   }
   rows.push('');
 
   // --- Section 5: Largest Transactions ---
-  rows.push('Description,Amount,Date,Category');
+  rows.push('Description,Amount,Currency,Date,Category');
   for (const tx of data.topExpenses) {
     rows.push(
-      buildCsvRow([tx.description, formatCurrency(tx.amount, tx.currency), tx.date, tx.category]),
+      buildCsvRow([
+        tx.description,
+        formatCurrency(tx.amount, tx.currency),
+        tx.currency || data.currency,
+        tx.date,
+        tx.category,
+      ]),
     );
   }
 

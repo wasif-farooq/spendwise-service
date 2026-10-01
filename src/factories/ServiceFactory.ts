@@ -204,6 +204,7 @@ export class ServiceFactory {
     return new ReportService(
       this.repositoryFactory.createTransactionRepository(),
       this.repositoryFactory.createCategoryRepository(),
+      this.createExchangeRateService(),
     );
   }
 }

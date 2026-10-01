@@ -10,6 +10,7 @@ import { generateExpenseReportXlsx } from './XlsxGenerator';
 import { ExportReportRequest, DateRangePreset, CustomDateRange } from '../types';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
+import type { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
 
 export interface ReportDownloadResult {
   buffer: Buffer;
@@ -21,9 +22,17 @@ export class ReportService {
   private emailService: IEmailService;
   private reportGenerator: ExpenseReportGenerator;
 
-  constructor(transactionRepo: TransactionRepository, categoryRepo: CategoryRepository) {
+  constructor(
+    transactionRepo: TransactionRepository,
+    categoryRepo: CategoryRepository,
+    exchangeRateService: ExchangeRateService,
+  ) {
     this.emailService = getEmailService();
-    this.reportGenerator = new ExpenseReportGenerator(transactionRepo, categoryRepo);
+    this.reportGenerator = new ExpenseReportGenerator(
+      transactionRepo,
+      categoryRepo,
+      async (from, to) => (await exchangeRateService.convert(1, from, to)).rate,
+    );
   }
 
   /**
@@ -108,7 +117,8 @@ export class ReportServiceFactory {
   static create(
     transactionRepo: TransactionRepository,
     categoryRepo: CategoryRepository,
+    exchangeRateService: ExchangeRateService,
   ): ReportService {
-    return new ReportService(transactionRepo, categoryRepo);
+    return new ReportService(transactionRepo, categoryRepo, exchangeRateService);
   }
 }
