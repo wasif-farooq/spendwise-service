@@ -4,6 +4,22 @@ import { Transaction, TransactionProps } from '../models/Transaction';
 import { CursorPaginationOptions, CursorFilters, PaginatedResult } from './types';
 import { Container } from '@di/Container';
 
+/** One synced row for insertImported (amount is an exact decimal string). */
+export interface ImportedTransactionRow {
+  accountId: string;
+  userId: string | null;
+  workspaceId: string;
+  type: 'income' | 'expense';
+  amount: string;
+  currency: string;
+  description: string;
+  date: Date;
+  counterparty?: string | null;
+  connectionAccountId: string;
+  externalId: string;
+  source: 'sync' | 'adjustment';
+}
+
 const ACCOUNTS_STATS_TTL = 5 * 60; // 5 minutes in seconds (Redis EX)
 
 export class TransactionRepository {
@@ -176,6 +192,9 @@ export class TransactionRepository {
       exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : undefined,
       convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
       baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
+      source: row.source || 'manual',
+      connectionAccountId: row.connection_account_id ?? null,
+      externalId: row.external_id ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -597,8 +616,11 @@ export class TransactionRepository {
   async invalidateAccountStatsCache(accountId: string): Promise<void> {
     if (this.cache) {
       try {
-        const pattern = `txn:stats:${accountId}:`;
-        await this.cache.del(pattern);
+        // The key getAccountStats(accountId) caches under (no date range).
+        // The old prefix-only key never matched anything, so it's kept only
+        // for compatibility with entries written by older code.
+        await this.cache.del(`txn:stats:${accountId}:none:none`);
+        await this.cache.del(`txn:stats:${accountId}:`);
       } catch (e) {
         console.log('[TransactionRepository] Failed to invalidate stats cache in Redis');
       }
@@ -840,6 +862,114 @@ export class TransactionRepository {
     return this.mapToEntity(result.rows[0]);
   }
 
+  /**
+   * Synced rows in one multi-row INSERT; rows already imported for the same
+   * link (same external id) are skipped by the partial unique index. Returns
+   * how many were actually inserted.
+   */
+  async insertImported(rows: ImportedTransactionRow[]): Promise<number> {
+    if (rows.length === 0) return 0;
+    const columns = [
+      'account_id',
+      'user_id',
+      'workspace_id',
+      'type',
+      'amount',
+      'currency',
+      'description',
+      'date',
+      'merchant',
+      'connection_account_id',
+      'external_id',
+      'source',
+      'linked_transaction_ids',
+      'receipt_ids',
+    ];
+    let inserted = 0;
+    // Chunked to stay well under Postgres' 65535 bind-parameter limit.
+    for (let start = 0; start < rows.length; start += 500) {
+      const chunk = rows.slice(start, start + 500);
+      const params: any[] = [];
+      const tuples = chunk.map((row) => {
+        const base = params.length;
+        params.push(
+          row.accountId,
+          row.userId,
+          row.workspaceId,
+          row.type,
+          row.amount,
+          row.currency,
+          row.description,
+          row.date,
+          row.counterparty ?? null,
+          row.connectionAccountId,
+          row.externalId,
+          row.source,
+        );
+        const placeholders = Array.from({ length: 12 }, (_, i) => `$${base + i + 1}`);
+        return `(${placeholders.join(', ')}, '{}'::uuid[], '{}'::uuid[])`;
+      });
+      const result = await this.dbToUse.query(
+        `INSERT INTO transactions (${columns.join(', ')})
+         VALUES ${tuples.join(', ')}
+         ON CONFLICT (connection_account_id, external_id)
+           WHERE connection_account_id IS NOT NULL AND external_id IS NOT NULL
+         DO NOTHING`,
+        params,
+      );
+      inserted += result.rowCount ?? 0;
+    }
+    return inserted;
+  }
+
+  /** Removes a link's synced and adjustment rows (unlink with "delete imported"). */
+  async deleteImportedForLink(connectionAccountId: string): Promise<number> {
+    const result = await this.dbToUse.query(
+      'DELETE FROM transactions WHERE connection_account_id = $1',
+      [connectionAccountId],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  /** Unlink with "keep": the link's rows become plain transactions. */
+  async releaseImportedForLink(connectionAccountId: string): Promise<number> {
+    const result = await this.dbToUse.query(
+      `UPDATE transactions
+          SET connection_account_id = NULL, external_id = NULL, source = 'manual', updated_at = NOW()
+        WHERE connection_account_id = $1`,
+      [connectionAccountId],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  /** Removes one synced row of a link (the day's balance adjustment before it's rewritten). */
+  async deleteLinkRow(connectionAccountId: string, externalId: string): Promise<void> {
+    await this.dbToUse.query(
+      'DELETE FROM transactions WHERE connection_account_id = $1 AND external_id = $2',
+      [connectionAccountId, externalId],
+    );
+  }
+
+  /** Date of a link's oldest synced movement (not adjustments), or null. */
+  async oldestSyncedDate(connectionAccountId: string): Promise<Date | null> {
+    const result = await this.dbToUse.query(
+      `SELECT MIN(date) AS oldest FROM transactions
+        WHERE connection_account_id = $1 AND source = 'sync'`,
+      [connectionAccountId],
+    );
+    return result.rows[0]?.oldest ? new Date(result.rows[0].oldest) : null;
+  }
+
+  /** Income minus expense for an account as an exact decimal string (no cache, no float). */
+  async getAccountBalanceExact(accountId: string): Promise<string> {
+    const result = await this.dbToUse.query(
+      `SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0)::text AS balance
+         FROM transactions WHERE account_id = $1`,
+      [accountId],
+    );
+    return result.rows[0]?.balance ?? '0';
+  }
+
   async delete(id: string): Promise<void> {
     await this.dbToUse.query('DELETE FROM transactions WHERE id = $1', [id]);
   }
@@ -864,6 +994,9 @@ export class TransactionRepository {
       convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
       baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
       receiptIds: row.receipt_ids || [],
+      source: row.source || 'manual',
+      connectionAccountId: row.connection_account_id ?? null,
+      externalId: row.external_id ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -887,6 +1020,9 @@ export class TransactionRepository {
       convertedAmount: row.converted_amount ? parseFloat(row.converted_amount) : undefined,
       baseAmount: row.base_amount ? parseFloat(row.base_amount) : undefined,
       receiptIds: row.receipt_ids || [],
+      source: row.source || 'manual',
+      connectionAccountId: row.connection_account_id ?? null,
+      externalId: row.external_id ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

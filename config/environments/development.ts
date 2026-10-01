@@ -270,6 +270,32 @@ export default {
   })(),
 
   // Activity Log Configuration
+  // Connected accounts (see production.ts for the variables). Development
+  // falls back to a fixed, well-known encryption key so connecting works
+  // out of the box; never use it anywhere else.
+  connections: {
+    encryption: {
+      keys: process.env.CONNECTIONS_ENC_KEYS || '1:ZGV2LW9ubHktY29ubmVjdGlvbnMta2V5LTMyLWJ5dGU=',
+      active: process.env.CONNECTIONS_ENC_ACTIVE || '',
+    },
+    httpTimeoutMs: parseInt(process.env.CONNECTIONS_HTTP_TIMEOUT_MS || '15000', 10),
+    etherscan: {
+      baseUrl: process.env.ETHERSCAN_BASE_URL || 'https://api.etherscan.io/v2/api',
+      apiKey: process.env.ETHERSCAN_API_KEY || '',
+      paidPlan: process.env.ETHERSCAN_PAID_PLAN === 'true',
+    },
+    bitcoin: { baseUrl: process.env.BITCOIN_ESPLORA_URL || 'https://mempool.space/api' },
+    tron: {
+      baseUrl: process.env.TRONGRID_BASE_URL || 'https://api.trongrid.io',
+      apiKey: process.env.TRONGRID_API_KEY || '',
+    },
+    solana: { rpcUrl: process.env.SOLANA_RPC_URL || '' },
+    syncCron: {
+      enabled: process.env.CRON_CONNECTION_SYNC_ENABLED !== 'false',
+      intervalMinutes: parseInt(process.env.CRON_CONNECTION_SYNC_INTERVAL_MINUTES || '15', 10),
+    },
+  },
+
   activityLog: {
     enabled: process.env.ACTIVITY_LOG_ENABLED !== 'false',
     captureIp: process.env.ACTIVITY_LOG_CAPTURE_IP !== 'false',

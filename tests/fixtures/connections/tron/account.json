@@ -1,0 +1,14 @@
+{
+ "data": [
+  {
+   "address": "41faf0a52cfb2648025538e4cbf3dee7bbad7a2658",
+   "balance": 55002,
+   "trc20": [
+    {
+     "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t": "673154"
+    }
+   ]
+  }
+ ],
+ "success": true
+}
