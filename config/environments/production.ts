@@ -292,6 +292,39 @@ const config = {
     };
   })(),
 
+  // Connected accounts (crypto wallets now, Stripe/PayPal later). Everything is
+  // optional so the API boots without it:
+  //   CONNECTIONS_ENC_KEYS     "1:<base64 32 bytes>[,2:...]" encrypts addresses and
+  //                            tokens at rest; without it connecting answers 503
+  //   CONNECTIONS_ENC_ACTIVE   key version for new values (default: highest)
+  //   ETHERSCAN_API_KEY        EVM chains (Etherscan V2); without it EVM is unavailable
+  //   ETHERSCAN_PAID_PLAN      true unlocks chains the free tier doesn't cover
+  //   TRONGRID_API_KEY         optional; keyless TronGrid is throttled
+  //   SOLANA_RPC_URL           e.g. a Helius URL; default public RPC (throttled)
+  //   BITCOIN_ESPLORA_URL      default https://mempool.space/api
+  connections: {
+    encryption: {
+      keys: optional('CONNECTIONS_ENC_KEYS'),
+      active: optional('CONNECTIONS_ENC_ACTIVE'),
+    },
+    httpTimeoutMs: int('CONNECTIONS_HTTP_TIMEOUT_MS', 15000),
+    etherscan: {
+      baseUrl: optional('ETHERSCAN_BASE_URL', 'https://api.etherscan.io/v2/api'),
+      apiKey: optional('ETHERSCAN_API_KEY'),
+      paidPlan: bool('ETHERSCAN_PAID_PLAN', false),
+    },
+    bitcoin: { baseUrl: optional('BITCOIN_ESPLORA_URL', 'https://mempool.space/api') },
+    tron: {
+      baseUrl: optional('TRONGRID_BASE_URL', 'https://api.trongrid.io'),
+      apiKey: optional('TRONGRID_API_KEY'),
+    },
+    solana: { rpcUrl: optional('SOLANA_RPC_URL') },
+    syncCron: {
+      enabled: bool('CRON_CONNECTION_SYNC_ENABLED', true),
+      intervalMinutes: int('CRON_CONNECTION_SYNC_INTERVAL_MINUTES', 15),
+    },
+  },
+
   activityLog: {
     enabled: process.env.ACTIVITY_LOG_ENABLED !== 'false',
     captureIp: process.env.ACTIVITY_LOG_CAPTURE_IP !== 'false',

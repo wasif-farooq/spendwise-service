@@ -112,4 +112,14 @@ export default {
     timeoutMs: 45000,
     maxTokens: 6000,
   },
+  // Connected accounts: a fixed test key, no provider keys (tests stub HTTP).
+  connections: {
+    encryption: { keys: '1:ZGV2LW9ubHktY29ubmVjdGlvbnMta2V5LTMyLWJ5dGU=', active: '' },
+    httpTimeoutMs: 15000,
+    etherscan: { baseUrl: 'https://api.etherscan.io/v2/api', apiKey: '', paidPlan: false },
+    bitcoin: { baseUrl: 'https://mempool.space/api' },
+    tron: { baseUrl: 'https://api.trongrid.io', apiKey: '' },
+    solana: { rpcUrl: '' },
+    syncCron: { enabled: false, intervalMinutes: 15 },
+  },
 };

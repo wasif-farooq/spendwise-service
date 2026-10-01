@@ -57,6 +57,11 @@ export const PERMISSIONS = {
     VIEW: 'aiAdvisor:view',
     USE: 'aiAdvisor:use',
   },
+  // Connected accounts (crypto wallets, later Stripe/PayPal).
+  INTEGRATIONS: {
+    VIEW: 'integrations:view',
+    MANAGE: 'integrations:manage',
+  },
 } as const;
 
 export const ALL_PERMISSIONS = Object.values(PERMISSIONS).flatMap((group) => Object.values(group));
