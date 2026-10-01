@@ -55,7 +55,11 @@ export function generateExpenseReportXlsx(data: ExpenseReportData): Buffer {
     ['TrackMyPocket Expense Report'],
     [`Period: ${formatDate(data.period.startDate)} — ${formatDate(data.period.endDate)}`],
     [`Generated: ${formatDate(data.generatedAt)}`],
+    [`Amounts in ${data.currency}`],
   ];
+  if (data.unconvertedCurrencies.length) {
+    overview.push([`Not included (no exchange rate): ${data.unconvertedCurrencies.join(' ')}`]);
+  }
 
   addSectionLabel(overview, 'Summary');
   overview.push(['Metric', 'Value']);
@@ -118,13 +122,11 @@ export function generateExpenseReportXlsx(data: ExpenseReportData): Buffer {
   // ═══════════════════════════════════════════════════════
   // Sheet 5: Largest Transactions (tabular)
   // ═══════════════════════════════════════════════════════
-  const txData: (string | number)[][] = [
-    ['Description', 'Amount', 'Date', 'Category'],
-  ];
+  const txData: (string | number)[][] = [['Description', 'Amount', 'Currency', 'Date', 'Category']];
   for (const tx of data.topExpenses) {
-    txData.push([tx.description, tx.amount, tx.date, tx.category]);
+    txData.push([tx.description, tx.amount, tx.currency || data.currency, tx.date, tx.category]);
   }
-  const txSheet = buildSheet(txData, [40, 18, 14, 20]);
+  const txSheet = buildSheet(txData, [40, 18, 10, 14, 20]);
   XLSX.utils.book_append_sheet(workbook, txSheet, 'Largest Transactions');
 
   // Write to buffer

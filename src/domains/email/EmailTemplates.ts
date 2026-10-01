@@ -3,6 +3,10 @@ interface ExpenseReportData {
     startDate: string;
     endDate: string;
   };
+  /** Totals and breakdowns are in this currency (defaults to USD). */
+  currency?: string;
+  /** Currencies left out of the totals for lack of an exchange rate. */
+  unconvertedCurrencies?: string[];
   summary: {
     totalExpenses: number;
     transactionCount: number;
@@ -11,16 +15,36 @@ interface ExpenseReportData {
   };
   byCategory: Array<{ category: string; amount: number; percentage: number }>;
   byMerchant: Array<{ merchant: string; amount: number; count: number }>;
-  topExpenses: Array<{ description: string; amount: number; date: string; category: string }>;
+  topExpenses: Array<{
+    description: string;
+    amount: number;
+    currency?: string;
+    date: string;
+    category: string;
+  }>;
+}
+
+/** Money in `code`; Intl rejects some codes (e.g. 4-letter coins), so fall back to "1.23 CODE". */
+function reportMoney(amount: number, code: string = 'USD'): string {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: code }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${code}`;
+  }
+}
+
+/** "Amounts in EUR", plus the currencies left out, for the report email. */
+function reportCurrencyNote(data: ExpenseReportData): string {
+  const code = data.currency || 'USD';
+  const missing = data.unconvertedCurrencies ?? [];
+  return missing.length
+    ? `Amounts in ${code}. Not included (no exchange rate): ${missing.join(', ')}.`
+    : `Amounts in ${code}.`;
 }
 
 export function generateExpenseReportEmailHtml(data: ExpenseReportData): string {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number, code: string = data.currency || 'USD') =>
+    reportMoney(amount, code);
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
@@ -50,6 +74,7 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
                 <p style="margin: 8px 0 0 0; color: rgba(255, 255, 255, 0.9); font-size: 14px;">
                   ${formatDate(data.period.startDate)} - ${formatDate(data.period.endDate)}
                 </p>
+                <p style="margin: 4px 0 0 0; color: rgba(255, 255, 255, 0.9); font-size: 12px;">${reportCurrencyNote(data)}</p>
               </td>
             </tr>
 
@@ -143,7 +168,7 @@ export function generateExpenseReportEmailHtml(data: ExpenseReportData): string 
                         <span style="color: #6b7280; font-size: 12px; margin-left: 8px;">${escapeHtml(tx.category)}</span>
                       </td>
                       <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
-                        <span style="color: #ef4444; font-size: 14px; font-weight: 600;">${formatCurrency(tx.amount)}</span>
+                        <span style="color: #ef4444; font-size: 14px; font-weight: 600;">${formatCurrency(tx.amount, tx.currency || data.currency || 'USD')}</span>
                       </td>
                     </tr>
                   `,
@@ -184,14 +209,14 @@ export function getExpenseReportSubject(data: ExpenseReportData): string {
 
 /** Plain-text part of the expense report email (the file is attached). */
 export function generateExpenseReportEmailText(data: ExpenseReportData): string {
-  const money = (amount: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  const money = (amount: number) => reportMoney(amount, data.currency || 'USD');
   const lines = [
     `Your TrackMyPocket expense report for ${data.period.startDate} to ${data.period.endDate} is attached.`,
     '',
     `Total expenses: ${money(data.summary.totalExpenses)}`,
     `Transactions: ${data.summary.transactionCount}`,
     `Average transaction: ${money(data.summary.averageTransaction)}`,
+    reportCurrencyNote(data),
   ];
   if (data.byCategory.length > 0) {
     lines.push('', 'Top categories:');

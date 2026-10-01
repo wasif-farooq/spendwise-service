@@ -4,6 +4,7 @@ import { calculateNextRunAt } from './reportUtils';
 import { ScheduledReportQueue } from '@messaging/queues/ScheduledReportQueue';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { CategoryRepository } from '@domains/categories/repositories/CategoryRepository';
+import type { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
 import {
   CreateScheduledReport,
   UpdateScheduledReport,
@@ -18,9 +19,10 @@ export class ScheduledReportService {
   constructor(
     transactionRepo: TransactionRepository,
     categoryRepo: CategoryRepository,
+    exchangeRateService: ExchangeRateService,
   ) {
     this.scheduledRepo = new ScheduledReportRepository();
-    this.reportService = new ReportService(transactionRepo, categoryRepo);
+    this.reportService = new ReportService(transactionRepo, categoryRepo, exchangeRateService);
   }
 
   async create(data: CreateScheduledReport) {

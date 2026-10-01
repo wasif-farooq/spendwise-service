@@ -704,7 +704,18 @@ export class TransactionRepository {
     }));
   }
 
-  // Get workspace-wide stats (single-currency sum; used by the expense report)
+  /** The workspace owner's preferred currency (Preferences), or null when unset. */
+  async getWorkspaceOwnerCurrency(workspaceId: string): Promise<string | null> {
+    const result = await this.dbToUse.query(
+      `SELECT p.currency FROM workspaces w
+         JOIN user_preferences p ON p.user_id = w.owner_id
+        WHERE w.id = $1`,
+      [workspaceId],
+    );
+    return result.rows[0]?.currency || null;
+  }
+
+  // Get workspace-wide stats (single-currency sum: mixed currencies are added as-is)
   async getWorkspaceStats(
     workspaceId: string,
     startDate?: string,
