@@ -94,7 +94,8 @@ export const createEvmAdapter: ChainAdapterFactory = ({ config, makeHttp }) => {
     try {
       body = await http.getJson<EtherscanResponse<T>>(`${baseUrl}?${query.toString()}`);
     } catch (error) {
-      if (error instanceof HttpStatusError) throw new ProviderDownError(error.message, error.status);
+      if (error instanceof HttpStatusError)
+        throw new ProviderDownError(error.message, error.status);
       throw error;
     }
     if (body && body.status === '1') return body.result;
@@ -126,7 +127,9 @@ export const createEvmAdapter: ChainAdapterFactory = ({ config, makeHttp }) => {
   };
 
   const nativeBalance = async (address: string, chainId: string) =>
-    String(await call<string>(chainId, { module: 'account', action: 'balance', address, tag: 'latest' }));
+    String(
+      await call<string>(chainId, { module: 'account', action: 'balance', address, tag: 'latest' }),
+    );
 
   const tokenBalance = async (address: string, chainId: string, contract: string) =>
     String(
@@ -158,7 +161,10 @@ export const createEvmAdapter: ChainAdapterFactory = ({ config, makeHttp }) => {
   const readCursor = (cursor: unknown): EvmCursor | null => {
     const c = cursor as Partial<EvmCursor> | null;
     if (!c || typeof c.startBlock !== 'number') return null;
-    return { startBlock: c.startBlock, page: typeof c.page === 'number' && c.page > 0 ? c.page : 1 };
+    return {
+      startBlock: c.startBlock,
+      page: typeof c.page === 'number' && c.page > 0 ? c.page : 1,
+    };
   };
 
   const mapNative = (address: string, symbol: string, chainName: string, tx: TxListItem) => {
@@ -199,7 +205,9 @@ export const createEvmAdapter: ChainAdapterFactory = ({ config, makeHttp }) => {
           date,
           type: 'expense',
           amount: toDecimalString(fee, 18),
-          description: failed ? `${chainName} network fee (failed transaction)` : `${chainName} network fee`,
+          description: failed
+            ? `${chainName} network fee (failed transaction)`
+            : `${chainName} network fee`,
           isFee: true,
         });
       }
@@ -293,7 +301,8 @@ export const createEvmAdapter: ChainAdapterFactory = ({ config, makeHttp }) => {
         const seen = new Set<string>();
         for (const tx of Array.isArray(recent) ? recent : []) {
           const contract = tx.contractAddress?.toLowerCase();
-          if (!contract || seen.has(contract) || findCuratedAsset('evm', chainId, contract)) continue;
+          if (!contract || seen.has(contract) || findCuratedAsset('evm', chainId, contract))
+            continue;
           seen.add(contract);
           assets.push({
             assetKey: assetKeyOf('evm', chainId, contract),
@@ -308,6 +317,11 @@ export const createEvmAdapter: ChainAdapterFactory = ({ config, makeHttp }) => {
         }
       }
       return assets;
+    },
+
+    async skipBackfill(_address, link) {
+      const { chainId } = chainOf(link.assetKey);
+      return { startBlock: await startBlockFor(chainId!, new Date()), page: 1 };
     },
 
     async fetchBalance(address, link) {
@@ -359,7 +373,9 @@ export const createEvmAdapter: ChainAdapterFactory = ({ config, makeHttp }) => {
           );
         }
 
-        const lastBlock = rows.length ? Number(rows[rows.length - 1].blockNumber) : state.startBlock;
+        const lastBlock = rows.length
+          ? Number(rows[rows.length - 1].blockNumber)
+          : state.startBlock;
         if (rows.length < PAGE_SIZE) {
           // Caught up. Re-read the last block next time; de-duplication absorbs it.
           state = { startBlock: lastBlock, page: 1 };

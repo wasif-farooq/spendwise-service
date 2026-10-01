@@ -96,7 +96,11 @@ export class ConnectionAccountRepository {
       `UPDATE connection_accounts
           SET cursor = $2, last_provider_balance = $3, last_synced_at = NOW(), updated_at = NOW()
         WHERE id = $1`,
-      [id, state.cursor === undefined ? null : JSON.stringify(state.cursor), state.lastProviderBalance],
+      [
+        id,
+        state.cursor === undefined ? null : JSON.stringify(state.cursor),
+        state.lastProviderBalance,
+      ],
     );
   }
 

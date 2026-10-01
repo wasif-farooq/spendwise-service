@@ -2,9 +2,15 @@ import { HttpStatusError } from '../../http';
 import { InvalidAddressError, ProviderDownError, RateLimitedError } from '../../errors';
 import { toDecimalString } from '../../decimal';
 import type { DiscoveredAsset, NormalizedTxn } from '../../types';
-import { assetKeyOf, curatedForChain, findCuratedAsset, parseAssetKey, shortAddress } from '../assets';
+import {
+  assetKeyOf,
+  curatedForChain,
+  findCuratedAsset,
+  parseAssetKey,
+  shortAddress,
+} from '../assets';
 import { base58CheckDecode, base58CheckEncode } from '../base58';
-import { pageNewestFirst } from '../newestFirst';
+import { pageNewestFirst, skipNewestFirstBackfill } from '../newestFirst';
 import type { ChainAdapter, ChainAdapterFactory } from '../types';
 
 /**
@@ -209,6 +215,8 @@ export const createTronAdapter: ChainAdapterFactory = ({ config, makeHttp }) => 
       }
       return assets;
     },
+
+    skipBackfill: (_address, _link, cursor) => skipNewestFirstBackfill(cursor),
 
     async fetchBalance(address, link) {
       const parsed = parseAssetKey(link.assetKey);

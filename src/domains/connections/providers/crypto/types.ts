@@ -47,6 +47,8 @@ export interface ChainAdapter {
     cursor: unknown,
     options: FetchOptions,
   ): Promise<FetchResult>;
+  /** See ConnectionProvider.skipBackfill. */
+  skipBackfill(address: string, link: ProviderLink, cursor: unknown): Promise<unknown>;
 }
 
 export type ChainAdapterFactory = (deps: ChainAdapterDeps) => ChainAdapter;

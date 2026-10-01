@@ -88,7 +88,14 @@ export const CURATED_ASSETS: readonly CuratedAsset[] = [
   native('evm', '137', 'POL', 'Polygon', 18),
   token('evm', '137', '0xc2132D05D31c914a87C6611C10748AEb04B58e8F', 'USDT', 'Tether', 6),
   token('evm', '137', '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', 'USDC', 'USD Coin', 6),
-  token('evm', '137', '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', 'USDC', 'USD Coin (bridged)', 6),
+  token(
+    'evm',
+    '137',
+    '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+    'USDC',
+    'USD Coin (bridged)',
+    6,
+  ),
   token('evm', '137', '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063', 'DAI', 'Dai', 18),
   token('evm', '137', '0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39', 'LINK', 'Chainlink', 18),
 
@@ -125,7 +132,14 @@ export const CURATED_ASSETS: readonly CuratedAsset[] = [
   token('evm', '43114', '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', 'USDT', 'Tether', 6),
   token('evm', '43114', '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', 'USDC', 'USD Coin', 6),
   token('evm', '43114', '0xd586E7F844cEa2F87f50152665BCbc2C279D8d70', 'DAI', 'Dai (bridged)', 18),
-  token('evm', '43114', '0x5947BB275c521040051D82396192181b413227A3', 'LINK', 'Chainlink (bridged)', 18),
+  token(
+    'evm',
+    '43114',
+    '0x5947BB275c521040051D82396192181b413227A3',
+    'LINK',
+    'Chainlink (bridged)',
+    18,
+  ),
 
   // Tron
   native('tron', null, 'TRX', 'TRON', 6),

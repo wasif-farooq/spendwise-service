@@ -5,7 +5,7 @@ import { ConfigLoader } from '@config/ConfigLoader';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { requireAuth } from '@shared/middleware/auth.middleware';
 import { requirePermission } from '@shared/middleware/permission.middleware';
-import type { FeatureFlagService } from '@domains/feature-flags/services/FeatureFlagService';
+import { isFeatureFlagOn } from '@shared/middleware/requireFeatureFlag';
 import { ReceiptScanController } from '../receipts/ReceiptScanController';
 import { ReceiptScanService } from '../receipts/ReceiptScanService';
 import { ReceiptScanRepository } from '../receipts/ReceiptScanRepository';
@@ -58,10 +58,7 @@ export const createReceiptScanRouter = (
 };
 
 /** Reads the flag through the FeatureFlagService, resolved on first use. */
-const isReceiptScanFlagOn = async (): Promise<boolean> => {
-  const flags = Container.getInstance().resolve<FeatureFlagService>(TOKENS.FeatureFlagService);
-  return flags.isEnabled(RECEIPT_SCAN_FLAG);
-};
+const isReceiptScanFlagOn = isFeatureFlagOn(RECEIPT_SCAN_FLAG);
 
 let servicePromise: Promise<ReceiptScanService> | null = null;
 

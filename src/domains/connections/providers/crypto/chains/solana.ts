@@ -4,7 +4,7 @@ import { toDecimalString } from '../../decimal';
 import type { DiscoveredAsset, NormalizedTxn } from '../../types';
 import { assetKeyOf, findCuratedAsset, parseAssetKey, shortAddress } from '../assets';
 import { base58Decode } from '../base58';
-import { pageNewestFirst, readNewestFirstCursor } from '../newestFirst';
+import { pageNewestFirst, skipNewestFirstBackfill, readNewestFirstCursor } from '../newestFirst';
 import type { ChainAdapter, ChainAdapterFactory } from '../types';
 
 /**
@@ -83,7 +83,10 @@ export const createSolanaAdapter: ChainAdapterFactory = ({ config, makeHttp }) =
       throw error;
     }
     if (body?.error) {
-      if (body.error.code === -32602 || /invalid param|wrongsize|invalid public key/i.test(body.error.message)) {
+      if (
+        body.error.code === -32602 ||
+        /invalid param|wrongsize|invalid public key/i.test(body.error.message)
+      ) {
         throw new InvalidAddressError();
       }
       if (/rate|too many/i.test(body.error.message)) throw new RateLimitedError(body.error.message);
@@ -121,7 +124,8 @@ export const createSolanaAdapter: ChainAdapterFactory = ({ config, makeHttp }) =
     const index = keys.indexOf(address);
     if (index < 0) return [];
     const date = new Date((tx.blockTime ?? info.blockTime ?? 0) * 1000);
-    const delta = BigInt(tx.meta.postBalances[index] ?? 0) - BigInt(tx.meta.preBalances[index] ?? 0);
+    const delta =
+      BigInt(tx.meta.postBalances[index] ?? 0) - BigInt(tx.meta.preBalances[index] ?? 0);
     const feePayer = index === 0;
     const fee = feePayer ? BigInt(tx.meta.fee ?? 0) : 0n;
     const moved = delta + fee;
@@ -251,6 +255,8 @@ export const createSolanaAdapter: ChainAdapterFactory = ({ config, makeHttp }) =
       }
       return assets;
     },
+
+    skipBackfill: (_address, _link, cursor) => skipNewestFirstBackfill(cursor),
 
     async fetchBalance(address, link) {
       const parsed = parseAssetKey(link.assetKey);

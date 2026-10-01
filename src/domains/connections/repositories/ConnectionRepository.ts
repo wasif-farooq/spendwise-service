@@ -147,10 +147,10 @@ export class ConnectionRepository {
   }
 
   async setNextSync(id: string, nextSyncAt: Date): Promise<void> {
-    await this.db.query('UPDATE connections SET next_sync_at = $2, updated_at = NOW() WHERE id = $1', [
-      id,
-      nextSyncAt,
-    ]);
+    await this.db.query(
+      'UPDATE connections SET next_sync_at = $2, updated_at = NOW() WHERE id = $1',
+      [id, nextSyncAt],
+    );
   }
 
   async delete(id: string): Promise<void> {

@@ -275,9 +275,7 @@ export default {
   // out of the box; never use it anywhere else.
   connections: {
     encryption: {
-      keys:
-        process.env.CONNECTIONS_ENC_KEYS ||
-        '1:ZGV2LW9ubHktY29ubmVjdGlvbnMta2V5LTMyLWJ5dGU=',
+      keys: process.env.CONNECTIONS_ENC_KEYS || '1:ZGV2LW9ubHktY29ubmVjdGlvbnMta2V5LTMyLWJ5dGU=',
       active: process.env.CONNECTIONS_ENC_ACTIVE || '',
     },
     httpTimeoutMs: parseInt(process.env.CONNECTIONS_HTTP_TIMEOUT_MS || '15000', 10),

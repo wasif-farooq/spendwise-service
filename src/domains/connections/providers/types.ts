@@ -58,6 +58,15 @@ export interface ProviderLink {
   currencyCode: string;
 }
 
+export interface AssetDescription {
+  assetKey: string;
+  chainId: string | null;
+  chainName: string;
+  symbol: string;
+  name: string;
+  currencyCode: string;
+}
+
 export interface DiscoveredAsset {
   /** Stable key, e.g. `evm:137:0x2791…`, `btc:native`. */
   assetKey: string;
@@ -122,6 +131,8 @@ export interface ConnectionProvider {
   /** Throws InvalidAddressError. */
   validate(input: { address: string; chains?: string[] }): ValidatedInput;
   discoverAssets(conn: ProviderConnection): Promise<DiscoveredAsset[]>;
+  /** What an asset key means (currency, chain), or null when it isn't supported. */
+  describeAsset(assetKey: string): AssetDescription | null;
   /** Exact decimal string. */
   fetchBalance(conn: ProviderConnection, link: ProviderLink): Promise<string>;
   fetchTransactions(
@@ -130,4 +141,9 @@ export interface ConnectionProvider {
     cursor: unknown,
     options: FetchOptions,
   ): Promise<FetchResult>;
+  /**
+   * A cursor that continues from now, dropping an unfinished backfill (the
+   * first import hit its cap; the opening balance covers what's older).
+   */
+  skipBackfill(conn: ProviderConnection, link: ProviderLink, cursor: unknown): Promise<unknown>;
 }

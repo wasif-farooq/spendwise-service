@@ -3,7 +3,7 @@ import { InvalidAddressError, ProviderDownError } from '../../errors';
 import { toDecimalString } from '../../decimal';
 import type { DiscoveredAsset, NormalizedTxn } from '../../types';
 import { assetKeyOf, findCuratedAsset, shortAddress } from '../assets';
-import { pageNewestFirst } from '../newestFirst';
+import { pageNewestFirst, skipNewestFirstBackfill } from '../newestFirst';
 import type { ChainAdapter, ChainAdapterFactory } from '../types';
 
 /**
@@ -41,7 +41,8 @@ export const createBitcoinAdapter: ChainAdapterFactory = ({ config, makeHttp }) 
       return await http.getJson<T>(`${baseUrl}${path}`);
     } catch (error) {
       if (error instanceof HttpStatusError && error.status === 400) throw new InvalidAddressError();
-      if (error instanceof HttpStatusError) throw new ProviderDownError(error.message, error.status);
+      if (error instanceof HttpStatusError)
+        throw new ProviderDownError(error.message, error.status);
       throw error;
     }
   };
@@ -50,8 +51,7 @@ export const createBitcoinAdapter: ChainAdapterFactory = ({ config, makeHttp }) 
     const info = await get<{
       chain_stats: { funded_txo_sum: number; spent_txo_sum: number };
     }>(`/address/${address}`);
-    const sats =
-      BigInt(info.chain_stats.funded_txo_sum) - BigInt(info.chain_stats.spent_txo_sum);
+    const sats = BigInt(info.chain_stats.funded_txo_sum) - BigInt(info.chain_stats.spent_txo_sum);
     return toDecimalString(sats, DECIMALS);
   };
 
@@ -144,6 +144,7 @@ export const createBitcoinAdapter: ChainAdapterFactory = ({ config, makeHttp }) 
       };
       return [asset];
     },
+    skipBackfill: (_address, _link, cursor) => skipNewestFirstBackfill(cursor),
     fetchBalance: (address) => balanceOf(address),
     fetchTransactions(address, _link, cursor, options) {
       return pageNewestFirst<EsploraTx>({
@@ -161,7 +162,9 @@ export const createBitcoinAdapter: ChainAdapterFactory = ({ config, makeHttp }) 
         },
         idOf: (tx) => tx.txid,
         timeOf: (tx) =>
-          tx.status?.confirmed && tx.status.block_time ? new Date(tx.status.block_time * 1000) : null,
+          tx.status?.confirmed && tx.status.block_time
+            ? new Date(tx.status.block_time * 1000)
+            : null,
         map: (tx) => mapTx(address, tx),
       });
     },

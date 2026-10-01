@@ -112,7 +112,10 @@ export class HttpClient {
           continue;
         }
         if (response.status >= 500) {
-          lastError = new ProviderDownError(`${this.name} answered ${response.status}`, response.status);
+          lastError = new ProviderDownError(
+            `${this.name} answered ${response.status}`,
+            response.status,
+          );
           continue;
         }
         if (!response.ok) {

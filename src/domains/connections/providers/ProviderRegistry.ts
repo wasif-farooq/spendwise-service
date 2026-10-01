@@ -2,7 +2,13 @@ import { HttpClient, HttpClientOptions } from './http';
 import type { ChainAdapterFactory, ConnectionsConfig } from './crypto/types';
 import { CHAIN_ADAPTERS } from './crypto/chains';
 import { CryptoWalletProvider } from './crypto/CryptoWalletProvider';
-import type { ChainInfo, ConnectionKind, ConnectionProvider, ProviderAuth, ProviderId } from './types';
+import type {
+  ChainInfo,
+  ConnectionKind,
+  ConnectionProvider,
+  ProviderAuth,
+  ProviderId,
+} from './types';
 
 /** What GET /connections/providers returns for each source. */
 export interface ProviderInfo {

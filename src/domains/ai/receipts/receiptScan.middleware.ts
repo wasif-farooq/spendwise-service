@@ -1,6 +1,7 @@
 import { NextFunction, Request, RequestHandler, Response } from 'express';
 import multer, { MulterError } from 'multer';
 import { createRateLimiter, RateLimitStore } from '@shared/middleware/rateLimit.middleware';
+import { requireFeatureFlag } from '@shared/middleware/requireFeatureFlag';
 import type { ReceiptScanService } from './ReceiptScanService';
 import {
   RECEIPT_SCAN_MESSAGES,
@@ -23,28 +24,14 @@ const userKey = (req: Request) => {
 export const RECEIPT_SCAN_FLAG = 'receiptScan';
 
 /**
- * 404 FEATURE_DISABLED while the `receiptScan` flag is off. Runs first, so a
- * disabled feature looks like a route that doesn't exist. A failed flag lookup
- * counts as off.
+ * 404 FEATURE_DISABLED while the `receiptScan` flag is off (the generic
+ * requireFeatureFlag, with receipt scanning's message).
  */
-export const requireReceiptScanFlag =
-  (isEnabled: () => Promise<boolean>): RequestHandler =>
-  async (_req, res, next) => {
-    let enabled = false;
-    try {
-      enabled = await isEnabled();
-    } catch {
-      enabled = false;
-    }
-    if (!enabled) {
-      res.status(404).json({
-        message: 'Receipt scanning is not available.',
-        code: 'FEATURE_DISABLED',
-      });
-      return;
-    }
-    next();
-  };
+export const requireReceiptScanFlag = (isEnabled: () => Promise<boolean>): RequestHandler =>
+  requireFeatureFlag(RECEIPT_SCAN_FLAG, {
+    isEnabled,
+    message: 'Receipt scanning is not available.',
+  });
 
 /**
  * 503 when scanning isn't configured, 402 SCAN_LIMIT_REACHED when the owner's

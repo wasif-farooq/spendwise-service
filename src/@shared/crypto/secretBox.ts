@@ -43,7 +43,9 @@ export const parseKeyring = (raw: string | undefined, active?: string | number):
     const separator = entry.indexOf(':');
     const version = Number(entry.slice(0, separator));
     if (separator < 1 || !Number.isInteger(version) || version < 1 || version > 255) {
-      throw new SecretBoxError('CONNECTIONS_ENC_KEYS entries must look like "<1-255>:<base64 key>"');
+      throw new SecretBoxError(
+        'CONNECTIONS_ENC_KEYS entries must look like "<1-255>:<base64 key>"',
+      );
     }
     const key = Buffer.from(entry.slice(separator + 1), 'base64');
     if (key.length !== KEY_BYTES) {
@@ -53,8 +55,7 @@ export const parseKeyring = (raw: string | undefined, active?: string | number):
   }
   if (keys.size === 0) throw new SecretBoxError('No encryption keys configured');
 
-  const wanted =
-    active === undefined || active === '' ? Math.max(...keys.keys()) : Number(active);
+  const wanted = active === undefined || active === '' ? Math.max(...keys.keys()) : Number(active);
   if (!keys.has(wanted)) {
     throw new SecretBoxError(`CONNECTIONS_ENC_ACTIVE=${active} is not one of the configured keys`);
   }
@@ -100,9 +101,10 @@ export class SecretBox {
     const decipher = createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(tag);
     try {
-      return Buffer.concat([decipher.update(box.subarray(HEADER_BYTES)), decipher.final()]).toString(
-        'utf8',
-      );
+      return Buffer.concat([
+        decipher.update(box.subarray(HEADER_BYTES)),
+        decipher.final(),
+      ]).toString('utf8');
     } catch {
       throw new SecretBoxError('Encrypted value failed authentication');
     }

@@ -50,6 +50,12 @@ export const readNewestFirstCursor = (cursor: unknown): NewestFirstCursor => {
   };
 };
 
+/** Drops an unfinished scan: the next run starts from the newest movement again. */
+export const skipNewestFirstBackfill = async (cursor: unknown): Promise<NewestFirstCursor> => {
+  const c = readNewestFirstCursor(cursor);
+  return { head: c.resume ? c.resume.newHead : c.head, resume: null, extra: c.extra };
+};
+
 export async function pageNewestFirst<T>(
   options: NewestFirstOptions<T>,
 ): Promise<{ items: NormalizedTxn[]; nextCursor: NewestFirstCursor; hasMore: boolean }> {

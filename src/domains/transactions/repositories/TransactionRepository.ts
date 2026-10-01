@@ -931,6 +931,35 @@ export class TransactionRepository {
     return result.rowCount ?? 0;
   }
 
+  /** Unlink with "keep": the link's rows become plain transactions. */
+  async releaseImportedForLink(connectionAccountId: string): Promise<number> {
+    const result = await this.dbToUse.query(
+      `UPDATE transactions
+          SET connection_account_id = NULL, external_id = NULL, source = 'manual', updated_at = NOW()
+        WHERE connection_account_id = $1`,
+      [connectionAccountId],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  /** Removes one synced row of a link (the day's balance adjustment before it's rewritten). */
+  async deleteLinkRow(connectionAccountId: string, externalId: string): Promise<void> {
+    await this.dbToUse.query(
+      'DELETE FROM transactions WHERE connection_account_id = $1 AND external_id = $2',
+      [connectionAccountId, externalId],
+    );
+  }
+
+  /** Date of a link's oldest synced movement (not adjustments), or null. */
+  async oldestSyncedDate(connectionAccountId: string): Promise<Date | null> {
+    const result = await this.dbToUse.query(
+      `SELECT MIN(date) AS oldest FROM transactions
+        WHERE connection_account_id = $1 AND source = 'sync'`,
+      [connectionAccountId],
+    );
+    return result.rows[0]?.oldest ? new Date(result.rows[0].oldest) : null;
+  }
+
   /** Income minus expense for an account as an exact decimal string (no cache, no float). */
   async getAccountBalanceExact(accountId: string): Promise<string> {
     const result = await this.dbToUse.query(

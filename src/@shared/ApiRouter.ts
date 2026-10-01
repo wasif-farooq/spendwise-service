@@ -20,6 +20,7 @@ import billingRoutesV1 from '@domains/billing/routes/billing.routes';
 import reportRoutes from '@domains/reports/routes/report.routes';
 import activityRoutesV1 from '@domains/activity/routes/activity.routes';
 import pushTokenRoutesV1 from '@domains/notifications/routes/push-tokens.routes';
+import connectionsRoutesV1 from '@domains/connections/routes/connections.routes';
 
 export class ApiRouter {
   private router: Router;
@@ -57,6 +58,8 @@ export class ApiRouter {
     this.router.use('/v1', analyticsRoutesV1);
     // Receipt scanning (at /v1/:workspaceId/ai/receipt-scan)
     this.router.use('/v1', receiptScanRoutesV1);
+    // Connected accounts (at /v1/:workspaceId/connections)
+    this.router.use('/v1', connectionsRoutesV1);
     // AI Advisor (at /v1/:workspaceId/ai)
     this.router.use('/v1', aiRoutesV1);
     // Payment (at /v1/payment)

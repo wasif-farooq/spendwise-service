@@ -1,6 +1,11 @@
 import { InvalidAddressError } from '../errors';
-import type { ConnectionProvider, ProviderConnection, ValidatedInput } from '../types';
-import { shortAddress } from './assets';
+import type {
+  AssetDescription,
+  ConnectionProvider,
+  ProviderConnection,
+  ValidatedInput,
+} from '../types';
+import { assetKeyOf, evmChainName, findCuratedAsset, parseAssetKey, shortAddress } from './assets';
 import type { ChainAdapter } from './types';
 
 /** Wraps a chain adapter into the generic provider contract (auth by public address). */
@@ -45,6 +50,25 @@ export class CryptoWalletProvider implements ConnectionProvider {
     return this.adapter.discoverAssets(conn.address, conn.metadata?.chains ?? []);
   }
 
+  describeAsset(assetKey: string): AssetDescription | null {
+    const parsed = parseAssetKey(assetKey);
+    if (!parsed || parsed.family !== this.adapter.family) return null;
+    const asset = findCuratedAsset(parsed.family, parsed.chainId, parsed.contract);
+    if (!asset) return null;
+    const chainName =
+      parsed.family === 'evm'
+        ? evmChainName(parsed.chainId)
+        : (this.adapter.chains()[0]?.name ?? this.adapter.name);
+    return {
+      assetKey: assetKeyOf(parsed.family, parsed.chainId, parsed.contract),
+      chainId: parsed.chainId,
+      chainName,
+      symbol: asset.symbol,
+      name: asset.name,
+      currencyCode: asset.currencyCode,
+    };
+  }
+
   fetchBalance(conn: ProviderConnection, link: Parameters<ChainAdapter['fetchBalance']>[1]) {
     return this.adapter.fetchBalance(conn.address, link);
   }
@@ -56,5 +80,13 @@ export class CryptoWalletProvider implements ConnectionProvider {
     options: Parameters<ChainAdapter['fetchTransactions']>[3],
   ) {
     return this.adapter.fetchTransactions(conn.address, link, cursor, options);
+  }
+
+  skipBackfill(
+    conn: ProviderConnection,
+    link: Parameters<ChainAdapter['skipBackfill']>[1],
+    cursor: unknown,
+  ) {
+    return this.adapter.skipBackfill(conn.address, link, cursor);
   }
 }
