@@ -47,6 +47,39 @@ describe('connections HTTP client', () => {
     expect(n).toBe(4);
   });
 
+  it('retries a 200 whose body says the provider rate limited it', async () => {
+    let n = 0;
+    const waits: number[] = [];
+    const http = new HttpClient({
+      name: 'Test',
+      fetchImpl: async () => {
+        n++;
+        const body = n < 3 ? { status: '0', result: 'Max calls per sec rate limit reached (3/sec)' } : { status: '1', result: '42' };
+        return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(body) };
+      },
+      isRateLimitedBody: (b) => b?.status === '0' && /rate limit/i.test(String(b?.result)),
+      sleep: async (ms) => void waits.push(ms),
+    });
+    await expect(http.getJson('https://x.test/a')).resolves.toEqual({ status: '1', result: '42' });
+    expect(n).toBe(3);
+    expect(waits).toEqual([500, 1000]);
+  });
+
+  it('gives up on a body that keeps saying rate limited, with RATE_LIMITED', async () => {
+    let n = 0;
+    const http = new HttpClient({
+      name: 'Test',
+      fetchImpl: async () => {
+        n++;
+        return { ok: true, status: 200, headers: { get: () => null }, text: async () => '{"status":"0","result":"rate limit"}' };
+      },
+      isRateLimitedBody: (b) => b?.status === '0',
+      sleep: async () => undefined,
+    });
+    await expect(http.getJson('https://x.test/a')).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+    expect(n).toBe(4);
+  });
+
   it('spaces requests to the provider rate cap', async () => {
     const clock = 0;
     const waits: number[] = [];

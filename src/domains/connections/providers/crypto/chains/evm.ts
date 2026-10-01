@@ -76,8 +76,15 @@ export const createEvmAdapter: ChainAdapterFactory = ({ config, makeHttp }) => {
   const baseUrl = (settings.baseUrl || 'https://api.etherscan.io/v2/api').replace(/\/+$/, '');
   const apiKey = settings.apiKey || '';
   const paidPlan = Boolean(settings.paidPlan);
-  // Free tier: 5 calls/s; stay under it.
-  const http = makeHttp({ name: 'Etherscan', timeoutMs: config.httpTimeoutMs, maxPerSecond: 4 });
+  // Free tier: 3 calls/s per key, shared by the API and the cron's sync. 2/s leaves room;
+  // Etherscan reports the limit in a 200 body, which the client then retries.
+  const http = makeHttp({
+    name: 'Etherscan',
+    timeoutMs: config.httpTimeoutMs,
+    maxPerSecond: 2,
+    isRateLimitedBody: (body) =>
+      body?.status === '0' && /rate limit/i.test(String(body?.result ?? body?.message ?? '')),
+  });
 
   const chainList = (): ChainInfo[] =>
     EVM_CHAINS.filter((c) => paidPlan || !c.requiresPaidKey).map((c) => ({
