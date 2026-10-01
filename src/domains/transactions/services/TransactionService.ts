@@ -131,6 +131,20 @@ export class TransactionService {
     }
   }
 
+  /**
+   * The one way an account's balance is written: income minus expense over
+   * all of its transactions, read past the stats cache. Used by every write
+   * path here and by the connection sync (with its transaction client).
+   */
+  async recomputeAccountBalance(accountId: string, trxDb?: DatabaseFacade): Promise<number> {
+    const transactionRepo = trxDb ? this.transactionRepo.withDb(trxDb) : this.transactionRepo;
+    const accountRepo = trxDb ? this.accountRepo.withDb(trxDb) : this.accountRepo;
+    await transactionRepo.invalidateAccountStatsCache(accountId);
+    const stats = await transactionRepo.getAccountStats(accountId);
+    await accountRepo.updateBalance(accountId, stats.balance);
+    return stats.balance;
+  }
+
   // Transfer funds between accounts with currency conversion
   async transfer(data: TransferDTO, userId: string, workspaceId: string): Promise<TransferResult> {
     // Validate accounts exist
@@ -189,7 +203,6 @@ export class TransactionService {
 
     return this.db.transaction(async (trxDb) => {
       const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
-      const trxAccountRepo = this.accountRepo.withDb(trxDb);
 
       // Create withdraw transaction (expense) on source account
       const withdrawTx = Transaction.create({
@@ -236,13 +249,9 @@ export class TransactionService {
       await trxTransactionRepo.update(updatedWithdraw);
 
       // Update both account balances
-      trxTransactionRepo.invalidateAccountStatsCache(data.fromAccountId);
-      const fromStats = await trxTransactionRepo.getAccountStats(data.fromAccountId);
-      await trxAccountRepo.updateBalance(data.fromAccountId, fromStats.balance);
+      await this.recomputeAccountBalance(data.fromAccountId, trxDb);
 
-      trxTransactionRepo.invalidateAccountStatsCache(data.toAccountId);
-      const toStats = await trxTransactionRepo.getAccountStats(data.toAccountId);
-      await trxAccountRepo.updateBalance(data.toAccountId, toStats.balance);
+      await this.recomputeAccountBalance(data.toAccountId, trxDb);
 
       return {
         withdraw: updatedWithdraw,
@@ -332,7 +341,6 @@ export class TransactionService {
   ): Promise<Transaction> {
     return this.db.transaction(async (trxDb) => {
       const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
-      const trxAccountRepo = this.accountRepo.withDb(trxDb);
 
       // accountId comes from the request body and is not covered by the
       // route's workspace permission check.
@@ -360,9 +368,7 @@ export class TransactionService {
       const saved = await trxTransactionRepo.save(transaction);
 
       // Invalidate stats cache and update account balance
-      trxTransactionRepo.invalidateAccountStatsCache(data.accountId);
-      const stats = await trxTransactionRepo.getAccountStats(data.accountId);
-      await trxAccountRepo.updateBalance(data.accountId, stats.balance);
+      await this.recomputeAccountBalance(data.accountId, trxDb);
 
       // If linking to transactions, update them as well (bidirectional)
       if (data.linkedTransactionIds && data.linkedTransactionIds.length > 0) {
@@ -414,7 +420,6 @@ export class TransactionService {
   ): Promise<Transaction> {
     return this.db.transaction(async (trxDb) => {
       const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
-      const trxAccountRepo = this.accountRepo.withDb(trxDb);
 
       const existing = await trxTransactionRepo.findById(id);
       if (!existing) {
@@ -485,14 +490,10 @@ export class TransactionService {
       }
 
       // Invalidate cache and update balance for old and new account if account changed
-      trxTransactionRepo.invalidateAccountStatsCache(oldAccountId);
-      const oldStats = await trxTransactionRepo.getAccountStats(oldAccountId);
-      await trxAccountRepo.updateBalance(oldAccountId, oldStats.balance);
+      await this.recomputeAccountBalance(oldAccountId, trxDb);
 
       if (data.accountId && data.accountId !== oldAccountId) {
-        trxTransactionRepo.invalidateAccountStatsCache(data.accountId);
-        const newStats = await trxTransactionRepo.getAccountStats(data.accountId);
-        await trxAccountRepo.updateBalance(data.accountId, newStats.balance);
+        await this.recomputeAccountBalance(data.accountId, trxDb);
       }
 
       return saved;
@@ -610,7 +611,6 @@ export class TransactionService {
   async deleteTransaction(id: string, workspaceId: string, userId?: string): Promise<void> {
     return this.db.transaction(async (trxDb) => {
       const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
-      const trxAccountRepo = this.accountRepo.withDb(trxDb);
 
       const existing = await trxTransactionRepo.findById(id);
       if (!existing) {
@@ -648,9 +648,7 @@ export class TransactionService {
           .catch(() => {});
       }
 
-      trxTransactionRepo.invalidateAccountStatsCache(accountId);
-      const stats = await trxTransactionRepo.getAccountStats(accountId);
-      await trxAccountRepo.updateBalance(accountId, stats.balance);
+      await this.recomputeAccountBalance(accountId, trxDb);
     });
   }
 

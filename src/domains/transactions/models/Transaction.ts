@@ -1,5 +1,7 @@
 import { Entity } from '@shared/Entity';
 
+export type TransactionSource = 'manual' | 'sync' | 'adjustment';
+
 export interface TransactionProps {
   accountId: string;
   userId: string;
@@ -20,6 +22,11 @@ export interface TransactionProps {
   baseAmount?: number;
   // Receipt/file attachments (multiple)
   receiptIds?: string[];
+  // Connected accounts: where the row came from. Synced rows carry their link
+  // and the provider's id; `adjustment` rows match the provider's balance.
+  source?: TransactionSource;
+  connectionAccountId?: string | null;
+  externalId?: string | null;
   // Metadata
   createdAt: Date;
   updatedAt: Date;
@@ -88,6 +95,15 @@ export class Transaction extends Entity<TransactionProps> {
   get receiptIds(): string[] | undefined {
     return this.props.receiptIds;
   }
+  get source(): TransactionSource {
+    return this.props.source ?? 'manual';
+  }
+  get connectionAccountId(): string | null {
+    return this.props.connectionAccountId ?? null;
+  }
+  get externalId(): string | null {
+    return this.props.externalId ?? null;
+  }
   get createdAt(): Date {
     return this.props.createdAt;
   }
@@ -113,6 +129,9 @@ export class Transaction extends Entity<TransactionProps> {
       convertedAmount: this.convertedAmount,
       baseAmount: this.baseAmount,
       receiptIds: this.receiptIds,
+      source: this.source,
+      connectionAccountId: this.connectionAccountId,
+      externalId: this.externalId,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
