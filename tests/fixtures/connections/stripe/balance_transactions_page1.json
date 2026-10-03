@@ -1,0 +1,10 @@
+{
+  "object": "list",
+  "url": "/v1/balance_transactions",
+  "has_more": true,
+  "data": [
+    { "id": "txn_5payout", "object": "balance_transaction", "amount": -50000, "fee": 0, "net": -50000, "currency": "usd", "created": 1790000500, "type": "payout", "description": "STRIPE PAYOUT", "status": "available" },
+    { "id": "txn_4refund", "object": "balance_transaction", "amount": -2000, "fee": -88, "net": -1912, "currency": "usd", "created": 1790000400, "type": "refund", "description": "REFUND FOR CHARGE (Order 1001)", "status": "available" },
+    { "id": "txn_3charge", "object": "balance_transaction", "amount": 10000, "fee": 320, "net": 9680, "currency": "usd", "created": 1790000300, "type": "charge", "description": "Order 1002", "status": "pending" }
+  ]
+}

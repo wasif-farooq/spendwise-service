@@ -302,6 +302,12 @@ const config = {
   //   TRONGRID_API_KEY         optional; keyless TronGrid is throttled
   //   SOLANA_RPC_URL           e.g. a Helius URL; default public RPC (throttled)
   //   BITCOIN_ESPLORA_URL      default https://mempool.space/api
+  //   STRIPE_APP_CLIENT_ID     the Stripe App's OAuth client id (ca_...); Stripe stays
+  //   STRIPE_APP_SECRET_KEY    "coming soon" until these two and the redirect URI are
+  //   STRIPE_APP_REDIRECT_URI  set. The secret key is the app developer account's;
+  //                            the redirect is <web>/connections/oauth/stripe/callback
+  //   STRIPE_APP_AUTHORIZE_URL the install link (default: the public Marketplace
+  //                            link; use the external-test link before review)
   connections: {
     encryption: {
       keys: optional('CONNECTIONS_ENC_KEYS'),
@@ -319,6 +325,13 @@ const config = {
       apiKey: optional('TRONGRID_API_KEY'),
     },
     solana: { rpcUrl: optional('SOLANA_RPC_URL') },
+    stripe: {
+      clientId: optional('STRIPE_APP_CLIENT_ID'),
+      secretKey: optional('STRIPE_APP_SECRET_KEY'),
+      redirectUri: optional('STRIPE_APP_REDIRECT_URI'),
+      authorizeUrl: optional('STRIPE_APP_AUTHORIZE_URL'),
+      apiBaseUrl: optional('STRIPE_APP_API_BASE_URL'),
+    },
     syncCron: {
       enabled: bool('CRON_CONNECTION_SYNC_ENABLED', true),
       intervalMinutes: int('CRON_CONNECTION_SYNC_INTERVAL_MINUTES', 15),

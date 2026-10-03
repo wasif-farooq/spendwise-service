@@ -117,6 +117,24 @@ export const fakeConnections = (store: Store): any => {
       return row;
     },
     findById: async (id: string) => store.connections.get(id) ?? null,
+    findByIdForUpdate: async (id: string) => store.connections.get(id) ?? null,
+    findByExternalRef: async (ws: string, provider: string, externalRef: string) =>
+      [...store.connections.values()].find(
+        (c) => c.workspaceId === ws && c.provider === provider && c.externalRef === externalRef,
+      ) ?? null,
+    async reconnect(id: string, credentialsEnc: Buffer, metadata: Record<string, any>) {
+      const c = store.connections.get(id);
+      if (!c) return null;
+      Object.assign(c, {
+        credentialsEnc, metadata: { ...c.metadata, ...metadata }, status: 'active',
+        lastError: null, lastErrorCode: null, consecutiveFailures: 0, nextSyncAt: new Date(),
+      });
+      return c;
+    },
+    async updateCredentials(id: string, credentialsEnc: Buffer) {
+      const c = store.connections.get(id);
+      if (c) c.credentialsEnc = credentialsEnc;
+    },
     findInWorkspace: async (id: string, ws: string) => {
       const c = store.connections.get(id);
       return c && c.workspaceId === ws ? c : null;
@@ -316,13 +334,17 @@ export class FakeProvider implements ConnectionProvider {
   }
 }
 
-export const build = (store: Store, provider = new FakeProvider(), now = () => new Date('2026-10-01T12:00:00Z')) => {
+export const build = <P extends ConnectionProvider = FakeProvider>(
+  store: Store,
+  provider: P = new FakeProvider() as unknown as P,
+  now = () => new Date('2026-10-01T12:00:00Z'),
+) => {
   const db = fakeDb(store);
   const connections = fakeConnections(store);
   const links = fakeLinks(store);
   const transactions = fakeTransactions(store);
   const registry = new ProviderRegistry([provider]);
-  provider.store = store;
+  if (provider instanceof FakeProvider) provider.store = store;
   const secretBox = SecretBox.fromConfig(`1:${Buffer.alloc(32, 7).toString('base64')}`);
   const recomputeBalance = async (accountId: string) => store.recompute(accountId);
   const activity = { log: jest.fn(async () => undefined) };

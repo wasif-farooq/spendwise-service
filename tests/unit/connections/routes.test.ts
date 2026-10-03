@@ -136,6 +136,29 @@ describe('connections routes', () => {
     expect(pro.body.code).toBe('PROVIDER_UNAVAILABLE');
   });
 
+  it('guards the sign-in routes: plan, availability, provider and body', async () => {
+    const start = (server: express.Express, provider = 'stripe') =>
+      request(server).post(`/v1/${WS}/connections/oauth/${provider}/start`).set(auth).send({});
+    const free = await start(app().server);
+    expect(free.status).toBe(402);
+    expect(free.body.code).toBe('PLAN_UPGRADE_REQUIRED');
+    // Not configured in this harness: still "coming soon".
+    const pro = await start(app({ plan: 'Pro' }).server);
+    expect(pro.status).toBe(503);
+    expect(pro.body.code).toBe('PROVIDER_UNAVAILABLE');
+    expect((await start(app().server, 'crypto:bitcoin')).status).toBe(400);
+
+    const { server } = app({ plan: 'Pro' });
+    const complete = (body: object) =>
+      request(server).post(`/v1/${WS}/connections/oauth/stripe/complete`).set(auth).send(body);
+    expect((await complete({ code: 'ac_1' })).status).toBe(400);
+    const unknown = await complete({ code: 'ac_1', state: 'a-state-nobody-issued' });
+    expect(unknown.status).toBe(400);
+    expect(unknown.body.code).toBe('OAUTH_STATE_INVALID');
+    mockPermission.denied.add('integrations:manage');
+    expect((await start(server)).status).toBe(403);
+  });
+
   it('validates bodies and params', async () => {
     const { server } = app();
     expect(
