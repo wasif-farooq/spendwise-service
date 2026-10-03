@@ -1,0 +1,10 @@
+{
+  "balances": [
+    { "currency": "USD", "primary": true, "total_balance": { "currency_code": "USD", "value": "1250.00" }, "available_balance": { "currency_code": "USD", "value": "1200.00" }, "withheld_balance": { "currency_code": "USD", "value": "50.00" } },
+    { "currency": "JPY", "total_balance": { "currency_code": "JPY", "value": "5000" }, "available_balance": { "currency_code": "JPY", "value": "5000" }, "withheld_balance": { "currency_code": "JPY", "value": "0" } },
+    { "currency": "XTS", "total_balance": { "currency_code": "XTS", "value": "7.00" } }
+  ],
+  "account_id": "MDXWPD67GEP5W",
+  "as_of_time": "2026-10-01T11:00:00+0000",
+  "last_refresh_time": "2026-10-01T11:00:00+0000"
+}

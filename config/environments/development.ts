@@ -297,6 +297,12 @@ export default {
       authorizeUrl: process.env.STRIPE_APP_AUTHORIZE_URL || '',
       apiBaseUrl: process.env.STRIPE_APP_API_BASE_URL || '',
     },
+    paypal: {
+      clientId: process.env.PAYPAL_CLIENT_ID || '',
+      clientSecret: process.env.PAYPAL_CLIENT_SECRET || '',
+      redirectUri: process.env.PAYPAL_REDIRECT_URI || '',
+      environment: process.env.PAYPAL_ENV || 'sandbox',
+    },
     syncCron: {
       enabled: process.env.CRON_CONNECTION_SYNC_ENABLED !== 'false',
       intervalMinutes: parseInt(process.env.CRON_CONNECTION_SYNC_INTERVAL_MINUTES || '15', 10),
