@@ -22,7 +22,8 @@ import type { ConnectionRow, LinkRow } from '../repositories/types';
  *     sync_started_at. Another live claim → 409 SYNC_IN_PROGRESS; a claim older
  *     than SYNC_CLAIM_STALE_MINUTES (a crashed run) is taken over. Nothing is held
  *     between statements, across the API, the worker and the CLI alike.
- *  2. Fetch phase, with no DB transaction open: per link, pages from its stored
+ *  2. Fetch phase, with no DB transaction open (OAuth sources first roll their
+ *     tokens, see freshConnection): per link, pages from its stored
  *     cursor (at most 5 pages / 1,000 rows a run; a first import stops at 2,000)
  *     and the provider balance, kept in memory.
  *  3. Write phase: one short transaction per link: re-read the link under a row
@@ -160,6 +161,31 @@ export class ConnectionSyncService {
     };
   }
 
+  /**
+   * The decrypted connection with tokens that are good to use. OAuth sources
+   * roll their tokens: that happens under a row lock on the connection, and the
+   * new pair is stored before the lock is released, so two runs can't both
+   * spend the same refresh token. This is the one provider call made inside a
+   * DB transaction (a single short request).
+   */
+  async freshConnection(
+    conn: ConnectionRow,
+    provider: ConnectionProvider,
+  ): Promise<ProviderConnection> {
+    const oauth = provider.oauth;
+    if (!oauth) return this.providerConnection(conn);
+    return this.deps.db.transaction(async (trx) => {
+      const connections = this.deps.connections.withDb(trx);
+      const locked = await connections.findByIdForUpdate(conn.id);
+      if (!locked) throw new AppError('Connection not found', 404);
+      const source = this.providerConnection(locked);
+      const rolled = await oauth.refresh(source.address, this.now());
+      if (!rolled) return source;
+      await connections.updateCredentials(conn.id, this.deps.secretBox.encrypt(rolled));
+      return { ...source, address: rolled };
+    });
+  }
+
   providerFor(conn: ConnectionRow): ConnectionProvider {
     const provider = this.deps.registry.get(conn.provider);
     if (!provider) throw new ConnectionSyncError('UNKNOWN', 'This source is not supported.');
@@ -194,7 +220,7 @@ export class ConnectionSyncService {
     const touched = new Set<string>();
     try {
       const provider = this.providerFor(conn);
-      const source = this.providerConnection(conn);
+      const source = await this.freshConnection(conn, provider);
       const links = await this.deps.links.findByConnection(connectionId);
 
       // 2. Fetch: every provider call, with no DB transaction open.

@@ -5,7 +5,7 @@ import { isCrypto } from '@domains/currencies/currencies';
 import type { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
 import { ProviderError } from '../providers/errors';
 import type { ProviderInfo, ProviderRegistry } from '../providers/ProviderRegistry';
-import type { DiscoveredAsset, ProviderId, SyncMode } from '../providers/types';
+import type { ConnectionProvider, DiscoveredAsset, ProviderId, SyncMode } from '../providers/types';
 import { PROVIDER_IDS } from '../providers/types';
 import type { ConnectionAccountRepository } from '../repositories/ConnectionAccountRepository';
 import type { ConnectionRepository } from '../repositories/ConnectionRepository';
@@ -16,6 +16,13 @@ import {
   SyncResult,
   readLinkCursor,
 } from './ConnectionSyncService';
+import {
+  OAUTH_STATE_TTL_SECONDS,
+  OAuthState,
+  OAuthStateStore,
+  memoryOAuthStateStore,
+  newOAuthState,
+} from './oauthState';
 
 /**
  * Connected accounts: connect a source, discover its assets, link each asset to
@@ -26,6 +33,12 @@ import {
  * CONNECTION_EXISTS / ACCOUNT_ALREADY_LINKED, 400 INVALID_ADDRESS /
  * CURRENCY_MISMATCH / ASSET_NOT_SUPPORTED / CURRENCY_NOT_SUPPORTED, 503
  * PROVIDER_UNAVAILABLE / CONNECTIONS_UNAVAILABLE, 502 provider failures.
+ *
+ * Sources the user signs in to (Stripe) connect in two calls: oauthStart gives
+ * the provider's sign-in URL, oauthComplete trades the code that comes back for
+ * tokens and creates the connection (400 OAUTH_REQUIRED on the address route,
+ * 400 OAUTH_STATE_INVALID, 502 OAUTH_FAILED, 409 REAUTH_REQUIRED when the
+ * tokens stop working).
  */
 
 export class ConnectionError extends AppError {
@@ -148,6 +161,8 @@ export interface ConnectionServiceDeps {
   activity?: ActivitySink;
   now?: () => Date;
   firstSyncInlineMs?: number;
+  /** Default: in memory (one process). The API passes the Redis-backed store. */
+  oauthStates?: OAuthStateStore;
 }
 
 const iso = (d: Date | null | undefined) => (d ? new Date(d).toISOString() : null);
@@ -162,9 +177,11 @@ const isUniqueViolation = (error: unknown) => (error as any)?.code === '23505';
 
 export class ConnectionService {
   private readonly now: () => Date;
+  private readonly oauthStates: OAuthStateStore;
 
   constructor(private readonly deps: ConnectionServiceDeps) {
     this.now = deps.now ?? (() => new Date());
+    this.oauthStates = deps.oauthStates ?? memoryOAuthStateStore();
   }
 
   listProviders(): ProviderInfo[] {
@@ -282,50 +299,12 @@ export class ConnectionService {
     userId: string,
     input: { provider: string; address?: string; displayName?: string; chains?: string[] },
   ): Promise<ConnectionDto> {
-    if (!PROVIDER_IDS.includes(input.provider as ProviderId)) {
-      throw new ConnectionError('Unknown source.', 400, 'PROVIDER_NOT_SUPPORTED');
-    }
-    const owner = await this.ownerLimits(workspaceId);
-    const usage = await this.usage(workspaceId, owner);
-    const info = this.listProviders().find((p) => p.id === input.provider)!;
-
-    if (info.kind === 'payment' && !usage.paymentConnections) {
+    const { provider, box } = await this.assertCanConnect(workspaceId, input.provider);
+    if (provider.auth === 'oauth') {
       throw new ConnectionError(
-        `${info.name} connections need a paid plan. Upgrade to connect ${info.name}.`,
-        402,
-        'PLAN_UPGRADE_REQUIRED',
-        { feature: 'paymentConnections', usage: usage.wallets },
-      );
-    }
-    if (
-      info.kind === 'crypto_wallet' &&
-      usage.wallets.limit !== null &&
-      usage.wallets.used >= usage.wallets.limit
-    ) {
-      throw new ConnectionError(
-        `You have reached the limit of ${usage.wallets.limit} connected wallets. Upgrade your plan to connect more.`,
-        402,
-        'CONNECTION_LIMIT_REACHED',
-        { feature: 'connectedWallets', usage: usage.wallets },
-      );
-    }
-
-    const provider = this.deps.registry.get(input.provider);
-    if (!provider || !provider.isAvailable().available) {
-      throw new ConnectionError(
-        info.comingSoon
-          ? `${info.name} is coming soon.`
-          : `${info.name} isn't available right now.`,
-        503,
-        'PROVIDER_UNAVAILABLE',
-      );
-    }
-    const box = this.deps.secretBox;
-    if (!box) {
-      throw new ConnectionError(
-        'Connecting accounts is not configured.',
-        503,
-        'CONNECTIONS_UNAVAILABLE',
+        `${provider.name} is connected by signing in to ${provider.name}.`,
+        400,
+        'OAUTH_REQUIRED',
       );
     }
 
@@ -366,6 +345,172 @@ export class ConnectionService {
     return this.toDto(conn, []);
   }
 
+  /** The checks every way of connecting shares: known source, plan, availability, encryption. */
+  private async assertCanConnect(
+    workspaceId: string,
+    providerId: string,
+  ): Promise<{ provider: ConnectionProvider; box: SecretBox }> {
+    if (!PROVIDER_IDS.includes(providerId as ProviderId)) {
+      throw new ConnectionError('Unknown source.', 400, 'PROVIDER_NOT_SUPPORTED');
+    }
+    const owner = await this.ownerLimits(workspaceId);
+    const usage = await this.usage(workspaceId, owner);
+    const info = this.listProviders().find((p) => p.id === providerId)!;
+
+    if (info.kind === 'payment' && !usage.paymentConnections) {
+      throw new ConnectionError(
+        `${info.name} connections need a paid plan. Upgrade to connect ${info.name}.`,
+        402,
+        'PLAN_UPGRADE_REQUIRED',
+        { feature: 'paymentConnections', usage: usage.wallets },
+      );
+    }
+    if (
+      info.kind === 'crypto_wallet' &&
+      usage.wallets.limit !== null &&
+      usage.wallets.used >= usage.wallets.limit
+    ) {
+      throw new ConnectionError(
+        `You have reached the limit of ${usage.wallets.limit} connected wallets. Upgrade your plan to connect more.`,
+        402,
+        'CONNECTION_LIMIT_REACHED',
+        { feature: 'connectedWallets', usage: usage.wallets },
+      );
+    }
+
+    const provider = this.deps.registry.get(providerId);
+    if (!provider || !provider.isAvailable().available) {
+      throw new ConnectionError(
+        info.comingSoon
+          ? `${info.name} is coming soon.`
+          : `${info.name} isn't available right now.`,
+        503,
+        'PROVIDER_UNAVAILABLE',
+      );
+    }
+    const box = this.deps.secretBox;
+    if (!box) {
+      throw new ConnectionError(
+        'Connecting accounts is not configured.',
+        503,
+        'CONNECTIONS_UNAVAILABLE',
+      );
+    }
+    return { provider, box };
+  }
+
+  // ----- connect by signing in (OAuth) -----
+
+  /** Where to send the user to sign in. The state it carries is good for ten minutes, once. */
+  async oauthStart(
+    workspaceId: string,
+    userId: string,
+    providerId: string,
+    input: { returnTo?: 'web' | 'mobile' } = {},
+  ): Promise<{ authorizeUrl: string }> {
+    const { provider } = await this.assertCanConnect(workspaceId, providerId);
+    if (!provider.oauth) {
+      throw new ConnectionError(
+        'This source is connected by its address.',
+        400,
+        'OAUTH_NOT_SUPPORTED',
+      );
+    }
+    const state = newOAuthState();
+    await this.oauthStates.put(
+      state,
+      { workspaceId, userId, provider: provider.id, returnTo: input.returnTo ?? 'web' },
+      OAUTH_STATE_TTL_SECONDS,
+    );
+    return { authorizeUrl: provider.oauth.authorizeUrl(state) };
+  }
+
+  /**
+   * The provider sent the user back with a code. Creates the connection, or,
+   * when that account is already connected in this workspace, stores the new
+   * tokens on it (that is how a REAUTH_REQUIRED connection is repaired).
+   */
+  async oauthComplete(
+    workspaceId: string,
+    userId: string,
+    providerId: string,
+    input: { code: string; state: string },
+  ): Promise<{
+    connection: ConnectionDto;
+    returnTo: OAuthState['returnTo'];
+    reconnected: boolean;
+  }> {
+    const saved = await this.oauthStates.take(input.state);
+    if (
+      !saved ||
+      saved.workspaceId !== workspaceId ||
+      saved.userId !== userId ||
+      saved.provider !== providerId
+    ) {
+      throw new ConnectionError(
+        'This sign-in expired or was already used. Start the connection again.',
+        400,
+        'OAUTH_STATE_INVALID',
+      );
+    }
+    const { provider, box } = await this.assertCanConnect(workspaceId, providerId);
+    if (!provider.oauth) {
+      throw new ConnectionError(
+        'This source is connected by its address.',
+        400,
+        'OAUTH_NOT_SUPPORTED',
+      );
+    }
+
+    let grant;
+    try {
+      grant = await provider.oauth.exchangeCode(input.code, this.now());
+    } catch (error) {
+      if (error instanceof ProviderError) {
+        throw new ConnectionError(error.message, 502, 'OAUTH_FAILED');
+      }
+      throw error;
+    }
+
+    const externalRef = box.blindIndex(`${provider.id}:${grant.accountRef}`);
+    const credentialsEnc = box.encrypt(grant.credentials);
+    const existing = await this.deps.connections.findByExternalRef(
+      workspaceId,
+      provider.id,
+      externalRef,
+    );
+    if (existing) {
+      await this.deps.connections.reconnect(existing.id, credentialsEnc, grant.metadata);
+      this.log(workspaceId, userId, existing.id, 'reconnect', { provider: provider.id });
+      return {
+        connection: await this.get(workspaceId, existing.id),
+        returnTo: saved.returnTo,
+        reconnected: true,
+      };
+    }
+
+    let conn: ConnectionRow;
+    try {
+      conn = await this.deps.connections.create({
+        workspaceId,
+        createdBy: userId,
+        provider: provider.id,
+        kind: provider.kind,
+        displayName: grant.displayName.slice(0, 100),
+        externalRef,
+        credentialsEnc,
+        metadata: grant.metadata,
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConnectionError('This account is already connected.', 409, 'CONNECTION_EXISTS');
+      }
+      throw error;
+    }
+    this.log(workspaceId, userId, conn.id, 'connect', { provider: conn.provider });
+    return { connection: this.toDto(conn, []), returnTo: saved.returnTo, reconnected: false };
+  }
+
   // ----- discover -----
 
   async discover(
@@ -380,14 +525,12 @@ export class ConnectionService {
     const provider = this.deps.sync.providerFor(conn);
     let assets: DiscoveredAsset[];
     try {
-      assets = await provider.discoverAssets(this.deps.sync.providerConnection(conn));
+      assets = await provider.discoverAssets(await this.deps.sync.freshConnection(conn, provider));
     } catch (error) {
       if (error instanceof ProviderError) {
-        throw new ConnectionError(
-          error.message,
-          error.code === 'INVALID_ADDRESS' ? 400 : 502,
-          error.code,
-        );
+        const status =
+          error.code === 'INVALID_ADDRESS' ? 400 : error.code === 'REAUTH_REQUIRED' ? 409 : 502;
+        throw new ConnectionError(error.message, status, error.code);
       }
       throw error;
     }
