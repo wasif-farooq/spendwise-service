@@ -2,6 +2,7 @@ import { HttpClient, HttpClientOptions } from './http';
 import type { ChainAdapterFactory, ConnectionsConfig } from './crypto/types';
 import { CHAIN_ADAPTERS } from './crypto/chains';
 import { CryptoWalletProvider } from './crypto/CryptoWalletProvider';
+import { PayPalProvider } from './paypal/PayPalProvider';
 import { StripeProvider } from './stripe/StripeProvider';
 import type {
   ChainInfo,
@@ -88,7 +89,8 @@ export class ProviderRegistry {
 
   /**
    * The registry the API and the CLI use: one wallet provider per chain adapter,
-   * plus Stripe once its app is configured (it stays "coming soon" until then).
+   * plus Stripe and PayPal once their apps are configured (each stays "coming
+   * soon" until then).
    */
   static fromConfig(
     config: ConnectionsConfig,
@@ -104,6 +106,9 @@ export class ProviderRegistry {
     }
     if (StripeProvider.isConfigured(config.stripe)) {
       registry.register(new StripeProvider(config.stripe!, makeHttp, config.httpTimeoutMs));
+    }
+    if (PayPalProvider.isConfigured(config.paypal)) {
+      registry.register(new PayPalProvider(config.paypal!, makeHttp, config.httpTimeoutMs));
     }
     return registry;
   }

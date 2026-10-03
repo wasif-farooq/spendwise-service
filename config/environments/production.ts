@@ -308,6 +308,12 @@ const config = {
   //                            the redirect is <web>/connections/oauth/stripe/callback
   //   STRIPE_APP_AUTHORIZE_URL the install link (default: the public Marketplace
   //                            link; use the external-test link before review)
+  //   PAYPAL_CLIENT_ID         the PayPal REST app (Log in with PayPal + Transaction
+  //   PAYPAL_CLIENT_SECRET     Search). PayPal stays "coming soon" until these two and
+  //   PAYPAL_REDIRECT_URI      the redirect (<web>/connections/oauth/paypal/callback)
+  //                            are set
+  //   PAYPAL_ENV               sandbox (default) or live. Live needs PayPal's partner
+  //                            approval to read other accounts' transactions
   connections: {
     encryption: {
       keys: optional('CONNECTIONS_ENC_KEYS'),
@@ -331,6 +337,12 @@ const config = {
       redirectUri: optional('STRIPE_APP_REDIRECT_URI'),
       authorizeUrl: optional('STRIPE_APP_AUTHORIZE_URL'),
       apiBaseUrl: optional('STRIPE_APP_API_BASE_URL'),
+    },
+    paypal: {
+      clientId: optional('PAYPAL_CLIENT_ID'),
+      clientSecret: optional('PAYPAL_CLIENT_SECRET'),
+      redirectUri: optional('PAYPAL_REDIRECT_URI'),
+      environment: optional('PAYPAL_ENV', 'sandbox'),
     },
     syncCron: {
       enabled: bool('CRON_CONNECTION_SYNC_ENABLED', true),
