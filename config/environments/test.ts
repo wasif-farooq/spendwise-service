@@ -121,6 +121,7 @@ export default {
     tron: { baseUrl: 'https://api.trongrid.io', apiKey: '' },
     solana: { rpcUrl: '' },
     stripe: { clientId: '', secretKey: '', redirectUri: '', authorizeUrl: '', apiBaseUrl: '' },
+    paypal: { clientId: '', clientSecret: '', redirectUri: '', environment: 'sandbox' },
     syncCron: { enabled: false, intervalMinutes: 15 },
   },
 };
