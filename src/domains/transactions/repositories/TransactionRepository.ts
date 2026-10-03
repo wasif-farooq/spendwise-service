@@ -942,7 +942,7 @@ export class TransactionRepository {
     return result.rowCount ?? 0;
   }
 
-  /** Removes one synced row of a link (the day's balance adjustment before it's rewritten). */
+  /** Removes one synced row of a link (the day's balance adjustment, or the opening balance, before it's rewritten). */
   async deleteLinkRow(connectionAccountId: string, externalId: string): Promise<void> {
     await this.dbToUse.query(
       'DELETE FROM transactions WHERE connection_account_id = $1 AND external_id = $2',

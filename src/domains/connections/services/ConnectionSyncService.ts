@@ -36,8 +36,10 @@ import type { ConnectionRow, LinkRow } from '../repositories/types';
  *
  * Reconciling with the provider's balance (the ledger balance is always
  * income minus expense, so the gap is booked as a transaction):
- *   history     when the backfill completes, one "Opening balance (synced)"
- *               dated before the oldest imported movement
+ *   history     one "Opening balance (synced)" dated before the oldest imported
+ *               movement. It is rewritten on every run of the backfill, so the
+ *               account shows the provider's balance while the import is still
+ *               going, and is final once the backfill completes
  *   every sync  a gap above dust (1e-8 crypto, 0.01 fiat) becomes one
  *               "Balance adjustment (synced)" per link per day, id
  *               adj:<linkId>:<date>, rewritten on later runs that day
@@ -60,7 +62,7 @@ export interface LinkCursor {
   done: boolean;
   /** Rows imported by the first import so far (capped at FIRST_IMPORT_CAP). */
   imported: number;
-  /** The opening balance (history mode) has been booked. */
+  /** The opening balance (history mode) is final: the backfill completed. */
   opened: boolean;
 }
 
@@ -361,37 +363,39 @@ export class ConnectionSyncService {
     const dust = dustUnits(isCrypto(link.currencyCode) ? 'crypto' : 'fiat');
     let adjustment: string | null = null;
 
-    if (next.done) {
-      if (link.syncMode === 'history' && !next.opened) {
-        const ledger = toUnits(await transactions.getAccountBalanceExact(link.accountId));
-        const gap = f.providerUnits - ledger;
-        if (absUnits(gap) > dust) {
-          const oldest =
-            (await transactions.oldestSyncedDate(link.id)) ?? link.syncFrom ?? this.now();
-          await transactions.insertImported([
-            this.adjustmentRow(conn, link, gap, new Date(oldest.getTime() - 1000), {
-              externalId: `open:${link.id}`,
-              description: 'Opening balance (synced)',
-            }),
-          ]);
-          adjustment = fromUnits(gap);
-        }
-        next.opened = true;
-      } else {
-        const today = this.now();
-        const externalId = `adj:${link.id}:${dayKey(today)}`;
-        await transactions.deleteLinkRow(link.id, externalId);
-        const ledger = toUnits(await transactions.getAccountBalanceExact(link.accountId));
-        const gap = f.providerUnits - ledger;
-        if (absUnits(gap) > dust) {
-          await transactions.insertImported([
-            this.adjustmentRow(conn, link, gap, today, {
-              externalId,
-              description: 'Balance adjustment (synced)',
-            }),
-          ]);
-          adjustment = fromUnits(gap);
-        }
+    if (link.syncMode === 'history' && !next.opened) {
+      // Rewritten every run until the backfill completes: a half-imported history
+      // would otherwise show a wrong (even negative) balance for hours.
+      const externalId = `open:${link.id}`;
+      await transactions.deleteLinkRow(link.id, externalId);
+      const ledger = toUnits(await transactions.getAccountBalanceExact(link.accountId));
+      const gap = f.providerUnits - ledger;
+      if (absUnits(gap) > dust) {
+        const oldest =
+          (await transactions.oldestSyncedDate(link.id)) ?? link.syncFrom ?? this.now();
+        await transactions.insertImported([
+          this.adjustmentRow(conn, link, gap, new Date(oldest.getTime() - 1000), {
+            externalId,
+            description: 'Opening balance (synced)',
+          }),
+        ]);
+        adjustment = fromUnits(gap);
+      }
+      next.opened = next.done;
+    } else if (next.done) {
+      const today = this.now();
+      const externalId = `adj:${link.id}:${dayKey(today)}`;
+      await transactions.deleteLinkRow(link.id, externalId);
+      const ledger = toUnits(await transactions.getAccountBalanceExact(link.accountId));
+      const gap = f.providerUnits - ledger;
+      if (absUnits(gap) > dust) {
+        await transactions.insertImported([
+          this.adjustmentRow(conn, link, gap, today, {
+            externalId,
+            description: 'Balance adjustment (synced)',
+          }),
+        ]);
+        adjustment = fromUnits(gap);
       }
     }
 
