@@ -11,6 +11,7 @@ import { ConnectionAccountRepository } from '../repositories/ConnectionAccountRe
 import { ConnectionRepository } from '../repositories/ConnectionRepository';
 import { AccountGateway, ConnectionService } from './ConnectionService';
 import { ActivitySink, ConnectionSyncService } from './ConnectionSyncService';
+import { cacheOAuthStateStore } from './oauthState';
 
 /** The feature flag (GET /api/v1/feature-flags) that switches connected accounts on. */
 export const CONNECTED_ACCOUNTS_FLAG = 'connectedAccounts';
@@ -138,6 +139,8 @@ export const buildConnectionServices = (db: DatabaseFacade, options: ConnectionS
     sync,
     accounts: options.accounts ?? createAccountGateway(db, connections, options),
     activity: options.activity,
+    // Without a cache the service keeps sign-in states in memory (one process).
+    oauthStates: options.cache ? cacheOAuthStateStore(options.cache) : undefined,
   });
   return { service, sync, registry, secretBox, connections, links };
 };

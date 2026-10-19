@@ -2,6 +2,7 @@ import { HttpClient, HttpClientOptions } from './http';
 import type { ChainAdapterFactory, ConnectionsConfig } from './crypto/types';
 import { CHAIN_ADAPTERS } from './crypto/chains';
 import { CryptoWalletProvider } from './crypto/CryptoWalletProvider';
+import { StripeProvider } from './stripe/StripeProvider';
 import type {
   ChainInfo,
   ConnectionKind,
@@ -23,7 +24,7 @@ export interface ProviderInfo {
   chains: ChainInfo[];
 }
 
-/** Sources announced in the apps before their provider ships (P13/P14). */
+/** Sources announced in the apps until their provider ships and is configured. */
 const COMING_SOON: ProviderInfo[] = [
   {
     id: 'stripe',
@@ -85,7 +86,10 @@ export class ProviderRegistry {
     return [...registered, ...missing];
   }
 
-  /** The registry the API and the CLI use: one wallet provider per chain adapter. */
+  /**
+   * The registry the API and the CLI use: one wallet provider per chain adapter,
+   * plus Stripe once its app is configured (it stays "coming soon" until then).
+   */
   static fromConfig(
     config: ConnectionsConfig,
     options: {
@@ -97,6 +101,9 @@ export class ProviderRegistry {
     const registry = new ProviderRegistry();
     for (const factory of options.adapters ?? CHAIN_ADAPTERS) {
       registry.register(new CryptoWalletProvider(factory({ config, makeHttp })));
+    }
+    if (StripeProvider.isConfigured(config.stripe)) {
+      registry.register(new StripeProvider(config.stripe!, makeHttp, config.httpTimeoutMs));
     }
     return registry;
   }

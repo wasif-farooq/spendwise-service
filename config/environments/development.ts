@@ -290,6 +290,13 @@ export default {
       apiKey: process.env.TRONGRID_API_KEY || '',
     },
     solana: { rpcUrl: process.env.SOLANA_RPC_URL || '' },
+    stripe: {
+      clientId: process.env.STRIPE_APP_CLIENT_ID || '',
+      secretKey: process.env.STRIPE_APP_SECRET_KEY || '',
+      redirectUri: process.env.STRIPE_APP_REDIRECT_URI || '',
+      authorizeUrl: process.env.STRIPE_APP_AUTHORIZE_URL || '',
+      apiBaseUrl: process.env.STRIPE_APP_API_BASE_URL || '',
+    },
     syncCron: {
       enabled: process.env.CRON_CONNECTION_SYNC_ENABLED !== 'false',
       intervalMinutes: parseInt(process.env.CRON_CONNECTION_SYNC_INTERVAL_MINUTES || '15', 10),

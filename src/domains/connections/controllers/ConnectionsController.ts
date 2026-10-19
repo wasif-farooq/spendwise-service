@@ -58,6 +58,16 @@ export class ConnectionsController {
   create = (req: Request, res: Response) =>
     this.run(res, 201, (s) => s.create(req.params.workspaceId, userIdOf(req), req.body));
 
+  oauthStart = (req: Request, res: Response) =>
+    this.run(res, 200, (s) =>
+      s.oauthStart(req.params.workspaceId, userIdOf(req), req.params.provider, req.body ?? {}),
+    );
+
+  oauthComplete = (req: Request, res: Response) =>
+    this.run(res, 201, (s) =>
+      s.oauthComplete(req.params.workspaceId, userIdOf(req), req.params.provider, req.body),
+    );
+
   assets = (req: Request, res: Response) =>
     this.run(res, 200, (s) => s.discover(req.params.workspaceId, req.params.id));
 

@@ -1,0 +1,13 @@
+{
+  "object": "balance",
+  "available": [
+    { "amount": 120050, "currency": "usd", "source_types": { "card": 120050 } },
+    { "amount": 5000, "currency": "jpy", "source_types": { "card": 5000 } },
+    { "amount": 700, "currency": "xts", "source_types": { "card": 700 } }
+  ],
+  "pending": [
+    { "amount": 2500, "currency": "usd", "source_types": { "card": 2500 } },
+    { "amount": 0, "currency": "jpy", "source_types": { "card": 0 } }
+  ],
+  "livemode": false
+}
