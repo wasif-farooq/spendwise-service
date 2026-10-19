@@ -4,9 +4,12 @@ import { PromoCodeService } from '../../promo-codes/services/PromoCodeService';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
 import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
+import { rejectIfManagedByGooglePlay } from '@domains/store-billing/storeBilling.middleware';
 
 const router = Router();
 const controller = new BillingController();
+// While Google Play bills the plan it's changed and cancelled in Google Play (409).
+const notStoreManaged = rejectIfManagedByGooglePlay();
 
 router.get('/', (req, res, next) => controller.getBillingData(req, res).catch(next));
 router.get('/history', (req, res, next) => controller.getHistory(req, res).catch(next));
@@ -67,7 +70,7 @@ router.post('/apply-promo', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/change-plan', async (req: Request, res: Response) => {
+router.post('/change-plan', notStoreManaged, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId || (req as any).user?.sub;
     if (!userId) {
@@ -97,7 +100,7 @@ router.post('/change-plan', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/cancel', async (req: Request, res: Response) => {
+router.post('/cancel', notStoreManaged, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId || (req as any).user?.sub;
     if (!userId) {

@@ -21,6 +21,7 @@ import reportRoutes from '@domains/reports/routes/report.routes';
 import activityRoutesV1 from '@domains/activity/routes/activity.routes';
 import pushTokenRoutesV1 from '@domains/notifications/routes/push-tokens.routes';
 import connectionsRoutesV1 from '@domains/connections/routes/connections.routes';
+import webhookRoutesV1 from '@domains/store-billing/routes/webhooks.routes';
 
 export class ApiRouter {
   private router: Router;
@@ -36,6 +37,9 @@ export class ApiRouter {
     // Account deletion (at /v1/auth/account) before the auth router, which would
     // otherwise run its controller middleware for these paths first.
     this.router.use('/v1/auth/account', accountDeletionRoutesV1);
+    // Inbound webhooks with their own shared-secret auth (at /v1/webhooks/revenuecat).
+    // Before the '/v1' routers below, whose requireAuth would answer 401 first.
+    this.router.use('/v1/webhooks', webhookRoutesV1);
     this.router.use('/v1/auth', authRoutesV1);
     this.router.use('/v1/users', userRoutesV1);
     this.router.use('/v1/workspaces', workspaceRoutesV1);
