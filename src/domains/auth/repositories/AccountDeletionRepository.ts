@@ -21,6 +21,10 @@ export interface DeletableSubscription {
   status: string | null;
   paymentProvider: string | null;
   merchantSubscriptionId: string | null;
+  /** Catalogue name of the plan ("Pro Monthly"), for telling a paid plan from Free. */
+  planName?: string | null;
+  /** Google Play's management page for a store subscription (P15). */
+  storeManagementUrl?: string | null;
 }
 
 export interface DeletedRows {
@@ -87,9 +91,11 @@ export class AccountDeletionRepository {
   ): Promise<DeletableSubscription[]> {
     const db = options.db ?? this.db;
     const result = await db.query(
-      `SELECT id, status, payment_provider, merchant_subscription_id
-         FROM user_subscriptions
-        WHERE user_id = $1`,
+      `SELECT us.id, us.status, us.payment_provider, us.merchant_subscription_id,
+              us.store_management_url, sp.name AS plan_name
+         FROM user_subscriptions us
+         LEFT JOIN subscription_plans sp ON sp.id = us.plan_id
+        WHERE us.user_id = $1`,
       [userId],
     );
     return result.rows.map((row: any) => ({
@@ -97,6 +103,8 @@ export class AccountDeletionRepository {
       status: row.status ?? null,
       paymentProvider: row.payment_provider ?? null,
       merchantSubscriptionId: row.merchant_subscription_id ?? null,
+      planName: row.plan_name ?? null,
+      storeManagementUrl: row.store_management_url ?? null,
     }));
   }
 

@@ -388,6 +388,22 @@ describe('AccountDeletionService.deleteAccount: subscriptions', () => {
     expect(events).toEqual(['begin', 'paddle-cancel', 'delete', 'commit']);
   });
 
+  it('still deletes with a live Google Play subscription, which it cannot cancel', async () => {
+    const { service, paddle, events } = setup({
+      subscriptions: [
+        paddleSub({
+          paymentProvider: 'google_play',
+          merchantSubscriptionId: 'GPA.1234',
+          planName: 'Pro Monthly',
+        }),
+      ],
+    });
+    const result = await service.deleteAccount(USER_ID, { password: PASSWORD });
+    expect(paddle!.cancelSubscription).not.toHaveBeenCalled();
+    expect(result.subscriptionCancelled).toBe(false);
+    expect(events).toEqual(['begin', 'delete', 'commit']);
+  });
+
   it('aborts with 502 and deletes nothing when Paddle refuses', async () => {
     const { service, repository, events } = setup({
       subscriptions: [paddleSub()],
@@ -515,7 +531,44 @@ describe('AccountDeletionService.preview', () => {
       workspacesToLeave: [{ id: 'theirs', name: 'Workspace theirs' }],
       blockingWorkspaces: [{ id: 'shared', name: 'Workspace shared', memberCount: 2 }],
       hasActiveSubscription: true,
+      storeSubscription: null,
     });
+  });
+
+  it('tells a Google Play subscriber to cancel in Google Play (the API cannot)', async () => {
+    const { service } = setup({
+      subscriptions: [
+        {
+          id: 's1',
+          status: 'active',
+          paymentProvider: 'google_play',
+          merchantSubscriptionId: 'GPA.1234-5678',
+          planName: 'Pro Monthly',
+          storeManagementUrl: 'https://play.google.com/store/account/subscriptions?sku=pro',
+        },
+      ],
+    });
+    const preview = await service.preview(USER_ID);
+    expect(preview.hasActiveSubscription).toBe(false);
+    expect(preview.storeSubscription).toEqual({
+      provider: 'google_play',
+      managementUrl: 'https://play.google.com/store/account/subscriptions?sku=pro',
+    });
+  });
+
+  it('has no store notice once the Play plan has ended (Free)', async () => {
+    const { service } = setup({
+      subscriptions: [
+        {
+          id: 's1',
+          status: 'active',
+          paymentProvider: null,
+          merchantSubscriptionId: null,
+          planName: 'Free',
+        },
+      ],
+    });
+    expect((await service.preview(USER_ID)).storeSubscription).toBeNull();
   });
 
   it('reports a Google-only account as having no password', async () => {
