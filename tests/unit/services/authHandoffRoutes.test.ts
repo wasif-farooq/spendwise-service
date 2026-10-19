@@ -137,6 +137,18 @@ describe('POST /auth/handoff', () => {
     expect(res.body.data.scope).toBe('checkout');
   });
 
+  it('issues a connections code (connecting Stripe / PayPal from the app)', async () => {
+    const { app } = buildApp();
+
+    const res = await request(app)
+      .post('/api/v1/auth/handoff')
+      .set('Authorization', `Bearer ${accessToken()}`)
+      .send({ scope: 'connections' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.scope).toBe('connections');
+  });
+
   it('rejects an unauthenticated request', async () => {
     const { app, redis } = buildApp();
 

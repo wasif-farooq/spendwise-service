@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { HANDOFF_SCOPES } from '../services/AuthHandoff';
 
 /**
  * The password policy, defined once so every path that sets a password
@@ -117,7 +118,7 @@ export const verifyEmailSchema = z.object({
 // cannot be confused with it.
 export const handoffIssueSchema = z.object({
   body: z.object({
-    scope: z.enum(['checkout']).default('checkout'),
+    scope: z.enum(HANDOFF_SCOPES).default('checkout'),
   }),
 });
 
