@@ -262,6 +262,24 @@ const config = {
     environment: process.env.PADDLE_ENV === 'sandbox' ? 'sandbox' : 'production',
   },
 
+  // Google Play subscriptions through RevenueCat (P15). Everything is optional:
+  // without the webhook secret the webhook refuses every call, and without the
+  // secret API key POST /subscription/sync answers 503 STORE_BILLING_UNAVAILABLE.
+  //   REVENUECAT_WEBHOOK_AUTH     the exact Authorization header value set on the
+  //                               RevenueCat webhook (e.g. "Bearer <random>")
+  //   REVENUECAT_SECRET_API_KEY   secret (sk_…) API key, for GET /v1/subscribers
+  //   REVENUECAT_ACCEPT_SANDBOX   apply sandbox (test) purchases; false here, set
+  //                               it to true on staging
+  //   REVENUECAT_API_URL          default https://api.revenuecat.com
+  // Product ids → plans live in src/domains/store-billing/storeProducts.ts.
+  revenuecat: {
+    webhookAuth: optional('REVENUECAT_WEBHOOK_AUTH'),
+    secretApiKey: optional('REVENUECAT_SECRET_API_KEY'),
+    acceptSandbox: bool('REVENUECAT_ACCEPT_SANDBOX', false),
+    apiUrl: optional('REVENUECAT_API_URL', 'https://api.revenuecat.com'),
+    timeoutMs: int('REVENUECAT_TIMEOUT_MS', 10000),
+  },
+
   // AI receipt scanning (POST /:workspaceId/ai/receipt-scan). Everything is
   // optional: without an API key the scan endpoints answer 503 AI_UNAVAILABLE
   // and the rest of the API boots and runs as usual. Any OpenAI-compatible
