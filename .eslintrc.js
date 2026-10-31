@@ -1,7 +1,7 @@
 module.exports = {
     parser: '@typescript-eslint/parser',
     parserOptions: {
-        project: 'tsconfig.json',
+        project: 'tsconfig.eslint.json',
         tsconfigRootDir: __dirname,
         sourceType: 'module',
     },
@@ -23,4 +23,13 @@ module.exports = {
         '@typescript-eslint/no-explicit-any': 'warn',
         'prettier/prettier': ['error'],
     },
+    overrides: [
+        {
+            // Tests were never formatted with Prettier; lint them for real problems only.
+            files: ['tests/**/*.ts'],
+            rules: {
+                'prettier/prettier': 'off',
+            },
+        },
+    ],
 };
