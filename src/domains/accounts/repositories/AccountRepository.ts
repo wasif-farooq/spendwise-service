@@ -1,6 +1,6 @@
 import { Account, AccountProps } from '../models/Account';
 import { DatabaseFacade } from '@facades/DatabaseFacade';
-import { IAccountRepository, AccountWithBalance, CurrencyTotal } from './IAccountRepository';
+import { IAccountRepository, AccountWithBalance } from './IAccountRepository';
 
 export class AccountRepository implements IAccountRepository {
   private dbToUse: DatabaseFacade;
@@ -124,19 +124,6 @@ export class AccountRepository implements IAccountRepository {
 
   async deleteByWorkspaceId(workspaceId: string): Promise<void> {
     await this.dbToUse.query('DELETE FROM accounts WHERE workspace_id = $1', [workspaceId]);
-  }
-
-  async getBalancesByCurrency(workspaceId: string): Promise<CurrencyTotal[]> {
-    const result = await this.dbToUse.query(
-      `SELECT currency, COALESCE(SUM(balance), 0) as total
-         FROM accounts WHERE workspace_id = $1
-         GROUP BY currency ORDER BY currency`,
-      [workspaceId],
-    );
-    return result.rows.map((row: any) => ({
-      currency: row.currency,
-      total: parseFloat(row.total || '0'),
-    }));
   }
 
   async findAllWithBalancesForWorkspace(workspaceId: string): Promise<AccountWithBalance[]> {

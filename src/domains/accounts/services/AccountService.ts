@@ -161,31 +161,49 @@ export class AccountService {
   }
 
   /**
-   * Sum of every account's balance in `targetCurrency`. Accounts whose
-   * currency has no rate are left out and listed in `unconvertedCurrencies`
+   * Every account's balance in `targetCurrency`, and what they add up to: `assets`
+   * (positive balances), `liabilities` (negative ones) and `total`, always their sum.
+   * Accounts whose currency has no rate are left out and listed in `unconvertedCurrencies`
    * (they used to be added unconverted, so 1 BTC counted as 1 USD).
    */
   async getTotalBalance(
     workspaceIdId: string,
     targetCurrency: string,
-  ): Promise<{ total: number; currency: string; unconvertedCurrencies: string[] }> {
-    const balances = await this.accountRepository.getBalancesByCurrency(workspaceIdId);
+  ): Promise<{
+    total: number;
+    assets: number;
+    liabilities: number;
+    currency: string;
+    unconvertedCurrencies: string[];
+    convertedBalances: Record<string, number>;
+  }> {
+    const accounts = await this.accountRepository.findAllWithBalancesForWorkspace(workspaceIdId);
     const service = this.exchangeRateService;
     const converter = new TotalsConverter(
       targetCurrency,
       service ? async (from, to) => (await service.convert(1, from, to)).rate : undefined,
     );
 
-    let total = 0;
-    for (const { currency, total: sum } of balances) {
-      const converted = await converter.convert(sum, currency);
-      if (converted !== null) total += converted;
+    let assets = 0;
+    let liabilities = 0;
+    const convertedBalances: Record<string, number> = {};
+    for (const account of accounts) {
+      const converted = await converter.convert(account.balance, account.currency);
+      if (converted === null) continue;
+      convertedBalances[account.id] = roundAmount(converted, targetCurrency);
+      if (converted < 0) liabilities += converted;
+      else assets += converted;
     }
+    const roundedAssets = roundAmount(assets, targetCurrency);
+    const roundedLiabilities = roundAmount(liabilities, targetCurrency);
 
     return {
-      total: roundAmount(total, targetCurrency),
+      total: roundAmount(roundedAssets + roundedLiabilities, targetCurrency),
+      assets: roundedAssets,
+      liabilities: roundedLiabilities,
       currency: targetCurrency,
       unconvertedCurrencies: converter.unconvertedCurrencies(),
+      convertedBalances,
     };
   }
 }
