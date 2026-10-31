@@ -48,6 +48,11 @@ export const googleLoginSchema = z.object({
   body: z
     .object({
       code: z.string().min(1).optional(),
+      // RFC 7636: the PKCE verifier the web client made its code_challenge from.
+      codeVerifier: z
+        .string()
+        .regex(/^[A-Za-z0-9\-._~]{43,128}$/)
+        .optional(),
       idToken: z.string().min(1).optional(),
     })
     .refine((data) => Boolean(data.code || data.idToken), {

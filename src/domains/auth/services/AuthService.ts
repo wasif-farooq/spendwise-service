@@ -259,10 +259,58 @@ export class AuthService {
   }
 
   /**
+   * Links a first Google sign-in to the user with that email. An unverified
+   * email proves nobody owned the account, so whoever registered it may not be
+   * this person: their password, 2FA and sessions don't survive the link. The
+   * owner can set a password again through "forgot password".
+   */
+  private async linkGoogleIdentity(user: User, sub: string): Promise<void> {
+    const wasUnverified = !user.emailVerified;
+    const identity = AuthIdentity.create({ userId: user.id, provider: 'google', sub });
+
+    await this.db.transaction(async (trx) => {
+      await this.authRepo.save(identity, { db: trx });
+      if (!wasUnverified) return;
+
+      const local = await this.authRepo.findByUserIdAndProvider(user.id, 'local', { db: trx });
+      if (local) {
+        local.clearPassword();
+        await this.authRepo.save(local, { db: trx });
+      }
+      user.disable2FA();
+      user.verifyEmail();
+      await this.userRepo.save(user, { db: trx });
+    });
+
+    if (wasUnverified) await this.revokeRefreshTokens(user);
+  }
+
+  /** Refresh tokens issued before now stop working; access tokens run out on their own. */
+  private async revokeRefreshTokens(user: User): Promise<void> {
+    const { iat, exp } = jwt.decode(this.generateRefreshToken(user)) as jwt.JwtPayload;
+    try {
+      await this.cache?.set(`refresh_revoked:${user.id}`, String(iat), { EX: exp! - iat! });
+    } catch (error) {
+      console.error('[AuthService] Could not revoke refresh tokens:', error);
+    }
+  }
+
+  private async isRefreshTokenRevoked(userId: string, issuedAt: number): Promise<boolean> {
+    try {
+      const revokedAt = await this.cache?.get(`refresh_revoked:${userId}`);
+      return revokedAt != null && issuedAt < Number(revokedAt);
+    } catch (error) {
+      // A cache outage must not sign every user out.
+      console.error('[AuthService] Could not check refresh token revocation:', error);
+      return false;
+    }
+  }
+
+  /**
    * Web sign-in: exchange an authorization code (issued to the web client with
    * the fixed redirect URI) for tokens, then read the profile from userinfo.
    */
-  async loginWithGoogle(code: string): Promise<GoogleLoginResult> {
+  async loginWithGoogle(code: string, codeVerifier?: string): Promise<GoogleLoginResult> {
     const config = ConfigLoader.getInstance();
     const googleConfig = config.get('auth.social.google') as any;
 
@@ -280,6 +328,7 @@ export class AuthService {
         code,
         grant_type: 'authorization_code',
         redirect_uri: googleConfig.redirectUri,
+        ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
       }).toString(),
     });
 
@@ -431,27 +480,21 @@ export class AuthService {
    * challenge or issue tokens.
    */
   private async completeGoogleLogin(googleUser: GoogleProfile): Promise<GoogleLoginResult> {
-    // Step 3: Find existing auth identity by provider + sub
-    let user = await this.userRepo.findByEmail(googleUser.email);
+    // Step 3: The Google account's sub identifies the person; an email can change
+    // or move to another Google account. Email only links a first Google sign-in.
+    const existingIdentity = await this.authRepo.findByProviderAndSub('google', googleUser.sub);
+    let user = existingIdentity
+      ? await this.userRepo.findById(existingIdentity.userId)
+      : await this.userRepo.findByEmail(googleUser.email);
     let isNewUser = false;
 
     if (user) {
-      // Check if user has Google auth identity linked
-      const authIdentity = await this.authRepo.findByUserIdAndProvider(user.id, 'google');
-      if (!authIdentity) {
-        // User exists but no Google identity - link it
-        const newIdentity = AuthIdentity.create({
-          userId: user.id,
-          provider: 'google',
-          sub: googleUser.sub,
-        });
-        await this.authRepo.save(newIdentity);
-      }
-
-      // Mark email as verified if not already (Google verified the email)
-      if (!user.emailVerified) {
-        user.verifyEmail();
-        await this.userRepo.save(user);
+      if (!existingIdentity) {
+        const otherGoogleIdentity = await this.authRepo.findByUserIdAndProvider(user.id, 'google');
+        if (otherGoogleIdentity) {
+          throw new AppError('This email is linked to a different Google account', 409);
+        }
+        await this.linkGoogleIdentity(user, googleUser.sub);
       }
 
       // Create resources if they don't exist (for existing users who linked Google)
@@ -480,19 +523,19 @@ export class AuthService {
         firstName: googleUser.given_name || googleUser.name?.split(' ')[0] || 'User',
         lastName: googleUser.family_name || googleUser.name?.split(' ').slice(1).join(' ') || '',
       });
-      await this.userRepo.save(user);
+      // Mark email as verified (Google already verified)
+      user.verifyEmail();
 
-      // Create auth identity with provider 'google'
       const identity = AuthIdentity.create({
         userId: user.id,
         provider: 'google',
         sub: googleUser.sub,
       });
-      await this.authRepo.save(identity);
-
-      // Mark email as verified (Google already verified)
-      user.verifyEmail();
-      await this.userRepo.save(user);
+      const newUser = user;
+      await this.db.transaction(async (trx) => {
+        await this.userRepo.save(newUser, { db: trx });
+        await this.authRepo.save(identity, { db: trx });
+      });
 
       // Create free subscription, workspace, and default categories
       try {
@@ -722,8 +765,9 @@ export class AuthService {
         throw new AppError('Invalid refresh token', 401);
       }
 
-      // In a real app, you might want to check a whitelist/database for the refresh token
-      // or use a different secret for refresh tokens.
+      if (await this.isRefreshTokenRevoked(payload.userId, payload.iat)) {
+        throw new AppError('Invalid refresh token', 401);
+      }
 
       const user = await this.userRepo.findById(payload.userId);
       if (!user) throw new AppError('User not found', 404);
