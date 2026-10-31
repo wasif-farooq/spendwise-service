@@ -6,6 +6,7 @@ import { AccountService } from '../services/AccountService';
 import { CreateAccountDto, UpdateAccountDto } from '../dto';
 import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
+import { openingBalanceTransactionType } from '../models/Account';
 
 export class AccountRequestRepository {
   private config = ConfigLoader.getInstance();
@@ -106,7 +107,7 @@ export class AccountRequestRepository {
           await trxTransactionService.createTransaction(
             {
               accountId: created.id,
-              type: 'income',
+              type: openingBalanceTransactionType(data.type),
               amount: initialBalance,
               currency: data.currency,
               description: 'Opening Balance',
