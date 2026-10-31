@@ -4,6 +4,7 @@ import { User } from '@domains/auth/models/User';
 import { AuthIdentity } from '@domains/auth/models/AuthIdentity';
 import { AppError } from '@shared/errors/AppError';
 import { googleLoginSchema } from '@domains/auth/validators/auth.validation';
+import { UpdateAuthIdentityQuery } from '@domains/auth/queries/auth/UpdateAuthIdentityQuery';
 import jwt from 'jsonwebtoken';
 
 const WEB_CLIENT_ID = 'web-client.apps.googleusercontent.com';
@@ -59,16 +60,26 @@ const buildUser = (overrides: Partial<any> = {}): User =>
     USER_ID,
   );
 
-const buildService = (existingUser: User | null, existingIdentity: AuthIdentity | null = null) => {
+const buildService = (
+  existingUser: User | null,
+  existingIdentity: AuthIdentity | null = null,
+  options: { bySub?: AuthIdentity | null; local?: AuthIdentity | null; cache?: any } = {},
+) => {
   const userRepo = {
-    findById: jest.fn(),
+    findById: jest.fn().mockResolvedValue(existingUser),
     findByEmail: jest.fn().mockResolvedValue(existingUser),
     save: jest.fn().mockResolvedValue(undefined),
   };
   const savedIdentities: AuthIdentity[] = [];
   const authRepo = {
-    findByUserIdAndProvider: jest.fn().mockImplementation(async () => {
-      return existingIdentity ?? savedIdentities[savedIdentities.length - 1] ?? null;
+    findByProviderAndSub: jest.fn().mockResolvedValue(options.bySub ?? null),
+    findByUserIdAndProvider: jest.fn().mockImplementation(async (_id: string, provider: string) => {
+      if (provider === 'local') return options.local ?? null;
+      return (
+        existingIdentity ??
+        savedIdentities.filter((identity) => identity.provider === 'google').pop() ??
+        null
+      );
     }),
     save: jest.fn().mockImplementation(async (identity: AuthIdentity) => {
       savedIdentities.push(identity);
@@ -81,8 +92,9 @@ const buildService = (existingUser: User | null, existingIdentity: AuthIdentity 
     createFreeSubscription: jest.fn().mockResolvedValue({}),
   };
 
+  const db = { transaction: jest.fn().mockImplementation(async (work: any) => work('trx')) };
   const service = new AuthService(
-    {} as any,
+    db as any,
     userRepo as any,
     authRepo as any,
     {} as any,
@@ -90,10 +102,12 @@ const buildService = (existingUser: User | null, existingIdentity: AuthIdentity 
     workspaceMembersRepository as any,
     workspaceService as any,
     subscriptionService as any,
+    options.cache,
   );
 
   return {
     service,
+    db,
     userRepo,
     authRepo,
     savedIdentities,
@@ -327,6 +341,117 @@ describe('AuthService.loginWithGoogleIdToken', () => {
   });
 });
 
+describe('AuthService Google account matching', () => {
+  const googleIdentity = (sub: string) =>
+    AuthIdentity.create({ userId: USER_ID, provider: 'google', sub });
+  const localIdentity = () =>
+    AuthIdentity.create({ userId: USER_ID, provider: 'local', passwordHash: 'attacker-hash' });
+  const fakeCache = () => {
+    const values = new Map<string, string>();
+    return {
+      values,
+      get: jest.fn(async (key: string) => values.get(key) ?? null),
+      set: jest.fn(async (key: string, value: string) => void values.set(key, value)),
+    };
+  };
+
+  it('finds the user by sub even when the Google email has changed', async () => {
+    const existing = buildUser();
+    const { service, userRepo, authRepo } = buildService(existing, googleIdentity(GOOGLE_SUB), {
+      bySub: googleIdentity(GOOGLE_SUB),
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse(validClaims({ email: 'renamed@example.com' })));
+
+    const result = await service.loginWithGoogleIdToken('the.id.token');
+
+    expect(authRepo.findByProviderAndSub).toHaveBeenCalledWith('google', GOOGLE_SUB);
+    expect(userRepo.findById).toHaveBeenCalledWith(USER_ID);
+    expect(userRepo.findByEmail).not.toHaveBeenCalled();
+    expect(result.user).toBe(existing);
+  });
+
+  it('refuses another Google account with the same email', async () => {
+    const { service, savedIdentities } = buildService(buildUser(), googleIdentity('other-sub'));
+    fetchMock.mockResolvedValueOnce(jsonResponse(validClaims()));
+
+    await expect(service.loginWithGoogleIdToken('the.id.token')).rejects.toMatchObject({
+      statusCode: 409,
+    });
+    expect(savedIdentities).toHaveLength(0);
+  });
+
+  it('keeps the password and 2FA when linking to a verified account', async () => {
+    const local = localIdentity();
+    const user = buildUser({
+      twoFactorEnabled: true,
+      twoFactorMethods: [{ type: 'app', verified: true }],
+    });
+    const cache = fakeCache();
+    const { service } = buildService(user, null, { local, cache });
+    fetchMock.mockResolvedValueOnce(jsonResponse(validClaims()));
+
+    const result = await service.loginWithGoogleIdToken('the.id.token');
+
+    expect(local.passwordHash).toBe('attacker-hash');
+    expect(result.requiresTwoFactor).toBe(true);
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it('removes the password, 2FA and sessions when linking to an unverified account', async () => {
+    const local = localIdentity();
+    const user = buildUser({
+      emailVerified: false,
+      twoFactorEnabled: true,
+      twoFactorMethods: [{ type: 'app', verified: true }],
+    });
+    const cache = fakeCache();
+    const { service, db } = buildService(user, null, { local, cache });
+    const earlier = jwt.sign(
+      {
+        userId: USER_ID,
+        purpose: 'refresh',
+        iat: Math.floor(Date.now() / 1000) - 60,
+      },
+      'unit-test-secret',
+    );
+    fetchMock.mockResolvedValueOnce(jsonResponse(validClaims()));
+
+    const result = await service.loginWithGoogleIdToken('the.id.token');
+
+    expect(db.transaction).toHaveBeenCalled();
+    expect(local.passwordHash).toBeUndefined();
+    expect(user.emailVerified).toBe(true);
+    expect(user.twoFactorEnabled).toBe(false);
+    expect(result.requiresTwoFactor).toBeUndefined();
+
+    await expect(service.refreshToken(earlier)).rejects.toMatchObject({ statusCode: 401 });
+    await expect(service.refreshToken(result.refreshToken!)).resolves.toHaveProperty('token');
+  });
+
+  it('still refreshes when the cache is down', async () => {
+    const cache = {
+      get: jest.fn().mockRejectedValue(new Error('down')),
+      set: jest.fn(),
+    };
+    const { service } = buildService(buildUser(), null, { cache });
+    const token = jwt.sign({ userId: USER_ID, purpose: 'refresh' }, 'unit-test-secret');
+
+    await expect(service.refreshToken(token)).resolves.toHaveProperty('token');
+  });
+
+  it('writes NULL when a password is cleared', async () => {
+    const local = localIdentity();
+    local.clearPassword();
+    const query = jest.fn().mockResolvedValue({ rows: [] });
+
+    await new UpdateAuthIdentityQuery({ query } as any).execute(local);
+
+    const [sql, bindings] = query.mock.calls[0];
+    expect(sql).toContain('"password_hash"');
+    expect(bindings).toContain(null);
+  });
+});
+
 describe('AuthService.loginWithGoogle (authorization code)', () => {
   it('exchanges the code, reads userinfo and logs the user in', async () => {
     const existing = buildUser();
@@ -361,6 +486,41 @@ describe('AuthService.loginWithGoogle (authorization code)', () => {
     expect(result.user).toBe(existing);
     expect(typeof result.token).toBe('string');
     expect(subOf(savedIdentities[0])).toBe(GOOGLE_SUB);
+  });
+
+  it('passes the PKCE verifier to the token exchange when there is one', async () => {
+    const { service } = buildService(buildUser());
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'access-123' }))
+      .mockResolvedValueOnce(
+        jsonResponse({ id: GOOGLE_SUB, email: 'user@example.com', verified_email: true }),
+      );
+
+    await service.loginWithGoogle('auth-code', 'v'.repeat(43));
+
+    const params = new URLSearchParams(fetchMock.mock.calls[0][1].body);
+    expect(params.get('code_verifier')).toBe('v'.repeat(43));
+  });
+
+  it('leaves the verifier out for a client that sent none', async () => {
+    const { service } = buildService(buildUser());
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'access-123' }))
+      .mockResolvedValueOnce(
+        jsonResponse({ id: GOOGLE_SUB, email: 'user@example.com', verified_email: true }),
+      );
+
+    await service.loginWithGoogle('auth-code');
+
+    expect(new URLSearchParams(fetchMock.mock.calls[0][1].body).has('code_verifier')).toBe(false);
+  });
+
+  it('accepts only a well-formed verifier', () => {
+    const parse = (codeVerifier: string) =>
+      googleLoginSchema.safeParse({ body: { code: 'c', codeVerifier } }).success;
+    expect(parse('a'.repeat(43))).toBe(true);
+    expect(parse('a'.repeat(42))).toBe(false);
+    expect(parse('a'.repeat(43) + '!')).toBe(false);
   });
 
   it.each([
