@@ -1,5 +1,9 @@
 import { Entity } from '@shared/Entity';
 
+/** An opening amount on a credit card is what's owed; on anything else it's money held. */
+export const openingBalanceTransactionType = (accountType: string): 'income' | 'expense' =>
+  accountType === 'credit_card' ? 'expense' : 'income';
+
 export type AccountType = 'bank' | 'savings' | 'cash' | 'credit_card' | 'investment';
 export type AccountTrend = 'up' | 'down' | 'stable';
 

@@ -10,6 +10,8 @@ import { ServiceFactory } from '@factories/ServiceFactory';
 import { RepositoryFactory } from '@factories/RepositoryFactory';
 import { requireAuth } from '@shared/middleware/auth.middleware';
 import { requirePermission } from '@shared/middleware/permission.middleware';
+import { AnalyticsFilters } from '@domains/analytics/services/AnalyticsService';
+import { accountAccessFor } from '@domains/workspaces/services/AccountAccess';
 
 const WorkspaceIdParamSchema = z.object({
   workspaceId: z.string().uuid(),
@@ -38,6 +40,12 @@ class AIController {
     return req.params.workspaceId;
   }
 
+  /** Insights only draw on the accounts whose transactions the caller can view. */
+  private async scope(req: Request): Promise<AnalyticsFilters | undefined> {
+    const accounts = (await accountAccessFor(req)).accountIdsWith('transactions:view');
+    return accounts ? { accounts } : undefined;
+  }
+
   async getInsights(req: Request, res: Response) {
     try {
       const workspaceId = this.getWorkspaceId(req);
@@ -47,9 +55,12 @@ class AIController {
 
       const analyticsService = await this.getAnalyticsService();
 
-      const accounts = await this.accountRepo.findByWorkspaceId(workspaceId);
-      const overview = await analyticsService.getOverview(workspaceId, 'month');
-      const categoryTrends = await analyticsService.getCategoryTrends(workspaceId, 1);
+      const scope = await this.scope(req);
+      const accounts = scope?.accounts
+        ? await this.accountRepo.findByWorkspaceId(workspaceId, scope.accounts)
+        : await this.accountRepo.findByWorkspaceId(workspaceId);
+      const overview = await analyticsService.getOverview(workspaceId, 'month', scope);
+      const categoryTrends = await analyticsService.getCategoryTrends(workspaceId, 1, scope);
 
       const insights: Array<{
         type: string;
@@ -119,8 +130,9 @@ class AIController {
       }
 
       const analyticsService = await this.getAnalyticsService();
-      const overview = await analyticsService.getOverview(workspaceId, 'month');
-      const categoryTrends = await analyticsService.getCategoryTrends(workspaceId, 1);
+      const scope = await this.scope(req);
+      const overview = await analyticsService.getOverview(workspaceId, 'month', scope);
+      const categoryTrends = await analyticsService.getCategoryTrends(workspaceId, 1, scope);
 
       const recommendations: Array<{
         category: string;
@@ -170,8 +182,9 @@ class AIController {
       }
 
       const analyticsService = await this.getAnalyticsService();
-      const overview = await analyticsService.getOverview(workspaceId, 'month');
-      const categoryTrends = await analyticsService.getCategoryTrends(workspaceId, 1);
+      const scope = await this.scope(req);
+      const overview = await analyticsService.getOverview(workspaceId, 'month', scope);
+      const categoryTrends = await analyticsService.getCategoryTrends(workspaceId, 1, scope);
 
       const analysis = {
         monthOverview: {

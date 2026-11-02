@@ -3,7 +3,12 @@ import { Attachment } from '../models/Attachment';
 export interface IStorageRepository {
   create(attachment: Partial<Attachment>): Promise<Attachment>;
   findById(id: string): Promise<Attachment | null>;
-  findByWorkspace(workspaceId: string, limit?: number, offset?: number): Promise<Attachment[]>;
+  findByWorkspace(
+    workspaceId: string,
+    limit?: number,
+    offset?: number,
+    accountIds?: string[],
+  ): Promise<Attachment[]>;
   findByUser(userId: string): Promise<Attachment[]>;
   findByBucketAndKey(bucket: string, key: string): Promise<Attachment | null>;
   delete(id: string): Promise<void>;

@@ -6,6 +6,8 @@ import { AccountService } from '../services/AccountService';
 import { CreateAccountDto, UpdateAccountDto } from '../dto';
 import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
+import { openingBalanceTransactionType } from '../models/Account';
+import { AccountAccess, grantCreatorAccess } from '@domains/workspaces/services/AccountAccess';
 
 export class AccountRequestRepository {
   private config = ConfigLoader.getInstance();
@@ -31,26 +33,36 @@ export class AccountRequestRepository {
       }));
   }
 
-  async getAccounts(workspaceId: string, _userId: string) {
+  async getAccounts(workspaceId: string, _userId: string, access?: AccountAccess) {
     if (this.getMode() === 'direct') {
       const service = this.getService();
-      return this.wrap(service.getAccountsByWorkspace(workspaceId));
+      return this.wrap(service.getAccountsByWorkspace(workspaceId, access));
     }
     throw new Error('RPC mode not implemented');
   }
 
-  async getAccountById(workspaceId: string, accountId: string, _userId: string) {
+  async getAccountById(
+    workspaceId: string,
+    accountId: string,
+    _userId: string,
+    access?: AccountAccess,
+  ) {
     if (this.getMode() === 'direct') {
       const service = this.getService();
-      return this.wrap(service.getAccountById(accountId, workspaceId));
+      return this.wrap(service.getAccountById(accountId, workspaceId, access));
     }
     throw new Error('RPC mode not implemented');
   }
 
-  async getTotalBalance(workspaceId: string, targetCurrency: string, _userId: string) {
+  async getTotalBalance(
+    workspaceId: string,
+    targetCurrency: string,
+    _userId: string,
+    access?: AccountAccess,
+  ) {
     if (this.getMode() === 'direct') {
       const service = this.getService();
-      return this.wrap(service.getTotalBalance(workspaceId, targetCurrency));
+      return this.wrap(service.getTotalBalance(workspaceId, targetCurrency, access));
     }
     throw new Error('RPC mode not implemented');
   }
@@ -72,7 +84,13 @@ export class AccountRequestRepository {
     throw new Error('RPC mode not implemented');
   }
 
-  async createWithOpeningBalance(workspaceId: string, userId: string, data: CreateAccountDto) {
+  /** With a restricted `access`, the creator is granted full rights on the new account. */
+  async createWithOpeningBalance(
+    workspaceId: string,
+    userId: string,
+    data: CreateAccountDto,
+    access?: AccountAccess,
+  ) {
     if (this.getMode() === 'direct') {
       const service = this.getService();
       const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
@@ -89,6 +107,7 @@ export class AccountRequestRepository {
           workspaceId,
           trxAccountRepo,
         );
+        await grantCreatorAccess(trxDb, access, created.id);
 
         if (initialBalance > 0) {
           const {
@@ -106,7 +125,7 @@ export class AccountRequestRepository {
           await trxTransactionService.createTransaction(
             {
               accountId: created.id,
-              type: 'income',
+              type: openingBalanceTransactionType(data.type),
               amount: initialBalance,
               currency: data.currency,
               description: 'Opening Balance',
@@ -125,18 +144,24 @@ export class AccountRequestRepository {
     throw new Error('RPC mode not implemented');
   }
 
-  async update(workspaceId: string, accountId: string, _userId: string, data: UpdateAccountDto) {
+  async update(
+    workspaceId: string,
+    accountId: string,
+    userId: string,
+    data: UpdateAccountDto,
+    access?: AccountAccess,
+  ) {
     if (this.getMode() === 'direct') {
       const service = this.getService();
-      return this.wrap(service.updateAccount(accountId, data, workspaceId));
+      return this.wrap(service.updateAccount(accountId, data, workspaceId, userId, access));
     }
     throw new Error('RPC mode not implemented');
   }
 
-  async delete(workspaceId: string, accountId: string, _userId: string) {
+  async delete(workspaceId: string, accountId: string, userId: string, access?: AccountAccess) {
     if (this.getMode() === 'direct') {
       const service = this.getService();
-      return this.wrap(service.deleteAccount(accountId, workspaceId));
+      return this.wrap(service.deleteAccount(accountId, workspaceId, userId, access));
     }
     throw new Error('RPC mode not implemented');
   }

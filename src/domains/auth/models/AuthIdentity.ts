@@ -44,6 +44,11 @@ export class AuthIdentity extends Entity<AuthIdentityProps> {
     this.props.updatedAt = new Date();
   }
 
+  public clearPassword() {
+    this.props.passwordHash = undefined;
+    this.props.updatedAt = new Date();
+  }
+
   public changePassword(passwordHash: string) {
     this.props.passwordHash = passwordHash;
     this.props.updatedAt = new Date();

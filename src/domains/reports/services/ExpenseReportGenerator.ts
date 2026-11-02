@@ -44,6 +44,8 @@ export class ExpenseReportGenerator {
     workspaceId: string,
     dateRange: DateRangePreset,
     customDates?: CustomDateRange,
+    /** Restricts the report to these accounts (the requester's accessible ones); undefined = all. */
+    accountIds?: string[],
   ): Promise<ExpenseReportData> {
     const { startDate, endDate } = resolveDateRange(dateRange, customDates);
 
@@ -58,21 +60,31 @@ export class ExpenseReportGenerator {
     const round = (amount: number) => roundAmount(amount, target);
 
     const totalExpenses = round(
-      await this.convertedExpenseTotal(converter, workspaceId, startDateStr, endDateStr),
+      await this.convertedExpenseTotal(
+        converter,
+        workspaceId,
+        startDateStr,
+        endDateStr,
+        accountIds,
+      ),
     );
 
     // Get account-level stats
-    const accountStats = await this.transactionRepo.getWorkspaceAccountStats(
-      workspaceId,
-      startDateStr,
-      endDateStr,
-    );
+    const accountStats = accountIds
+      ? await this.transactionRepo.getWorkspaceAccountStats(
+          workspaceId,
+          startDateStr,
+          endDateStr,
+          accountIds,
+        )
+      : await this.transactionRepo.getWorkspaceAccountStats(workspaceId, startDateStr, endDateStr);
 
     // Get all transactions for the period (for category/merchant breakdown)
     const transactionsResult = await this.transactionRepo.findByWorkspaceId(workspaceId, {
       startDate: startDateStr,
       endDate: endDateStr,
       limit: 10000,
+      ...(accountIds ? { accountIds } : {}),
     });
 
     // Filter only expenses, each with its amount in the report currency (null: no rate)
@@ -157,6 +169,7 @@ export class ExpenseReportGenerator {
         workspaceId,
         prevStartDate.toISOString().split('T')[0],
         prevEndDate.toISOString().split('T')[0],
+        accountIds,
       );
       if (prevExpenses > 0 && totalExpenses > 0) {
         previousPeriodChange = ((totalExpenses - prevExpenses) / prevExpenses) * 100;
@@ -192,12 +205,16 @@ export class ExpenseReportGenerator {
     workspaceId: string,
     startDate: string,
     endDate: string,
+    accountIds?: string[],
   ): Promise<number> {
-    const rows = await this.transactionRepo.getWorkspaceStatsByCurrency(
-      workspaceId,
-      startDate,
-      endDate,
-    );
+    const rows = accountIds
+      ? await this.transactionRepo.getWorkspaceStatsByCurrency(
+          workspaceId,
+          startDate,
+          endDate,
+          accountIds,
+        )
+      : await this.transactionRepo.getWorkspaceStatsByCurrency(workspaceId, startDate, endDate);
     let total = 0;
     for (const row of rows) {
       const expense = await converter.convert(row.totalExpense, row.currency);

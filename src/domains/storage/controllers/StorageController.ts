@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { StorageService } from '../services/StorageService';
 import { ConfigLoader } from '@config/ConfigLoader';
+import { accountAccessFor } from '@domains/workspaces/services/AccountAccess';
 
 // Extend Express Request type to include user
 declare global {
@@ -231,7 +232,12 @@ export class StorageController {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
 
-      const attachments = await this.service.listByWorkspace(workspaceId, limit, offset);
+      const attachments = await this.service.listByWorkspace(
+        workspaceId,
+        limit,
+        offset,
+        (await accountAccessFor(req)).accountIdsWith('transactions:view'),
+      );
 
       res.json({
         data: attachments,

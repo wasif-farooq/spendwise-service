@@ -17,7 +17,7 @@ export class UpdateAuthIdentityQuery {
     const { sql, bindings } = qb('auth_identities')
       .where({ id: identity.id })
       .update({
-        password_hash: identity.passwordHash,
+        password_hash: identity.passwordHash ?? null,
         last_login_at: identity.getProps().lastLoginAt,
       })
       .toSQL()
