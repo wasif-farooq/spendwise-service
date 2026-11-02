@@ -16,10 +16,8 @@ jest.mock('@factories/ServiceFactory', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const {
-  rejectIfManagedByGooglePlay,
-  syncStoreSubscriptionHandler,
-} = require('@domains/store-billing/storeBilling.middleware');
+const storeBillingMiddleware = require('@domains/store-billing/storeBilling.middleware');
+const { rejectIfManagedByGooglePlay, syncStoreSubscriptionHandler } = storeBillingMiddleware;
 
 const SECRET = 'Bearer rc_webhook_unit_secret_0123456789';
 const quiet = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
