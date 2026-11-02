@@ -26,6 +26,12 @@ jest.mock('@monitoring/logging/StructuredLogger', () => ({
 }));
 
 const mockPermission = { allowed: true };
+// Per-account access is covered by accountAccess.test.ts; here the caller sees every account.
+jest.mock('@domains/workspaces/services/AccountAccess', () => {
+  const actual = jest.requireActual('@domains/workspaces/services/AccountAccess');
+  return { ...actual, accountAccessFor: async () => actual.AccountAccess.unrestricted() };
+});
+
 jest.mock('@shared/middleware/permission.middleware', () => ({
   requirePermission: () => (_req: any, res: any, next: any) =>
     mockPermission.allowed ? next() : res.status(403).json({ message: 'Forbidden' }),

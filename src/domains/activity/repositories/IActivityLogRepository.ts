@@ -5,6 +5,11 @@ export interface ActivityQueryFilters {
   entityId?: string;
   userId?: string;
   action?: string;
+  /**
+   * Hides account and transaction entries outside these accounts (the caller's
+   * accessible ones). Other entity types are unaffected. undefined = no restriction.
+   */
+  accountIds?: string[];
 }
 
 export interface ActivityQueryResult {

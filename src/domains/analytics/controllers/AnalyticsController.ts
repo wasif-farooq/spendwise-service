@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import { AnalyticsRequestRepository } from '../repositories/AnalyticsRequestRepository';
 import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
 import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
+import { accountAccessFor } from '@domains/workspaces/services/AccountAccess';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface DateFilters {
   startDate?: string;
@@ -22,6 +25,39 @@ export class AnalyticsController {
 
   private getUserId(req: Request): string {
     return (req as any).user?.userId || (req as any).user?.id || (req as any).user?.sub;
+  }
+
+  /**
+   * The caller's account and category filters (`accounts`, `categories`: repeated params or a
+   * comma list, as clients serialise arrays), with accounts narrowed to those whose transactions
+   * the caller can view. No account filter → all viewable accounts; a filter naming none of them
+   * matches nothing. Ids that aren't UUIDs are dropped so they can't break the uuid comparison.
+   */
+  private async scopeFilters(
+    req: Request,
+  ): Promise<{ accounts?: string[]; categories?: string[] }> {
+    const ids = (value: unknown): string[] => {
+      const raw = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+      return raw
+        .flatMap((v) => (typeof v === 'string' ? v.split(',') : []))
+        .map((v) => v.trim())
+        .filter((v) => UUID.test(v));
+    };
+    const requested = req.query.accounts !== undefined ? ids(req.query.accounts) : undefined;
+    const categories = ids(req.query.categories);
+    const viewable = (await accountAccessFor(req)).accountIdsWith('transactions:view');
+
+    let accounts: string[] | undefined;
+    if (requested && viewable) {
+      const allowed = new Set(viewable);
+      accounts = requested.filter((id) => allowed.has(id));
+    } else {
+      accounts = requested ?? viewable;
+    }
+    return {
+      ...(accounts ? { accounts } : {}),
+      ...(categories.length ? { categories } : {}),
+    };
   }
 
   private async getOwnerId(workspaceId: string, userId: string): Promise<string> {
@@ -148,11 +184,12 @@ export class AnalyticsController {
         truncated,
         warning,
       } = this.truncateDateRange(filters, maxDays);
+      const scopedFilters = { ...truncatedFilters, ...(await this.scopeFilters(req)) };
 
       const result = await this.analyticsRequestRepository.getOverview(
         workspaceId,
         userId,
-        truncatedFilters,
+        scopedFilters,
       );
 
       if (result.error) {
@@ -190,11 +227,12 @@ export class AnalyticsController {
         truncated,
         warning,
       } = this.truncateDateRange(filters, maxDays);
+      const scopedFilters = { ...truncatedFilters, ...(await this.scopeFilters(req)) };
 
       const result = await this.analyticsRequestRepository.getCategoryTrends(
         workspaceId,
         userId,
-        truncatedFilters,
+        scopedFilters,
       );
 
       if (result.error) {
@@ -231,13 +269,14 @@ export class AnalyticsController {
         truncated,
         warning,
       } = this.truncateDateRange(filters, maxDays);
+      const scopedFilters = { ...truncatedFilters, ...(await this.scopeFilters(req)) };
 
       const result = await this.analyticsRequestRepository.getComparison(
         workspaceId,
         userId,
         period as string,
         parseInt(months as string),
-        truncatedFilters,
+        scopedFilters,
       );
 
       if (result.error) {
@@ -274,11 +313,12 @@ export class AnalyticsController {
         truncated,
         warning,
       } = this.truncateDateRange(filters, maxDays);
+      const scopedFilters = { ...truncatedFilters, ...(await this.scopeFilters(req)) };
 
       const result = await this.analyticsRequestRepository.getSpendingTrend(
         workspaceId,
         period as string,
-        truncatedFilters,
+        scopedFilters,
       );
 
       if (result.error) {
@@ -315,11 +355,13 @@ export class AnalyticsController {
         truncated,
         warning,
       } = this.truncateDateRange(filters, maxDays);
+      const scopedFilters = { ...truncatedFilters, ...(await this.scopeFilters(req)) };
 
       const result = await this.analyticsRequestRepository.getTopMerchants(
         workspaceId,
         userId,
         parseInt(limit as string),
+        scopedFilters,
       );
 
       if (result.error) {

@@ -34,7 +34,7 @@ router.post(
   '/:workspaceId/accounts',
   validateParams(WorkspaceIdParamSchema),
   validateBody(CreateAccountSchema),
-  requirePermission('account:create'),
+  requirePermission('accounts:create'),
   cryptoForNewAccount,
   (req, res) => req.controller.createAccount(req, res),
 );
@@ -43,7 +43,7 @@ router.put(
   validateParams(WorkspaceIdParamSchema),
   validateParams(AccountIdParamSchema),
   validateBody(UpdateAccountSchema),
-  requirePermission('account:update'),
+  requirePermission('accounts:edit'),
   cryptoForAccountUpdate,
   (req, res) => req.controller.updateAccount(req, res),
 );
@@ -51,7 +51,7 @@ router.delete(
   '/:workspaceId/accounts/:id',
   validateParams(WorkspaceIdParamSchema),
   validateParams(AccountIdParamSchema),
-  requirePermission('account:delete'),
+  requirePermission('accounts:delete'),
   (req, res) => req.controller.deleteAccount(req, res),
 );
 
