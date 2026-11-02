@@ -11,6 +11,8 @@ export interface ActivityQueryOptions {
   action?: string;
   limit?: number;
   cursor?: string;
+  /** See ActivityQueryFilters.accountIds. */
+  accountIds?: string[];
 }
 
 export interface EntityHistoryOptions {
@@ -19,6 +21,7 @@ export interface EntityHistoryOptions {
   startDate: string;
   endDate: string;
   limit?: number;
+  accountIds?: string[];
 }
 
 export class ActivityLogService {
@@ -50,6 +53,7 @@ export class ActivityLogService {
     if (options.entityId) filters.entityId = options.entityId;
     if (options.userId) filters.userId = options.userId;
     if (options.action) filters.action = options.action;
+    if (options.accountIds) filters.accountIds = options.accountIds;
 
     return this.repository.findByDateRange(
       workspaceId,
@@ -80,6 +84,7 @@ export class ActivityLogService {
       startDate,
       endDate,
       options.limit || 100,
+      options.accountIds,
     );
   }
 

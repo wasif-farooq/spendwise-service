@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ReportRequestRepository } from '@domains/repositories/ReportRequestRepository';
 import { DateRangePreset, CustomDateRange } from '../types';
+import { accountAccessFor } from '@domains/workspaces/services/AccountAccess';
 
 export class ReportController {
   constructor(private reportRequestRepository: ReportRequestRepository) {}
@@ -91,6 +92,8 @@ export class ReportController {
           dateRange,
           customDates,
           format,
+          userId,
+          accountIds: (await accountAccessFor(req)).accountIdsWith('transactions:view'),
         });
 
         if (result.error) {
@@ -175,6 +178,7 @@ export class ReportController {
           dateRange,
           customDates: parsedCustomDates,
           format,
+          accountIds: (await accountAccessFor(req)).accountIdsWith('transactions:view'),
         });
 
         if (result.error) {

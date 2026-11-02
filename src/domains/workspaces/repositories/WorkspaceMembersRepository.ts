@@ -222,6 +222,22 @@ export class WorkspaceMembersRepository extends BaseRepository<WorkspaceMember> 
     }
   }
 
+  /**
+   * Makes `accountPermissions` the member's complete set of account rows: accounts
+   * left out lose access (rows are enforced, so a stale row is a live grant).
+   */
+  async replaceAccountPermissions(
+    memberId: string,
+    accountPermissions: Record<string, { permissions: string[]; denied: string[] }>,
+  ): Promise<void> {
+    const keep = Object.keys(accountPermissions);
+    await this.db.query(
+      'DELETE FROM workspace_member_account_permissions WHERE member_id = $1 AND NOT (account_id = ANY($2::uuid[]))',
+      [memberId, keep],
+    );
+    await this.saveAccountPermissions(memberId, accountPermissions);
+  }
+
   async getAccountPermissions(
     memberId: string,
   ): Promise<Record<string, { permissions: string[]; denied: string[] }>> {

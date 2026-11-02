@@ -57,6 +57,7 @@ export interface TopMerchant {
 }
 
 export interface AnalyticsFilters {
+  /** Restricts to these accounts (the caller's accessible ones); an empty array matches nothing. */
   accounts?: string[];
   categories?: string[];
   startDate?: string;
@@ -141,7 +142,7 @@ export class AnalyticsService {
     const currParams: any[] = [workspaceId, dateRange.startDate];
     let currQuery = `SELECT t.amount, t.type, t.currency FROM transactions t WHERE t.workspace_id = $1 AND t.date >= $2 AND t.date <= NOW()`;
 
-    if (filters?.accounts?.length) {
+    if (filters?.accounts) {
       currQuery += ` AND t.account_id = ANY($${currParams.length + 1})`;
       currParams.push(filters.accounts);
     }
@@ -155,7 +156,7 @@ export class AnalyticsService {
     const prevParams: any[] = [workspaceId, dateRange.prevStartDate, dateRange.startDate];
     let prevQuery = `SELECT t.amount, t.type, t.currency FROM transactions t WHERE t.workspace_id = $1 AND t.date >= $2 AND t.date < $3`;
 
-    if (filters?.accounts?.length) {
+    if (filters?.accounts) {
       prevQuery += ` AND t.account_id = ANY($${prevParams.length + 1})`;
       prevParams.push(filters.accounts);
     }
@@ -190,13 +191,18 @@ export class AnalyticsService {
     const expenseChange = prevExpense > 0 ? ((currExpense - prevExpense) / prevExpense) * 100 : 0;
 
     // Get accounts and transactions count
+    const accounts = filters?.accounts;
     const accountsResult = await this.db.query(
-      `SELECT COUNT(*) as count FROM accounts WHERE workspace_id = $1 AND is_active = true`,
-      [workspaceId],
+      `SELECT COUNT(*) as count FROM accounts WHERE workspace_id = $1 AND is_active = true${
+        accounts ? ' AND id = ANY($2::uuid[])' : ''
+      }`,
+      accounts ? [workspaceId, accounts] : [workspaceId],
     );
     const transactionsResult = await this.db.query(
-      `SELECT COUNT(*) as count FROM transactions WHERE workspace_id = $1 AND date >= $2 AND date <= NOW()`,
-      [workspaceId, dateRange.startDate],
+      `SELECT COUNT(*) as count FROM transactions WHERE workspace_id = $1 AND date >= $2 AND date <= NOW()${
+        accounts ? ' AND account_id = ANY($3::uuid[])' : ''
+      }`,
+      accounts ? [workspaceId, dateRange.startDate, accounts] : [workspaceId, dateRange.startDate],
     );
 
     return {
@@ -247,7 +253,7 @@ export class AnalyticsService {
     const params: any[] = [workspaceId, startDate.toISOString(), endDate.toISOString()];
     let query = `SELECT COALESCE(c.name, 'Uncategorized') as category, c.id as category_id, t.amount, t.currency FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.workspace_id = $1 AND t.type = 'expense' AND t.date >= $2 AND t.date <= $3`;
 
-    if (filters?.accounts?.length) {
+    if (filters?.accounts) {
       query += ` AND t.account_id = ANY($${params.length + 1})`;
       params.push(filters.accounts);
     }
@@ -307,7 +313,7 @@ export class AnalyticsService {
     const params: any[] = [workspaceId, startDate.toISOString(), endDate.toISOString()];
     let query = `SELECT TO_CHAR(date, '${dateFormat}') as period_key, TO_CHAR(date, '${labelFormat}') as period_label, amount, type, currency FROM transactions WHERE workspace_id = $1 AND date >= $2 AND date <= $3`;
 
-    if (filters?.accounts?.length) {
+    if (filters?.accounts) {
       query += ` AND account_id = ANY($${params.length + 1})`;
       params.push(filters.accounts);
     }
@@ -384,7 +390,7 @@ export class AnalyticsService {
     const params: any[] = [workspaceId, startDate.toISOString(), endDate.toISOString()];
     let query = `SELECT DATE_TRUNC('${dateTrunc}', date) as period, amount, type, currency FROM transactions WHERE workspace_id = $1 AND date >= $2 AND date <= $3`;
 
-    if (filters?.accounts?.length) {
+    if (filters?.accounts) {
       query += ` AND account_id = ANY($${params.length + 1})`;
       params.push(filters.accounts);
     }
@@ -495,7 +501,7 @@ export class AnalyticsService {
     const params: any[] = [workspaceId, startDate.toISOString()];
     let query = `SELECT COALESCE(description, 'Unknown') as merchant, currency, SUM(amount) as total, COUNT(id) as transaction_count, MAX(date) as last_transaction FROM transactions WHERE workspace_id = $1 AND type = 'expense' AND date >= $2 AND date <= NOW() AND description IS NOT NULL`;
 
-    if (filters?.accounts?.length) {
+    if (filters?.accounts) {
       query += ` AND account_id = ANY($${params.length + 1})`;
       params.push(filters.accounts);
     }

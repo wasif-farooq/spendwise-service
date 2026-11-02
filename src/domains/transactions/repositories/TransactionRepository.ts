@@ -268,6 +268,8 @@ export class TransactionRepository {
           type?: string;
           categoryId?: string;
           accountId?: string;
+          /** Restricts to these accounts; an empty array matches nothing. */
+          accountIds?: string[];
           startDate?: string;
           endDate?: string;
           search?: string;
@@ -299,6 +301,11 @@ export class TransactionRepository {
     if (filters?.accountId) {
       whereClause += ` AND t.account_id = $${paramIndex}`;
       params.push(filters.accountId);
+      paramIndex++;
+    }
+    if (filters?.accountIds) {
+      whereClause += ` AND t.account_id = ANY($${paramIndex}::uuid[])`;
+      params.push(filters.accountIds);
       paramIndex++;
     }
     if (filters?.startDate) {
@@ -375,6 +382,7 @@ export class TransactionRepository {
     options: CursorPaginationOptions,
     filters?: {
       accountId?: string;
+      accountIds?: string[];
       categoryId?: string;
       category?: string;
       type?: string;
@@ -407,6 +415,8 @@ export class TransactionRepository {
       startDate?: string;
       endDate?: string;
       linkedStatus?: 'all' | 'linked' | 'unlinked';
+      /** Restricts to these accounts; an empty array matches nothing. */
+      accountIds?: string[];
     } = {},
   ): Promise<{ transactions: Transaction[]; total: number }> {
     const {
@@ -414,6 +424,7 @@ export class TransactionRepository {
       offset = 0,
       search,
       accountId,
+      accountIds,
       categoryId,
       category,
       type,
@@ -429,6 +440,12 @@ export class TransactionRepository {
     if (accountId) {
       whereClause += ` AND t.account_id = $${paramIndex}`;
       params.push(accountId);
+      paramIndex++;
+    }
+
+    if (accountIds) {
+      whereClause += ` AND t.account_id = ANY($${paramIndex}::uuid[])`;
+      params.push(accountIds);
       paramIndex++;
     }
 
@@ -632,6 +649,7 @@ export class TransactionRepository {
     workspaceId: string,
     startDate?: string,
     endDate?: string,
+    accountIds?: string[],
   ): Promise<
     Array<{
       accountId: string;
@@ -646,6 +664,12 @@ export class TransactionRepository {
     let whereClause = 'WHERE t.workspace_id = $1';
     const params: any[] = [workspaceId];
     let paramIndex = 2;
+
+    if (accountIds) {
+      whereClause += ` AND t.account_id = ANY($${paramIndex}::uuid[])`;
+      params.push(accountIds);
+      paramIndex++;
+    }
 
     if (startDate) {
       whereClause += ` AND t.date >= $${paramIndex}`;
@@ -692,11 +716,16 @@ export class TransactionRepository {
     workspaceId: string,
     startDate?: string,
     endDate?: string,
+    accountIds?: string[],
   ): Promise<
     Array<{ currency: string; totalIncome: number; totalExpense: number; transactionCount: number }>
   > {
     const params: any[] = [workspaceId];
     let whereClause = 'WHERE workspace_id = $1';
+    if (accountIds) {
+      params.push(accountIds);
+      whereClause += ` AND account_id = ANY($${params.length}::uuid[])`;
+    }
     if (startDate) {
       params.push(startDate);
       whereClause += ` AND date >= $${params.length}`;

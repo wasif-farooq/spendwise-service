@@ -24,11 +24,16 @@ export class AccountRepository implements IAccountRepository {
     return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
   }
 
-  async findByWorkspaceId(workspaceId: string): Promise<Account[]> {
-    const result = await this.dbToUse.query(
-      'SELECT * FROM accounts WHERE workspace_id = $1 ORDER BY created_at DESC',
-      [workspaceId],
-    );
+  async findByWorkspaceId(workspaceId: string, accountIds?: string[]): Promise<Account[]> {
+    const result = accountIds
+      ? await this.dbToUse.query(
+          'SELECT * FROM accounts WHERE workspace_id = $1 AND id = ANY($2::uuid[]) ORDER BY created_at DESC',
+          [workspaceId, accountIds],
+        )
+      : await this.dbToUse.query(
+          'SELECT * FROM accounts WHERE workspace_id = $1 ORDER BY created_at DESC',
+          [workspaceId],
+        );
     return result.rows.map((row: any) => this.mapToEntity(row));
   }
 
@@ -126,11 +131,19 @@ export class AccountRepository implements IAccountRepository {
     await this.dbToUse.query('DELETE FROM accounts WHERE workspace_id = $1', [workspaceId]);
   }
 
-  async findAllWithBalancesForWorkspace(workspaceId: string): Promise<AccountWithBalance[]> {
-    const result = await this.dbToUse.query(
-      'SELECT id, name, balance, currency FROM accounts WHERE workspace_id = $1',
-      [workspaceId],
-    );
+  async findAllWithBalancesForWorkspace(
+    workspaceId: string,
+    accountIds?: string[],
+  ): Promise<AccountWithBalance[]> {
+    const result = accountIds
+      ? await this.dbToUse.query(
+          'SELECT id, name, balance, currency FROM accounts WHERE workspace_id = $1 AND id = ANY($2::uuid[])',
+          [workspaceId, accountIds],
+        )
+      : await this.dbToUse.query(
+          'SELECT id, name, balance, currency FROM accounts WHERE workspace_id = $1',
+          [workspaceId],
+        );
     return result.rows.map((row: any) => ({
       id: row.id,
       name: row.name,

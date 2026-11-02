@@ -304,11 +304,11 @@ export class WorkspaceService {
       targetMember.updateStatus(dto.status);
     }
 
-    // Update account permissions if provided
+    // Update account permissions if provided: the payload is the member's full
+    // set (the forms send every account with access), so accounts left out lose it.
     if (dto.accountPermissions) {
       if (Object.keys(dto.accountPermissions).length > 0) {
-        // Save permissions when object has content
-        await this.workspaceMembersRepository.saveAccountPermissions(
+        await this.workspaceMembersRepository.replaceAccountPermissions(
           memberId,
           dto.accountPermissions,
         );
@@ -855,9 +855,16 @@ export class WorkspaceService {
 
     member.addRole(roleId);
 
-    // Save account permissions if provided
-    if (accountPermissions && Object.keys(accountPermissions).length > 0) {
-      await this.workspaceMembersRepository.saveAccountPermissions(memberId, accountPermissions);
+    // Account permissions, when sent, replace the member's set ({} clears it).
+    if (accountPermissions) {
+      if (Object.keys(accountPermissions).length > 0) {
+        await this.workspaceMembersRepository.replaceAccountPermissions(
+          memberId,
+          accountPermissions,
+        );
+      } else {
+        await this.workspaceMembersRepository.deleteAccountPermissions(memberId);
+      }
     }
 
     await this.workspaceMembersRepository.save(member);
@@ -970,12 +977,16 @@ export class WorkspaceService {
     const accountPermissions = await this.workspaceMembersRepository.getAccountPermissions(
       member.id,
     );
+    const workspace = await this.workspaceRepository.findById(workspaceId);
 
     return {
       member,
       roles,
       permissions,
       accountPermissions,
+      // The owner and `*` roles see every account; everyone else only the
+      // accounts in accountPermissions (none listed: no accounts).
+      unrestrictedAccounts: workspace?.ownerId === userId || permissions.includes('*'),
     };
   }
 

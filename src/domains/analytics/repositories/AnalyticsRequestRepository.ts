@@ -87,10 +87,15 @@ export class AnalyticsRequestRepository {
     throw new Error('RPC mode not implemented');
   }
 
-  async getTopMerchants(workspaceId: string, userId: string, limit: number) {
+  async getTopMerchants(
+    workspaceId: string,
+    userId: string,
+    limit: number,
+    filters?: AnalyticsFilters,
+  ) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
-      return this.wrap(service.getTopMerchants(workspaceId, 'month', limit));
+      return this.wrap(service.getTopMerchants(workspaceId, 'month', limit, filters));
     }
     throw new Error('RPC mode not implemented');
   }

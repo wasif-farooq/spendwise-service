@@ -3,6 +3,7 @@ import { TransactionRequestRepository } from '../repositories/TransactionRequest
 import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
 import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
 import { AppError } from '@shared/errors/AppError';
+import { accountAccessFor } from '@domains/workspaces/services/AccountAccess';
 import {
   CreateTransactionDTO,
   UpdateTransactionDTO,
@@ -80,6 +81,7 @@ export class TransactionController {
             endDate: endDate as string,
             search: search as string,
           },
+          await accountAccessFor(req),
         );
 
         if (result.error) {
@@ -105,6 +107,7 @@ export class TransactionController {
             endDate: endDate as string,
             search: search as string,
           },
+          await accountAccessFor(req),
         );
 
         if (result.error) {
@@ -129,6 +132,7 @@ export class TransactionController {
           startDate: startDate as string,
           endDate: endDate as string,
         },
+        await accountAccessFor(req),
       );
 
       if (result.error) {
@@ -170,6 +174,7 @@ export class TransactionController {
             startDate: startDate as string,
             endDate: endDate as string,
           },
+          await accountAccessFor(req),
         );
 
         if (result.error) {
@@ -193,6 +198,7 @@ export class TransactionController {
           startDate: startDate as string,
           endDate: endDate as string,
         },
+        await accountAccessFor(req),
       );
 
       if (result.error) {
@@ -217,6 +223,7 @@ export class TransactionController {
       const result = await this.transactionRequestRepository.getTransactionWithDetails(
         id,
         workspaceId,
+        await accountAccessFor(req),
       );
 
       if (result.error) {
@@ -249,6 +256,10 @@ export class TransactionController {
         throw new AppError('Transfer type is disabled. Use linked transactions instead.', 400);
       }
 
+      // Before the plan-limit check, so an inaccessible account answers 404.
+      const access = await accountAccessFor(req);
+      access.assert(data.accountId, 'transactions:create');
+
       if (this.subscriptionRequestRepository) {
         const currentMonthCount = await this.transactionRequestRepository.countByAccountThisMonth(
           data.accountId,
@@ -272,7 +283,12 @@ export class TransactionController {
         );
       }
 
-      const result = await this.transactionRequestRepository.create(workspaceId, userId, data);
+      const result = await this.transactionRequestRepository.create(
+        workspaceId,
+        userId,
+        data,
+        access,
+      );
 
       if (result.error) {
         throw new AppError(result.error, result.statusCode);
@@ -299,7 +315,13 @@ export class TransactionController {
         throw new AppError('Transfer type is disabled. Use linked transactions instead.', 400);
       }
 
-      const result = await this.transactionRequestRepository.update(workspaceId, id, userId, data);
+      const result = await this.transactionRequestRepository.update(
+        workspaceId,
+        id,
+        userId,
+        data,
+        await accountAccessFor(req),
+      );
 
       if (result.error) {
         throw new AppError(result.error, result.statusCode);
@@ -321,7 +343,12 @@ export class TransactionController {
         throw new AppError('Workspace not found', 404);
       }
 
-      const result = await this.transactionRequestRepository.delete(workspaceId, id, userId);
+      const result = await this.transactionRequestRepository.delete(
+        workspaceId,
+        id,
+        userId,
+        await accountAccessFor(req),
+      );
 
       if (result.error) {
         throw new AppError(result.error, result.statusCode);
@@ -344,7 +371,13 @@ export class TransactionController {
         throw new AppError('Workspace not found', 404);
       }
 
-      const result = await this.transactionRequestRepository.link(workspaceId, id, userId, data);
+      const result = await this.transactionRequestRepository.link(
+        workspaceId,
+        id,
+        userId,
+        data,
+        await accountAccessFor(req),
+      );
 
       if (result.error) {
         throw new AppError(result.error, result.statusCode);
@@ -367,7 +400,13 @@ export class TransactionController {
       }
 
       const dto = { linkedId: req.body.linkedId };
-      const result = await this.transactionRequestRepository.unlink(workspaceId, id, userId, dto);
+      const result = await this.transactionRequestRepository.unlink(
+        workspaceId,
+        id,
+        userId,
+        dto,
+        await accountAccessFor(req),
+      );
 
       if (result.error) {
         throw new AppError(result.error, result.statusCode);
@@ -394,6 +433,7 @@ export class TransactionController {
         workspaceId,
         startDate as string,
         endDate as string,
+        await accountAccessFor(req),
       );
 
       if (result.error) {
@@ -419,6 +459,7 @@ export class TransactionController {
         workspaceId,
         startDate as string,
         endDate as string,
+        await accountAccessFor(req),
       );
 
       if (result.error) {
@@ -445,6 +486,7 @@ export class TransactionController {
         startDate as string,
         endDate as string,
         typeof currency === 'string' && /^[A-Za-z]{3,10}$/.test(currency) ? currency : undefined,
+        await accountAccessFor(req),
       );
 
       if (result.error) {
@@ -467,7 +509,12 @@ export class TransactionController {
         throw new AppError('Workspace not found', 404);
       }
 
-      const result = await this.transactionRequestRepository.transfer(workspaceId, userId, data);
+      const result = await this.transactionRequestRepository.transfer(
+        workspaceId,
+        userId,
+        data,
+        await accountAccessFor(req),
+      );
 
       if (result.error) {
         throw new AppError(result.error, result.statusCode);

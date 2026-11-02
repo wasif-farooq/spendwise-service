@@ -65,6 +65,8 @@ export interface ReceiptScanInput {
   userId: string;
   image: Buffer;
   mimeType: ReceiptImageMimeType;
+  /** Accounts the suggestion may come from (the caller's bookable ones); undefined = all. */
+  accountIds?: string[];
 }
 
 export interface ReceiptScanServiceDeps {
@@ -223,7 +225,9 @@ export class ReceiptScanService {
       this.deps.accounts.findByWorkspaceId(input.workspaceId),
     ]);
     const expenseCategories = categories.filter((c) => c.type !== 'income' && c.id);
-    const byActivity = [...accounts].sort(
+    const allowed = input.accountIds ? new Set(input.accountIds) : null;
+    const usable = allowed ? accounts.filter((a) => allowed.has(a.id)) : accounts;
+    const byActivity = [...usable].sort(
       (a, b) => (b.lastActivity?.getTime() ?? 0) - (a.lastActivity?.getTime() ?? 0),
     );
     const currencyHint = byActivity[0]?.currency?.toUpperCase() || 'USD';

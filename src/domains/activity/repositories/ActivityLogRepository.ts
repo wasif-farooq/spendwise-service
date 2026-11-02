@@ -7,6 +7,13 @@ import {
 } from './IActivityLogRepository';
 import { ActivityLogProps } from '../models/ActivityLog';
 
+/** Account/transaction entries are kept only when they belong to one of `$n` (text[]). */
+const accountScopeClause = (n: number) =>
+  ` AND (entity_type NOT IN ('account', 'transaction')` +
+  ` OR (entity_type = 'account' AND entity_id::text = ANY($${n}::text[]))` +
+  ` OR (entity_type = 'transaction' AND (new_values->>'accountId' = ANY($${n}::text[])` +
+  ` OR old_values->>'accountId' = ANY($${n}::text[]))))`;
+
 export class ActivityLogRepository implements IActivityLogRepository {
   constructor(private db: DatabaseFacade) {}
 
@@ -103,6 +110,12 @@ export class ActivityLogRepository implements IActivityLogRepository {
       paramIndex++;
     }
 
+    if (filters?.accountIds) {
+      whereClause += accountScopeClause(paramIndex);
+      params.push(filters.accountIds);
+      paramIndex++;
+    }
+
     if (cursor) {
       try {
         const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
@@ -154,16 +167,23 @@ export class ActivityLogRepository implements IActivityLogRepository {
     startDate: Date,
     endDate: Date,
     limit = 100,
+    accountIds?: string[],
   ): Promise<any[]> {
+    const params: any[] = [workspaceId, entityType, entityId, startDate, endDate, limit];
+    let scope = '';
+    if (accountIds) {
+      params.push(accountIds);
+      scope = accountScopeClause(params.length);
+    }
     const result = await this.db.query(
       `SELECT id, workspace_id, user_id, entity_type, entity_id, action,
                     old_values, new_values, metadata, activity_date, created_at
              FROM activity_logs
              WHERE workspace_id = $1 AND entity_type = $2 AND entity_id = $3
-               AND activity_date >= $4 AND activity_date < $5
+               AND activity_date >= $4 AND activity_date < $5${scope}
              ORDER BY activity_date DESC, id DESC
              LIMIT $6`,
-      [workspaceId, entityType, entityId, startDate, endDate, limit],
+      params,
     );
     return result.rows.map(this.mapRow);
   }

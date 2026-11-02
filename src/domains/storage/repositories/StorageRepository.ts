@@ -41,10 +41,26 @@ export class StorageRepository implements IStorageRepository {
     return result.rows[0] ? this.mapToEntity(result.rows[0]) : null;
   }
 
-  async findByWorkspace(workspaceId: string, limit = 50, offset = 0): Promise<Attachment[]> {
+  /**
+   * With `accountIds`, receipts attached to transactions outside those accounts are
+   * left out (files not attached to any transaction stay listed).
+   */
+  async findByWorkspace(
+    workspaceId: string,
+    limit = 50,
+    offset = 0,
+    accountIds?: string[],
+  ): Promise<Attachment[]> {
+    const scope = accountIds
+      ? ` AND NOT EXISTS (
+            SELECT 1 FROM transactions t
+             WHERE t.workspace_id = $1
+               AND ${this.tableName}.id = ANY(t.receipt_ids)
+               AND NOT (t.account_id = ANY($4::uuid[])))`
+      : '';
     const result = await this.db.query(
-      `SELECT * FROM ${this.tableName} WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
-      [workspaceId, limit, offset],
+      `SELECT * FROM ${this.tableName} WHERE workspace_id = $1${scope} ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+      accountIds ? [workspaceId, limit, offset, accountIds] : [workspaceId, limit, offset],
     );
     return result.rows.map((row: any) => this.mapToEntity(row));
   }

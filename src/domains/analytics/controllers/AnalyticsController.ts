@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AnalyticsRequestRepository } from '../repositories/AnalyticsRequestRepository';
 import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
 import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
+import { accountAccessFor } from '@domains/workspaces/services/AccountAccess';
 
 interface DateFilters {
   startDate?: string;
@@ -22,6 +23,12 @@ export class AnalyticsController {
 
   private getUserId(req: Request): string {
     return (req as any).user?.userId || (req as any).user?.id || (req as any).user?.sub;
+  }
+
+  /** Analytics only ever cover the accounts whose transactions the caller can view. */
+  private async accessibleAccounts(req: Request): Promise<{ accounts?: string[] }> {
+    const accounts = (await accountAccessFor(req)).accountIdsWith('transactions:view');
+    return accounts ? { accounts } : {};
   }
 
   private async getOwnerId(workspaceId: string, userId: string): Promise<string> {
@@ -148,11 +155,12 @@ export class AnalyticsController {
         truncated,
         warning,
       } = this.truncateDateRange(filters, maxDays);
+      const scopedFilters = { ...truncatedFilters, ...(await this.accessibleAccounts(req)) };
 
       const result = await this.analyticsRequestRepository.getOverview(
         workspaceId,
         userId,
-        truncatedFilters,
+        scopedFilters,
       );
 
       if (result.error) {
@@ -190,11 +198,12 @@ export class AnalyticsController {
         truncated,
         warning,
       } = this.truncateDateRange(filters, maxDays);
+      const scopedFilters = { ...truncatedFilters, ...(await this.accessibleAccounts(req)) };
 
       const result = await this.analyticsRequestRepository.getCategoryTrends(
         workspaceId,
         userId,
-        truncatedFilters,
+        scopedFilters,
       );
 
       if (result.error) {
@@ -231,13 +240,14 @@ export class AnalyticsController {
         truncated,
         warning,
       } = this.truncateDateRange(filters, maxDays);
+      const scopedFilters = { ...truncatedFilters, ...(await this.accessibleAccounts(req)) };
 
       const result = await this.analyticsRequestRepository.getComparison(
         workspaceId,
         userId,
         period as string,
         parseInt(months as string),
-        truncatedFilters,
+        scopedFilters,
       );
 
       if (result.error) {
@@ -274,11 +284,12 @@ export class AnalyticsController {
         truncated,
         warning,
       } = this.truncateDateRange(filters, maxDays);
+      const scopedFilters = { ...truncatedFilters, ...(await this.accessibleAccounts(req)) };
 
       const result = await this.analyticsRequestRepository.getSpendingTrend(
         workspaceId,
         period as string,
-        truncatedFilters,
+        scopedFilters,
       );
 
       if (result.error) {
@@ -315,11 +326,13 @@ export class AnalyticsController {
         truncated,
         warning,
       } = this.truncateDateRange(filters, maxDays);
+      const scopedFilters = { ...truncatedFilters, ...(await this.accessibleAccounts(req)) };
 
       const result = await this.analyticsRequestRepository.getTopMerchants(
         workspaceId,
         userId,
         parseInt(limit as string),
+        scopedFilters,
       );
 
       if (result.error) {

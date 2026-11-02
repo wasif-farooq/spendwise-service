@@ -3,6 +3,7 @@ import { AppError } from '@shared/errors/AppError';
 import type { ConnectionService } from '../services/ConnectionService';
 import { ConnectionError } from '../services/ConnectionService';
 import { ConnectionSyncError } from '../services/ConnectionSyncService';
+import { accountAccessFor } from '@domains/workspaces/services/AccountAccess';
 
 const userIdOf = (req: Request): string => {
   const user = (req as any).user;
@@ -53,13 +54,16 @@ export class ConnectionsController {
 
   providers = (_req: Request, res: Response) => this.run(res, 200, async (s) => s.listProviders());
 
-  list = (req: Request, res: Response) => this.run(res, 200, (s) => s.list(req.params.workspaceId));
+  list = (req: Request, res: Response) =>
+    this.run(res, 200, async (s) => s.list(req.params.workspaceId, await accountAccessFor(req)));
 
   create = (req: Request, res: Response) =>
     this.run(res, 201, (s) => s.create(req.params.workspaceId, userIdOf(req), req.body));
 
   assets = (req: Request, res: Response) =>
-    this.run(res, 200, (s) => s.discover(req.params.workspaceId, req.params.id));
+    this.run(res, 200, async (s) =>
+      s.discover(req.params.workspaceId, req.params.id, await accountAccessFor(req)),
+    );
 
   async link(req: Request, res: Response) {
     try {
@@ -69,6 +73,7 @@ export class ConnectionsController {
         userIdOf(req),
         req.params.id,
         req.body.links,
+        await accountAccessFor(req),
       );
       res.setHeader('Cache-Control', 'no-store');
       res.status(result.pending ? 202 : 200).json({ data: result });
@@ -78,26 +83,30 @@ export class ConnectionsController {
   }
 
   unlink = (req: Request, res: Response) =>
-    this.run(res, 200, (s) =>
+    this.run(res, 200, async (s) =>
       s.unlink(
         req.params.workspaceId,
         userIdOf(req),
         req.params.id,
         req.params.linkId,
         flag(req.query.deleteImported),
+        await accountAccessFor(req),
       ),
     );
 
   sync = (req: Request, res: Response) =>
-    this.run(res, 200, (s) => s.sync(req.params.workspaceId, userIdOf(req), req.params.id));
+    this.run(res, 200, async (s) =>
+      s.sync(req.params.workspaceId, userIdOf(req), req.params.id, await accountAccessFor(req)),
+    );
 
   remove = (req: Request, res: Response) =>
-    this.run(res, 204, (s) =>
+    this.run(res, 204, async (s) =>
       s.remove(
         req.params.workspaceId,
         userIdOf(req),
         req.params.id,
         flag(req.query.deleteImported),
+        await accountAccessFor(req),
       ),
     );
 }
