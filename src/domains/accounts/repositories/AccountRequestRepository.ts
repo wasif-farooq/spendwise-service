@@ -6,7 +6,7 @@ import { AccountService } from '../services/AccountService';
 import { CreateAccountDto, UpdateAccountDto } from '../dto';
 import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
-import { openingBalanceTransactionType } from '../models/Account';
+import { openingBalanceTransaction } from '../models/Account';
 import { AccountAccess, grantCreatorAccess } from '@domains/workspaces/services/AccountAccess';
 
 export class AccountRequestRepository {
@@ -97,19 +97,20 @@ export class AccountRequestRepository {
       const repoFactory = new RepositoryFactory(db);
       const accountRepo = repoFactory.createAccountRepository();
 
-      const initialBalance = data.balance || 0;
+      const { openingBalanceType, ...accountData } = data;
+      const opening = openingBalanceTransaction(data.type, data.balance, openingBalanceType);
 
       const account = await db.transaction(async (trxDb) => {
         const trxAccountRepo = accountRepo.withDb(trxDb);
         const created = await service.createAccountWithRepo(
-          data,
+          accountData,
           userId,
           workspaceId,
           trxAccountRepo,
         );
         await grantCreatorAccess(trxDb, access, created.id);
 
-        if (initialBalance > 0) {
+        if (opening) {
           const {
             TransactionService,
           } = require('@domains/transactions/services/TransactionService');
@@ -125,8 +126,8 @@ export class AccountRequestRepository {
           await trxTransactionService.createTransaction(
             {
               accountId: created.id,
-              type: openingBalanceTransactionType(data.type),
-              amount: initialBalance,
+              type: opening.type,
+              amount: opening.amount,
               currency: data.currency,
               description: 'Opening Balance',
               date: new Date().toISOString(),

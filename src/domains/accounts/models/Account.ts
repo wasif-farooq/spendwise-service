@@ -4,6 +4,19 @@ import { Entity } from '@shared/Entity';
 export const openingBalanceTransactionType = (accountType: string): 'income' | 'expense' =>
   accountType === 'credit_card' ? 'expense' : 'income';
 
+/**
+ * The transaction an account's opening amount is recorded as, or null when there is none.
+ * The user's explicit choice wins; otherwise it falls back to the per-type default.
+ */
+export const openingBalanceTransaction = (
+  accountType: string,
+  amount: number | undefined,
+  requestedType?: 'income' | 'expense',
+): { type: 'income' | 'expense'; amount: number } | null => {
+  if (!amount || amount <= 0) return null;
+  return { type: requestedType ?? openingBalanceTransactionType(accountType), amount };
+};
+
 export type AccountType = 'bank' | 'savings' | 'cash' | 'credit_card' | 'investment';
 export type AccountTrend = 'up' | 'down' | 'stable';
 
