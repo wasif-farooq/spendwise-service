@@ -9,12 +9,22 @@ import {
   UpdateTransactionDTO,
   TransferDTO,
 } from '../services/TransactionService';
+import { TransactionLimitService } from '../services/TransactionLimit';
+
+/** Error body with the `code` (and plan-limit details) some errors carry. */
+const errorBody = (error: any) => ({
+  message: error.message,
+  ...(error?.code && typeof error.code === 'string' ? { code: error.code } : {}),
+  ...(error?.extra && typeof error.extra === 'object' ? error.extra : {}),
+});
 
 export class TransactionController {
   constructor(
     private transactionRequestRepository: TransactionRequestRepository,
     private subscriptionRequestRepository?: SubscriptionRequestRepository,
     private workspaceRequestRepository?: WorkspaceRequestRepository,
+    /** Monthly transaction allowance (limits.transactions); resolved lazily, after the DB is up. */
+    private getTransactionLimit?: () => TransactionLimitService,
   ) {}
 
   private getWorkspaceId(req: Request): string {
@@ -260,28 +270,8 @@ export class TransactionController {
       const access = await accountAccessFor(req);
       access.assert(data.accountId, 'transactions:create');
 
-      if (this.subscriptionRequestRepository) {
-        const currentMonthCount = await this.transactionRequestRepository.countByAccountThisMonth(
-          data.accountId,
-        );
-
-        let ownerId = userId;
-        if (this.workspaceRequestRepository) {
-          const workspaceResult = await this.workspaceRequestRepository.getById(
-            workspaceId,
-            userId,
-          );
-          if (!workspaceResult.error && workspaceResult.data) {
-            ownerId = workspaceResult.data.ownerId;
-          }
-        }
-
-        await this.subscriptionRequestRepository.checkAccountTransactionLimit(
-          ownerId,
-          data.accountId,
-          currentMonthCount,
-        );
-      }
+      // 402 TRANSACTION_LIMIT_REACHED once the workspace owner's plan allowance is used up.
+      await this.getTransactionLimit?.().assertCanAdd(workspaceId, 1);
 
       const result = await this.transactionRequestRepository.create(
         workspaceId,
@@ -296,7 +286,7 @@ export class TransactionController {
 
       res.status(201).json(result.data?.toJSON ? result.data.toJSON() : result.data);
     } catch (error: any) {
-      res.status(error.statusCode || 500).json({ message: error.message });
+      res.status(error.statusCode || 500).json(errorBody(error));
     }
   }
 
@@ -509,11 +499,19 @@ export class TransactionController {
         throw new AppError('Workspace not found', 404);
       }
 
+      // Before the plan-limit check, so an inaccessible account answers 404.
+      const access = await accountAccessFor(req);
+      access.assert(data.fromAccountId, 'transactions:create', 'Source account not found');
+      access.assert(data.toAccountId, 'transactions:create', 'Destination account not found');
+
+      // A transfer writes two rows (withdrawal + deposit), so it uses two of the allowance.
+      await this.getTransactionLimit?.().assertCanAdd(workspaceId, 2);
+
       const result = await this.transactionRequestRepository.transfer(
         workspaceId,
         userId,
         data,
-        await accountAccessFor(req),
+        access,
       );
 
       if (result.error) {
@@ -527,7 +525,7 @@ export class TransactionController {
         deposit: result.data?.deposit?.toJSON ? result.data.deposit.toJSON() : result.data?.deposit,
       });
     } catch (error: any) {
-      res.status(error.statusCode || 500).json({ message: error.message });
+      res.status(error.statusCode || 500).json(errorBody(error));
     }
   }
 }

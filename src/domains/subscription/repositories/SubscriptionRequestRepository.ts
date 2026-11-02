@@ -79,18 +79,6 @@ export class SubscriptionRequestRepository {
     throw new Error('RPC mode not implemented');
   }
 
-  async checkAccountTransactionLimit(
-    userId: string,
-    accountId: string,
-    currentMonthCount: number,
-  ): Promise<void> {
-    if (this.getMode() === 'direct') {
-      const service = this.getService();
-      return service.checkAccountTransactionLimit(userId, accountId, currentMonthCount);
-    }
-    throw new Error('RPC mode not implemented');
-  }
-
   async checkTransactionHistoryLimit(userId: string, startDate: string | undefined): Promise<void> {
     if (this.getMode() === 'direct') {
       const service = this.getService();

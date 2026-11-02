@@ -228,16 +228,4 @@ export class TransactionRequestRepository {
     }
     throw new Error('RPC mode not implemented');
   }
-
-  async countByAccountThisMonth(accountId: string): Promise<number> {
-    if (this.getMode() === 'direct') {
-      const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-      const {
-        TransactionRepository,
-      } = require('@domains/transactions/repositories/TransactionRepository');
-      const repo = new TransactionRepository(db);
-      return repo.countByAccountThisMonth(accountId);
-    }
-    throw new Error('RPC mode not implemented');
-  }
 }

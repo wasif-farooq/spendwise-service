@@ -520,16 +520,6 @@ export class TransactionRepository {
     };
   }
 
-  async countByAccountThisMonth(accountId: string): Promise<number> {
-    const result = await this.dbToUse.query(
-      `SELECT COUNT(*) as count FROM transactions 
-             WHERE account_id = $1 
-             AND created_at >= date_trunc('month', NOW())`,
-      [accountId],
-    );
-    return parseInt(result.rows[0]?.count || '0');
-  }
-
   async countByWorkspaceId(workspaceId: string): Promise<number> {
     const result = await this.dbToUse.query(
       'SELECT COUNT(*) as count FROM transactions WHERE workspace_id = $1',

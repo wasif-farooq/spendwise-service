@@ -118,6 +118,9 @@ router.get(
   (req, res) => req.controller.getTransactionById(req, res),
 );
 
+// POST create (1 row) and POST transfer (2 rows) answer 402
+// { message, code: 'TRANSACTION_LIMIT_REACHED', feature, limit, used, resetsAt }
+// once the workspace owner's monthly allowance is used up (TransactionLimit.ts).
 router.post(
   '/:workspaceId/accounts/:accountId/transactions',
   validateParams(WorkspaceIdParamSchema),
