@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { SubscriptionRequestRepository } from '../repositories/SubscriptionRequestRepository';
 import { AccountRequestRepository } from '@domains/accounts/repositories/AccountRequestRepository';
 import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
+import { billingFieldsOf } from '@domains/store-billing/subscriptionSource';
 
 export class SubscriptionController {
   constructor(
@@ -75,6 +76,7 @@ export class SubscriptionController {
             startDate: new Date(),
             features: defaultPlan?.features || [],
             limits: defaultPlan?.limits || {},
+            ...billingFieldsOf(null),
           },
           featureUsage,
         });
@@ -91,6 +93,16 @@ export class SubscriptionController {
           features: subscription.featuresSnapshot || plan?.features || [],
           limits: subscription.limitsSnapshot || plan?.limits || {},
           paymentProvider: subscription.paymentProvider,
+          // P15: who bills the plan, and the store's renewal facts.
+          ...billingFieldsOf({
+            status: subscription.status,
+            paymentProvider: subscription.paymentProvider,
+            planKey: plan?.name,
+            cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+            currentPeriodEnd: subscription.currentPeriodEnd,
+            billingCycle: subscription.billingCycle,
+            storeManagementUrl: subscription.storeManagementUrl,
+          }),
         },
         featureUsage,
       });

@@ -57,6 +57,11 @@ export class UserSubscriptionRepository extends BaseRepository<UserSubscription>
         trialEndsAt: row.trial_ends_at,
         paymentProvider: row.payment_provider,
         merchantSubscriptionId: row.merchant_subscription_id,
+        billingCycle: row.billing_cycle ?? undefined,
+        cancelAtPeriodEnd: row.cancel_at_period_end ?? undefined,
+        storeProductId: row.store_product_id ?? null,
+        storeManagementUrl: row.store_management_url ?? null,
+        storeState: row.store_state ?? null,
         featuresSnapshot:
           typeof row.features_snapshot === 'string'
             ? JSON.parse(row.features_snapshot)

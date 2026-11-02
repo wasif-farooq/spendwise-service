@@ -7,6 +7,8 @@ import { generateAccountDeletedEmail } from '@domains/email/EmailTemplates';
 import type { IEmailService } from '@domains/email/EmailService';
 import type { PaddleSubscription } from '@domains/payment/services/PaddleGateway';
 import { PADDLE_APP_TAG } from '@domains/payment/services/PaddleGateway';
+import { subscriptionSourceOf } from '@domains/store-billing/subscriptionSource';
+import { GOOGLE_PLAY_SUBSCRIPTIONS_URL } from '@domains/store-billing/storeProducts';
 import { User } from '../models/User';
 import { IUserRepository } from '../repositories/IUserRepository';
 import { IAuthRepository } from '../repositories/IAuthRepository';
@@ -74,6 +76,11 @@ export interface DeletionPreview {
   workspacesToLeave: WorkspaceRef[];
   blockingWorkspaces: BlockingWorkspace[];
   hasActiveSubscription: boolean;
+  /**
+   * A live app-store subscription (P15). The API can't cancel it: the user cancels it in
+   * Google Play, or it keeps billing. Deleting the account still proceeds.
+   */
+  storeSubscription: { provider: 'google_play'; managementUrl: string } | null;
 }
 
 export interface DeletionResult {
@@ -148,6 +155,25 @@ export function classifyWorkspaces(userId: string, rows: WorkspaceMembershipRow[
     toLeave: rows.filter((w) => w.ownerId !== userId),
   };
 }
+
+const storeSubscriptionOf = (
+  subs: DeletableSubscription[],
+): DeletionPreview['storeSubscription'] => {
+  const live = subs.find(
+    (s) =>
+      subscriptionSourceOf({
+        status: s.status,
+        paymentProvider: s.paymentProvider,
+        planKey: s.planName ?? 'paid',
+      }) === 'google_play',
+  );
+  return live
+    ? {
+        provider: 'google_play',
+        managementUrl: live.storeManagementUrl || GOOGLE_PLAY_SUBSCRIPTIONS_URL,
+      }
+    : null;
+};
 
 const isLiveProviderSubscription = (s: DeletableSubscription) =>
   s.paymentProvider === 'paddle' &&
@@ -225,6 +251,7 @@ export class AccountDeletionService {
       workspacesToLeave: toLeave.map(refOf),
       blockingWorkspaces: blocking,
       hasActiveSubscription: subscriptions.some(isLiveProviderSubscription),
+      storeSubscription: storeSubscriptionOf(subscriptions),
     };
   }
 

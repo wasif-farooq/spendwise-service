@@ -16,6 +16,14 @@ export interface UserSubscriptionProps {
   trialEndsAt?: Date;
   paymentProvider?: string;
   merchantSubscriptionId?: string;
+  /** 'monthly' | 'yearly' (column billing_cycle). */
+  billingCycle?: string;
+  /** Renewal is off: the plan ends at currentPeriodEnd. */
+  cancelAtPeriodEnd?: boolean;
+  /** Google Play (RevenueCat) facts, P15; null for other providers. */
+  storeProductId?: string | null;
+  storeManagementUrl?: string | null;
+  storeState?: string | null;
   featuresSnapshot: string[];
   limitsSnapshot: Record<string, number>;
   createdAt: Date;
@@ -106,5 +114,20 @@ export class UserSubscription extends Entity<UserSubscriptionProps> {
   }
   get cancelledAt(): Date | undefined {
     return this.props.cancelledAt;
+  }
+  get billingCycle(): string | undefined {
+    return this.props.billingCycle;
+  }
+  get cancelAtPeriodEnd(): boolean {
+    return !!this.props.cancelAtPeriodEnd;
+  }
+  get storeProductId(): string | null | undefined {
+    return this.props.storeProductId;
+  }
+  get storeManagementUrl(): string | null | undefined {
+    return this.props.storeManagementUrl;
+  }
+  get storeState(): string | null | undefined {
+    return this.props.storeState;
   }
 }
