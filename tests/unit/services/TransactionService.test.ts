@@ -31,7 +31,6 @@ const mockTransactionRepo = {
     getAccountStats: jest.fn(),
     getWorkspaceAccountStats: jest.fn(),
     getWorkspaceStats: jest.fn(),
-    countByAccountThisMonth: jest.fn(),
     countByWorkspaceId: jest.fn(),
     withDb: jest.fn(() => mockTransactionRepo),
     invalidateAccountStatsCache: jest.fn(),

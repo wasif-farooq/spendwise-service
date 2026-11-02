@@ -3,6 +3,7 @@ import { TransactionController } from '@domains/transactions/controllers/Transac
 import { TransactionRequestRepositoryFactory } from '@domains/transactions/repositories/TransactionRequestRepositoryFactory';
 import { SubscriptionRequestRepositoryFactory } from '@domains/subscription/repositories/SubscriptionRequestRepositoryFactory';
 import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
+import { getTransactionLimitService } from './transactionLimitProvider';
 
 export class TransactionControllerFactory {
   private static instance: TransactionController | null = null;
@@ -29,6 +30,7 @@ export class TransactionControllerFactory {
       transactionRequestRepository,
       subscriptionRequestRepository,
       workspaceRequestRepository,
+      getTransactionLimitService,
     );
 
     return TransactionControllerFactory.instance;
