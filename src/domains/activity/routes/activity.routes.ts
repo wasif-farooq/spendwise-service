@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '@shared/middleware/auth.middleware';
+import { requireAdmin } from '@shared/middleware/admin.middleware';
 import { validateQuery, validateParams } from '@shared/middleware/validateBody.middleware';
 import { z } from 'zod';
 import {
@@ -41,8 +42,13 @@ router.get(
   controller.getEntityHistory.bind(controller),
 );
 
-router.get('/activity/partitions', controller.listPartitions.bind(controller));
+// Operator maintenance: admins only (was open to any signed-in user).
+router.get('/activity/partitions', requireAdmin(), controller.listPartitions.bind(controller));
 
-router.post('/activity/partitions/ensure', controller.ensurePartitions.bind(controller));
+router.post(
+  '/activity/partitions/ensure',
+  requireAdmin(),
+  controller.ensurePartitions.bind(controller),
+);
 
 export default router;

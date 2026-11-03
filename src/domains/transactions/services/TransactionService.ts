@@ -8,6 +8,9 @@ import { CursorPaginationOptions, CursorFilters, PaginatedResult } from '../repo
 import { ActivityCaptureService } from '@shared/ActivityCaptureService';
 import { roundAmount } from '@domains/currencies/currencies';
 import { TotalsConverter } from '@domains/currencies/TotalsConverter';
+import type { AccountAccess } from '@domains/workspaces/services/AccountAccess';
+
+const TX_NOT_FOUND = 'Transaction not found';
 
 export interface CreateTransactionDTO {
   accountId: string;
@@ -105,6 +108,7 @@ export class TransactionService {
     transactionIds: string[],
     workspaceId: string,
     trxDb?: DatabaseFacade,
+    access?: AccountAccess,
   ): Promise<void> {
     const repo = trxDb ? this.transactionRepo.withDb(trxDb) : this.transactionRepo;
 
@@ -113,6 +117,8 @@ export class TransactionService {
       if (!transaction || transaction.workspaceId !== workspaceId) {
         throw new AppError('Linked transaction not found', 404);
       }
+      // Linking writes the back-reference into the other transaction.
+      access?.assert(transaction.accountId, 'transactions:edit', 'Linked transaction not found');
     }
   }
 
@@ -146,7 +152,16 @@ export class TransactionService {
   }
 
   // Transfer funds between accounts with currency conversion
-  async transfer(data: TransferDTO, userId: string, workspaceId: string): Promise<TransferResult> {
+  async transfer(
+    data: TransferDTO,
+    userId: string,
+    workspaceId: string,
+    access?: AccountAccess,
+  ): Promise<TransferResult> {
+    // A transfer writes to both accounts, so both must allow creating transactions.
+    access?.assert(data.fromAccountId, 'transactions:create', 'Source account not found');
+    access?.assert(data.toAccountId, 'transactions:create', 'Destination account not found');
+
     // Validate accounts exist
     const fromAccount = await this.accountRepo.findById(data.fromAccountId);
     if (!fromAccount) {
@@ -274,8 +289,15 @@ export class TransactionService {
       endDate?: string;
       linkedStatus?: 'all' | 'linked' | 'unlinked';
     } = {},
+    access?: AccountAccess,
   ) {
-    return this.transactionRepo.findByWorkspaceId(workspaceId, options);
+    if (!access) return this.transactionRepo.findByWorkspaceId(workspaceId, options);
+    if (options.accountId) access.assert(options.accountId, 'transactions:view');
+    const accountIds = access.accountIdsWith('transactions:view');
+    return this.transactionRepo.findByWorkspaceId(
+      workspaceId,
+      accountIds ? { ...options, accountIds } : options,
+    );
   }
 
   async getTransactionsByAccount(
@@ -298,8 +320,10 @@ export class TransactionService {
     workspaceId: string,
     options: CursorPaginationOptions,
     filters?: CursorFilters,
+    access?: AccountAccess,
   ): Promise<PaginatedResult<Transaction>> {
     await this.assertAccountInWorkspace(accountId, workspaceId);
+    access?.assert(accountId, 'transactions:view');
     return this.transactionRepo.findByAccountIdCursor(accountId, options, filters);
   }
 
@@ -318,18 +342,42 @@ export class TransactionService {
       endDate?: string;
       search?: string;
     },
+    access?: AccountAccess,
   ): Promise<PaginatedResult<Transaction>> {
-    return this.transactionRepo.findByWorkspaceIdCursor(workspaceId, options, filters);
+    if (!access) return this.transactionRepo.findByWorkspaceIdCursor(workspaceId, options, filters);
+    if (filters?.accountId) access.assert(filters.accountId, 'transactions:view');
+    const accountIds = access.accountIdsWith('transactions:view');
+    return this.transactionRepo.findByWorkspaceIdCursor(
+      workspaceId,
+      options,
+      accountIds ? { ...(filters || {}), accountIds } : filters,
+    );
   }
 
   async getTransactionById(id: string): Promise<Transaction | null> {
     return this.transactionRepo.findById(id);
   }
 
-  async getTransactionWithDetails(id: string, workspaceId: string): Promise<any> {
+  async getTransactionWithDetails(
+    id: string,
+    workspaceId: string,
+    access?: AccountAccess,
+  ): Promise<any> {
     const transaction = await this.transactionRepo.findByIdWithDetails(id);
     if (!transaction || transaction.workspaceId !== workspaceId) {
-      throw new AppError('Transaction not found', 404);
+      throw new AppError(TX_NOT_FOUND, 404);
+    }
+    if (access) {
+      // A transaction in an account the caller cannot see does not exist for them.
+      if (!access.can(transaction.accountId, 'transactions:view')) {
+        throw new AppError(TX_NOT_FOUND, 404);
+      }
+      // The other side of a transfer may sit in an account they cannot see.
+      if (Array.isArray(transaction.linkedTransactions)) {
+        transaction.linkedTransactions = transaction.linkedTransactions.filter((linked: any) =>
+          access.can(linked.accountId, 'transactions:view'),
+        );
+      }
     }
     return transaction;
   }
@@ -338,7 +386,9 @@ export class TransactionService {
     data: CreateTransactionDTO,
     userId: string,
     workspaceId: string,
+    access?: AccountAccess,
   ): Promise<Transaction> {
+    access?.assert(data.accountId, 'transactions:create');
     return this.db.transaction(async (trxDb) => {
       const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
 
@@ -347,7 +397,12 @@ export class TransactionService {
       await this.assertAccountInWorkspace(data.accountId, workspaceId, trxDb);
 
       if (data.linkedTransactionIds?.length) {
-        await this.assertTransactionsInWorkspace(data.linkedTransactionIds, workspaceId, trxDb);
+        await this.assertTransactionsInWorkspace(
+          data.linkedTransactionIds,
+          workspaceId,
+          trxDb,
+          access,
+        );
       }
 
       const transaction = Transaction.create({
@@ -417,6 +472,7 @@ export class TransactionService {
     data: UpdateTransactionDTO,
     workspaceId: string,
     userId?: string,
+    access?: AccountAccess,
   ): Promise<Transaction> {
     return this.db.transaction(async (trxDb) => {
       const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
@@ -430,14 +486,26 @@ export class TransactionService {
         throw new AppError('Transaction not found', 404);
       }
 
+      // Checked against the account the transaction is really in, not the path's.
+      access?.assert(existing.accountId, 'transactions:edit', TX_NOT_FOUND);
+
       // Reassigning the account must not move the transaction (and its
       // balance recalculation) onto another workspace's account.
       if (data.accountId) {
         await this.assertAccountInWorkspace(data.accountId, workspaceId, trxDb);
+        // Moving between accounts needs rights on both.
+        if (data.accountId !== existing.accountId) {
+          access?.assert(data.accountId, 'transactions:edit');
+        }
       }
 
       if (data.linkedTransactionIds?.length) {
-        await this.assertTransactionsInWorkspace(data.linkedTransactionIds, workspaceId, trxDb);
+        await this.assertTransactionsInWorkspace(
+          data.linkedTransactionIds,
+          workspaceId,
+          trxDb,
+          access,
+        );
       }
 
       const oldValues = existing.toJSON();
@@ -504,6 +572,7 @@ export class TransactionService {
     id: string,
     dto: LinkTransactionDTO,
     workspaceId: string,
+    access?: AccountAccess,
   ): Promise<Transaction> {
     const existing = await this.transactionRepo.findById(id);
     if (!existing) {
@@ -513,6 +582,7 @@ export class TransactionService {
     if (existing.workspaceId !== workspaceId) {
       throw new AppError('Transaction not found', 404);
     }
+    access?.assert(existing.accountId, 'transactions:edit', TX_NOT_FOUND);
 
     // Verify the linked transaction exists and is in the same workspace —
     // linking writes back to it, so an unscoped id is a cross-workspace write.
@@ -520,6 +590,7 @@ export class TransactionService {
     if (!linkedTx || linkedTx.workspaceId !== workspaceId) {
       throw new AppError('Linked transaction not found', 404);
     }
+    access?.assert(linkedTx.accountId, 'transactions:edit', 'Linked transaction not found');
 
     const updatedProps = existing.getProps();
     const currentLinkedIds = updatedProps.linkedTransactionIds || [];
@@ -560,6 +631,7 @@ export class TransactionService {
     id: string,
     dto: UnlinkTransactionDTO,
     workspaceId: string,
+    access?: AccountAccess,
   ): Promise<Transaction> {
     const existing = await this.transactionRepo.findById(id);
     if (!existing) {
@@ -569,6 +641,7 @@ export class TransactionService {
     if (existing.workspaceId !== workspaceId) {
       throw new AppError('Transaction not found', 404);
     }
+    access?.assert(existing.accountId, 'transactions:edit', TX_NOT_FOUND);
 
     const linkedIdToRemove = dto.linkedId;
     const updatedProps = existing.getProps();
@@ -608,7 +681,12 @@ export class TransactionService {
     return saved;
   }
 
-  async deleteTransaction(id: string, workspaceId: string, userId?: string): Promise<void> {
+  async deleteTransaction(
+    id: string,
+    workspaceId: string,
+    userId?: string,
+    access?: AccountAccess,
+  ): Promise<void> {
     return this.db.transaction(async (trxDb) => {
       const trxTransactionRepo = this.transactionRepo.withDb(trxDb);
 
@@ -620,6 +698,7 @@ export class TransactionService {
       if (existing.workspaceId !== workspaceId) {
         throw new AppError('Transaction not found', 404);
       }
+      access?.assert(existing.accountId, 'transactions:delete', TX_NOT_FOUND);
 
       const accountId = existing.accountId;
       const oldValues = existing.toJSON();
@@ -701,13 +780,23 @@ export class TransactionService {
     workspaceId: string,
     startDate?: string,
     endDate?: string,
+    access?: AccountAccess,
   ) {
     await this.assertAccountInWorkspace(accountId, workspaceId);
+    access?.assert(accountId, 'transactions:view');
     return this.transactionRepo.getAccountStats(accountId, startDate, endDate);
   }
 
-  async getWorkspaceAccountStats(workspaceId: string, startDate?: string, endDate?: string) {
-    return this.transactionRepo.getWorkspaceAccountStats(workspaceId, startDate, endDate);
+  async getWorkspaceAccountStats(
+    workspaceId: string,
+    startDate?: string,
+    endDate?: string,
+    access?: AccountAccess,
+  ) {
+    const accountIds = access?.accountIdsWith('transactions:view');
+    return accountIds
+      ? this.transactionRepo.getWorkspaceAccountStats(workspaceId, startDate, endDate, accountIds)
+      : this.transactionRepo.getWorkspaceAccountStats(workspaceId, startDate, endDate);
   }
 
   /**
@@ -721,6 +810,7 @@ export class TransactionService {
     startDate?: string,
     endDate?: string,
     currency?: string,
+    access?: AccountAccess,
   ): Promise<{
     totalIncome: number;
     totalExpense: number;
@@ -730,11 +820,15 @@ export class TransactionService {
     unconvertedCurrencies: string[];
   }> {
     const target = (currency || (await this.ownerCurrency(workspaceId)) || 'USD').toUpperCase();
-    const rows = await this.transactionRepo.getWorkspaceStatsByCurrency(
-      workspaceId,
-      startDate,
-      endDate,
-    );
+    const accountIds = access?.accountIdsWith('transactions:view');
+    const rows = accountIds
+      ? await this.transactionRepo.getWorkspaceStatsByCurrency(
+          workspaceId,
+          startDate,
+          endDate,
+          accountIds,
+        )
+      : await this.transactionRepo.getWorkspaceStatsByCurrency(workspaceId, startDate, endDate);
     const service = this.exchangeRateService;
     const converter = new TotalsConverter(
       target,

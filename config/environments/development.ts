@@ -239,6 +239,16 @@ export default {
     environment: process.env.PADDLE_ENV === 'production' ? 'production' : 'sandbox',
   },
 
+  // Google Play subscriptions through RevenueCat (P15); see production.ts.
+  // Sandbox (test) purchases are applied by default outside production.
+  revenuecat: {
+    webhookAuth: process.env.REVENUECAT_WEBHOOK_AUTH || '',
+    secretApiKey: process.env.REVENUECAT_SECRET_API_KEY || '',
+    acceptSandbox: process.env.REVENUECAT_ACCEPT_SANDBOX !== 'false',
+    apiUrl: process.env.REVENUECAT_API_URL || 'https://api.revenuecat.com',
+    timeoutMs: parseInt(process.env.REVENUECAT_TIMEOUT_MS || '10000', 10),
+  },
+
   // AI receipt scanning (POST /:workspaceId/ai/receipt-scan). Everything is
   // optional: without an API key the scan endpoints answer 503 AI_UNAVAILABLE
   // and the rest of the API boots and runs as usual. Any OpenAI-compatible

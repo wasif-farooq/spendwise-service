@@ -6,6 +6,7 @@ import {
   StripeProvider,
   readStripeCredentials,
 } from '@domains/connections/providers/stripe/StripeProvider';
+import { AccountAccess } from '@domains/workspaces/services/AccountAccess';
 import { Store, build } from './fakes';
 import { fixture } from './helpers';
 
@@ -283,14 +284,17 @@ describe('connecting Stripe', () => {
     let now = NOW;
     const ctx = build(store, stripe.provider, () => now);
     const stateOf = (authorizeUrl: string) => new URL(authorizeUrl).searchParams.get('state')!;
-    const connect = async () => {
+    const connect = async (access?: AccountAccess) => {
       const { authorizeUrl } = await ctx.service.oauthStart(WS, 'user-1', 'stripe', {
         returnTo: 'mobile',
       });
-      return ctx.service.oauthComplete(WS, 'user-1', 'stripe', {
-        code: 'ac_good',
-        state: stateOf(authorizeUrl),
-      });
+      return ctx.service.oauthComplete(
+        WS,
+        'user-1',
+        'stripe',
+        { code: 'ac_good', state: stateOf(authorizeUrl) },
+        access,
+      );
     };
     return { store, stripe, ctx, stateOf, connect, setNow: (d: Date) => (now = d) };
   };
@@ -413,5 +417,39 @@ describe('connecting Stripe', () => {
     });
     await ctx.sync.syncConnection(connection.id, { trigger: 'manual' });
     expect(store.connections.get(connection.id)!.status).toBe('active');
+  });
+
+  it('reconnecting needs write access to every linked account, and shows only visible ones', async () => {
+    const { store, stripe, ctx, connect: signIn } = setup();
+    // Stripe's codes work once; each sign-in gets a fresh one for the same account.
+    const connect = (access?: AccountAccess) => {
+      stripe.state.codes.set('ac_good', 'acct_1ABCDEFGHIJKLMNO');
+      return signIn(access);
+    };
+    const { connection } = await connect();
+    const linked = await ctx.service.link(WS, 'user-1', connection.id, [
+      { assetKey: 'stripe:usd', newAccount: { name: 'Stripe USD' }, syncMode: 'from_today' },
+    ]);
+    const accountId = linked.connection.links[0].accountId;
+    const viewOnly = AccountAccess.restricted('m-1', ['accounts:view'], {
+      [accountId]: { permissions: ['accounts:view'], denied: [] },
+    });
+    await expect(connect(viewOnly)).rejects.toMatchObject({
+      statusCode: 403,
+      code: 'ACCOUNT_ACCESS_DENIED',
+    });
+
+    const editor = AccountAccess.restricted('m-1', ['accounts:view', 'transactions:create'], {
+      [accountId]: { permissions: [], denied: [] },
+    });
+    const again = await connect(editor);
+    expect(again.reconnected).toBe(true);
+    expect(again.connection.links.map((l) => l.accountId)).toEqual([accountId]);
+
+    // A member who can't see the linked account can't reconnect it either.
+    await expect(connect(AccountAccess.restricted('m-1', ['*'], {}))).rejects.toMatchObject({
+      code: 'ACCOUNT_ACCESS_DENIED',
+    });
+    expect(store.connections.size).toBe(1);
   });
 });

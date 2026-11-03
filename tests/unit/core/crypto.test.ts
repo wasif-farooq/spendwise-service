@@ -276,10 +276,10 @@ describe('totals skip missing rates', () => {
 
   it('accounts total leaves unconverted currencies out and lists them', async () => {
     const repo = {
-      getBalancesByCurrency: async () => [
-        { currency: 'BTC', total: 0.00012345 },
-        { currency: 'ETH', total: 2 },
-        { currency: 'USD', total: 100.1 },
+      findAllWithBalancesForWorkspace: async () => [
+        { id: 'btc', name: 'Wallet', currency: 'BTC', balance: 0.00012345 },
+        { id: 'eth', name: 'Other wallet', currency: 'ETH', balance: 2 },
+        { id: 'usd', name: 'Bank', currency: 'USD', balance: 100.1 },
       ],
     };
     const exchange = {
@@ -287,7 +287,14 @@ describe('totals skip missing rates', () => {
     };
     const service = new AccountService(repo as any, exchange as any);
     const total = await service.getTotalBalance('ws', 'USD');
-    expect(total).toEqual({ total: 108.0, currency: 'USD', unconvertedCurrencies: ['ETH'] });
+    expect(total).toEqual({
+      total: 108.0,
+      assets: 108.0,
+      liabilities: 0,
+      currency: 'USD',
+      unconvertedCurrencies: ['ETH'],
+      convertedBalances: { btc: 7.9, usd: 100.1 },
+    });
   });
 
   it('analytics overview skips transactions it cannot convert', async () => {

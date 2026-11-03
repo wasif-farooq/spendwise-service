@@ -6,6 +6,7 @@ import { TOKENS } from '@di/tokens';
 import { UserSubscriptionRepository } from '@domains/subscription/repositories/SubscriptionRepository';
 import { SubscriptionPlanRepository } from '@domains/subscription/repositories/SubscriptionRepository';
 import { UserRepository } from '@domains/auth/repositories/UserRepository';
+import { billingFieldsOf } from '@domains/store-billing/subscriptionSource';
 
 export class BillingController {
   private paymentRepo: PaymentRepository;
@@ -49,6 +50,15 @@ export class BillingController {
                 currentPeriodEnd: subscription.currentPeriodEnd,
                 paymentProvider: subscription.paymentProvider,
                 merchantSubscriptionId: subscription.merchantSubscriptionId,
+                ...billingFieldsOf({
+                  status: subscription.status,
+                  paymentProvider: subscription.paymentProvider,
+                  planKey: plan?.name,
+                  cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+                  currentPeriodEnd: subscription.currentPeriodEnd,
+                  billingCycle: subscription.billingCycle,
+                  storeManagementUrl: subscription.storeManagementUrl,
+                }),
               }
             : null,
           plan: plan

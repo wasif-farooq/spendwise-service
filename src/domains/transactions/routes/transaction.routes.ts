@@ -118,12 +118,15 @@ router.get(
   (req, res) => req.controller.getTransactionById(req, res),
 );
 
+// POST create (1 row) and POST transfer (2 rows) answer 402
+// { message, code: 'TRANSACTION_LIMIT_REACHED', feature, limit, used, resetsAt }
+// once the workspace owner's monthly allowance is used up (TransactionLimit.ts).
 router.post(
   '/:workspaceId/accounts/:accountId/transactions',
   validateParams(WorkspaceIdParamSchema),
   validateParams(AccountIdParamSchema),
   validateBody(CreateTransactionSchema),
-  requirePermission('transaction:create'),
+  requirePermission('transactions:create'),
   cryptoOnPathAccount,
   (req, res) => req.controller.createTransaction(req, res),
 );
@@ -134,7 +137,7 @@ router.put(
   validateParams(AccountIdParamSchema),
   validateParams(TransactionIdParamSchema),
   validateBody(UpdateTransactionSchema),
-  requirePermission('transaction:edit'),
+  requirePermission('transactions:edit'),
   cryptoOnPathAccount,
   (req, res) => req.controller.updateTransaction(req, res),
 );
@@ -144,7 +147,7 @@ router.delete(
   validateParams(WorkspaceIdParamSchema),
   validateParams(AccountIdParamSchema),
   validateParams(TransactionIdParamSchema),
-  requirePermission('transaction:delete'),
+  requirePermission('transactions:delete'),
   (req, res) => req.controller.deleteTransaction(req, res),
 );
 
@@ -154,7 +157,7 @@ router.post(
   validateParams(AccountIdParamSchema),
   validateParams(TransactionIdParamSchema),
   validateBody(LinkTransactionSchema),
-  requirePermission('transaction:edit'),
+  requirePermission('transactions:edit'),
   (req, res) => req.controller.linkTransaction(req, res),
 );
 
@@ -164,7 +167,7 @@ router.delete(
   validateParams(AccountIdParamSchema),
   validateParams(TransactionIdParamSchema),
   validateBody(UnlinkTransactionSchema),
-  requirePermission('transaction:edit'),
+  requirePermission('transactions:edit'),
   (req, res) => req.controller.unlinkTransaction(req, res),
 );
 
@@ -194,7 +197,7 @@ router.post(
   '/:workspaceId/transactions/transfer',
   validateParams(WorkspaceIdParamSchema),
   validateBody(TransferSchema),
-  requirePermission('transaction:create'),
+  requirePermission('transactions:create'),
   cryptoOnSourceAccount,
   (req, res) => req.controller.transfer(req, res),
 );

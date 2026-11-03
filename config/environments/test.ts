@@ -113,6 +113,13 @@ export default {
     maxTokens: 6000,
   },
   // Connected accounts: a fixed test key, no provider keys (tests stub HTTP).
+  revenuecat: {
+    webhookAuth: '',
+    secretApiKey: '',
+    acceptSandbox: true,
+    apiUrl: 'https://api.revenuecat.com',
+    timeoutMs: 10000,
+  },
   connections: {
     encryption: { keys: '1:ZGV2LW9ubHktY29ubmVjdGlvbnMta2V5LTMyLWJ5dGU=', active: '' },
     httpTimeoutMs: 15000,

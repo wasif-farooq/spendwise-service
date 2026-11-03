@@ -3,6 +3,7 @@ import { SubscriptionController } from '@domains/subscription/controllers/Subscr
 import { SubscriptionRequestRepositoryFactory } from '@domains/subscription/repositories/SubscriptionRequestRepositoryFactory';
 import { AccountRequestRepositoryFactory } from '@domains/accounts/repositories/AccountRequestRepositoryFactory';
 import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
+import { getTransactionLimitService } from './transactionLimitProvider';
 
 export class SubscriptionControllerFactory {
   private static instance: SubscriptionController | null = null;
@@ -29,6 +30,7 @@ export class SubscriptionControllerFactory {
       subscriptionRequestRepository,
       accountRequestRepository,
       workspaceRequestRepository,
+      getTransactionLimitService,
     );
 
     return SubscriptionControllerFactory.instance;

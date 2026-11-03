@@ -19,6 +19,11 @@ export interface ExportReportRequest {
   dateRange: DateRangePreset;
   customDates?: CustomDateRange;
   format: 'csv' | 'xlsx';
+  /**
+   * Accounts the report may cover. When absent it is resolved from `userId`'s
+   * account access; with neither, the whole workspace (internal callers only).
+   */
+  accountIds?: string[];
 }
 
 export interface ResolvedDateRange {

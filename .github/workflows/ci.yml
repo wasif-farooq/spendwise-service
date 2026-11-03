@@ -43,8 +43,8 @@ jobs:
       - name: Build
         run: pnpm run build
 
-      # Ratcheted against .ratchet-baseline.json: 189 pre-existing errors are
-      # tolerated, a 190th fails the build. Warnings are reported but not
+      # Ratcheted against .ratchet-baseline.json: 165 pre-existing errors are
+      # tolerated, a 166th fails the build. Warnings are reported but not
       # gated. When the baseline reaches 0, replace this with `pnpm run lint`
       # and delete scripts/ratchet.mjs.
       - name: Lint

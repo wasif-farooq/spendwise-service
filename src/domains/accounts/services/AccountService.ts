@@ -7,6 +7,7 @@ import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRa
 import { ActivityCaptureService } from '@shared/ActivityCaptureService';
 import { roundAmount } from '@domains/currencies/currencies';
 import { TotalsConverter } from '@domains/currencies/TotalsConverter';
+import type { AccountAccess } from '@domains/workspaces/services/AccountAccess';
 
 export class AccountService {
   constructor(
@@ -15,15 +16,19 @@ export class AccountService {
     private activityCapture?: ActivityCaptureService,
   ) {}
 
-  async getAccountsByWorkspace(workspaceId: string): Promise<Account[]> {
-    return this.accountRepository.findByWorkspaceId(workspaceId);
+  /** With `access`, only the accounts the caller can see (no `access`: all of them). */
+  async getAccountsByWorkspace(workspaceId: string, access?: AccountAccess): Promise<Account[]> {
+    const ids = access?.accountIdsWith('accounts:view');
+    return ids
+      ? this.accountRepository.findByWorkspaceId(workspaceId, ids)
+      : this.accountRepository.findByWorkspaceId(workspaceId);
   }
 
   async getAccountsByUser(userId: string): Promise<Account[]> {
     return this.accountRepository.findByUserId(userId);
   }
 
-  async getAccountById(id: string, workspaceId: string): Promise<Account> {
+  async getAccountById(id: string, workspaceId: string, access?: AccountAccess): Promise<Account> {
     const account = await this.accountRepository.findById(id);
     if (!account) {
       throw new AppError('Account not found', 404);
@@ -32,6 +37,8 @@ export class AccountService {
     if (account.workspaceId !== workspaceId) {
       throw new AppError('Account not found', 404);
     }
+    // An account the caller has no access to answers as if it did not exist.
+    access?.assert(id, 'accounts:view');
     return account;
   }
 
@@ -86,9 +93,11 @@ export class AccountService {
     data: UpdateAccountDto,
     workspaceId: string,
     userId?: string,
+    access?: AccountAccess,
   ): Promise<Account> {
     console.log('[DEBUG AccountService] updateAccount called with data:', data);
-    const account = await this.getAccountById(id, workspaceId);
+    const account = await this.getAccountById(id, workspaceId, access);
+    access?.assert(id, 'accounts:edit');
     const oldValues = account.toJSON();
 
     if (data.name !== undefined) {
@@ -137,8 +146,14 @@ export class AccountService {
     return updated;
   }
 
-  async deleteAccount(id: string, workspaceId: string, userId?: string): Promise<void> {
-    const account = await this.getAccountById(id, workspaceId);
+  async deleteAccount(
+    id: string,
+    workspaceId: string,
+    userId?: string,
+    access?: AccountAccess,
+  ): Promise<void> {
+    const account = await this.getAccountById(id, workspaceId, access);
+    access?.assert(id, 'accounts:delete');
     const oldValues = account.toJSON();
     await this.accountRepository.delete(id);
 
@@ -161,31 +176,54 @@ export class AccountService {
   }
 
   /**
-   * Sum of every account's balance in `targetCurrency`. Accounts whose
-   * currency has no rate are left out and listed in `unconvertedCurrencies`
+   * Every account's balance in `targetCurrency`, and what they add up to: `assets`
+   * (positive balances), `liabilities` (negative ones) and `total`, always their sum.
+   * Accounts whose currency has no rate are left out and listed in `unconvertedCurrencies`
    * (they used to be added unconverted, so 1 BTC counted as 1 USD).
    */
   async getTotalBalance(
     workspaceIdId: string,
     targetCurrency: string,
-  ): Promise<{ total: number; currency: string; unconvertedCurrencies: string[] }> {
-    const balances = await this.accountRepository.getBalancesByCurrency(workspaceIdId);
+    access?: AccountAccess,
+  ): Promise<{
+    total: number;
+    assets: number;
+    liabilities: number;
+    currency: string;
+    unconvertedCurrencies: string[];
+    convertedBalances: Record<string, number>;
+  }> {
+    // Only the accounts the caller can see count towards their totals.
+    const ids = access?.accountIdsWith('accounts:view');
+    const accounts = ids
+      ? await this.accountRepository.findAllWithBalancesForWorkspace(workspaceIdId, ids)
+      : await this.accountRepository.findAllWithBalancesForWorkspace(workspaceIdId);
     const service = this.exchangeRateService;
     const converter = new TotalsConverter(
       targetCurrency,
       service ? async (from, to) => (await service.convert(1, from, to)).rate : undefined,
     );
 
-    let total = 0;
-    for (const { currency, total: sum } of balances) {
-      const converted = await converter.convert(sum, currency);
-      if (converted !== null) total += converted;
+    let assets = 0;
+    let liabilities = 0;
+    const convertedBalances: Record<string, number> = {};
+    for (const account of accounts) {
+      const converted = await converter.convert(account.balance, account.currency);
+      if (converted === null) continue;
+      convertedBalances[account.id] = roundAmount(converted, targetCurrency);
+      if (converted < 0) liabilities += converted;
+      else assets += converted;
     }
+    const roundedAssets = roundAmount(assets, targetCurrency);
+    const roundedLiabilities = roundAmount(liabilities, targetCurrency);
 
     return {
-      total: roundAmount(total, targetCurrency),
+      total: roundAmount(roundedAssets + roundedLiabilities, targetCurrency),
+      assets: roundedAssets,
+      liabilities: roundedLiabilities,
       currency: targetCurrency,
       unconvertedCurrencies: converter.unconvertedCurrencies(),
+      convertedBalances,
     };
   }
 }

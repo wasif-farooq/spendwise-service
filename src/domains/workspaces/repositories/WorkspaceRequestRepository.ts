@@ -254,7 +254,9 @@ export class WorkspaceRequestRepository {
 
   async updateMemberRole(workspaceId: string, userId: string, memberId: string, data: any) {
     if (this.getMode() === 'direct') {
-      return this.wrap(this.service.updateMemberRole(workspaceId, userId, memberId, data));
+      // WorkspaceService has no updateMemberRole; updateMember sets the role and the full
+      // per-account access set (an empty object clears it).
+      return this.wrap(this.service.updateMember(workspaceId, userId, memberId, data));
     }
     throw new Error('RPC mode not implemented');
   }

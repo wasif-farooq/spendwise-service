@@ -23,6 +23,7 @@ import {
   memoryOAuthStateStore,
   newOAuthState,
 } from './oauthState';
+import { AccountAccess, grantCreatorAccess } from '@domains/workspaces/services/AccountAccess';
 
 /**
  * Connected accounts: connect a source, discover its assets, link each asset to
@@ -265,11 +266,18 @@ export class ConnectionService {
     };
   }
 
+  /**
+   * Links to accounts the caller cannot see are left out of every DTO. With no
+   * `access` (internal callers) nothing is hidden.
+   */
   async list(
     workspaceId: string,
+    access?: AccountAccess,
   ): Promise<{ connections: ConnectionDto[]; usage: ConnectionsUsage }> {
     const rows = await this.deps.connections.listByWorkspace(workspaceId);
-    const links = await this.deps.links.findByConnections(rows.map((r) => r.id));
+    const links = (await this.deps.links.findByConnections(rows.map((r) => r.id))).filter(
+      (l) => !access || access.canSee(l.accountId),
+    );
     return {
       connections: rows.map((row) =>
         this.toDto(
@@ -281,9 +289,32 @@ export class ConnectionService {
     };
   }
 
-  async get(workspaceId: string, id: string): Promise<ConnectionDto> {
+  async get(workspaceId: string, id: string, access?: AccountAccess): Promise<ConnectionDto> {
     const conn = await this.find(workspaceId, id);
-    return this.toDto(conn, await this.deps.links.findByConnection(conn.id));
+    const links = await this.deps.links.findByConnection(conn.id);
+    return this.toDto(
+      conn,
+      links.filter((l) => !access || access.canSee(l.accountId)),
+    );
+  }
+
+  /**
+   * Syncing, unlinking or removing writes into every linked account, so a caller
+   * restricted to some accounts needs `permission` on all of them.
+   */
+  private assertLinksWritable(
+    links: LinkRow[],
+    access: AccountAccess | undefined,
+    permission: 'transactions:create' | 'transactions:delete',
+  ) {
+    if (!access) return;
+    if (links.some((l) => !access.can(l.accountId, permission))) {
+      throw new ConnectionError(
+        "This connection is linked to accounts you don't have access to.",
+        403,
+        'ACCOUNT_ACCESS_DENIED',
+      );
+    }
   }
 
   private async find(workspaceId: string, id: string): Promise<ConnectionRow> {
@@ -435,6 +466,7 @@ export class ConnectionService {
     userId: string,
     providerId: string,
     input: { code: string; state: string },
+    access?: AccountAccess,
   ): Promise<{
     connection: ConnectionDto;
     returnTo: OAuthState['returnTo'];
@@ -480,10 +512,16 @@ export class ConnectionService {
       externalRef,
     );
     if (existing) {
+      // New tokens feed every linked account, like a sync: a restricted member needs them all.
+      this.assertLinksWritable(
+        await this.deps.links.findByConnection(existing.id),
+        access,
+        'transactions:create',
+      );
       await this.deps.connections.reconnect(existing.id, credentialsEnc, grant.metadata);
       this.log(workspaceId, userId, existing.id, 'reconnect', { provider: provider.id });
       return {
-        connection: await this.get(workspaceId, existing.id),
+        connection: await this.get(workspaceId, existing.id, access),
         returnTo: saved.returnTo,
         reconnected: true,
       };
@@ -516,6 +554,7 @@ export class ConnectionService {
   async discover(
     workspaceId: string,
     id: string,
+    access?: AccountAccess,
   ): Promise<{
     assets: DiscoveredAssetDto[];
     accounts: CandidateAccount[];
@@ -535,7 +574,10 @@ export class ConnectionService {
       throw error;
     }
 
-    const accounts = await this.deps.accounts.listAccounts(workspaceId);
+    // Only accounts the caller may book into are offered (and suggested).
+    const accounts = (await this.deps.accounts.listAccounts(workspaceId)).filter(
+      (a) => !access || access.can(a.id, 'transactions:create'),
+    );
     const linked = await this.deps.links.linkedAccountIds(workspaceId);
     const ownLinks = await this.deps.links.findByConnection(conn.id);
     const owner = await this.ownerLimits(workspaceId);
@@ -555,7 +597,8 @@ export class ConnectionService {
       }
       return {
         ...asset,
-        linkedAccountId: existing?.accountId ?? null,
+        linkedAccountId:
+          existing && (!access || access.canSee(existing.accountId)) ? existing.accountId : null,
         suggestedAccountId: suggested,
       };
     });
@@ -574,6 +617,7 @@ export class ConnectionService {
     userId: string,
     id: string,
     requests: LinkRequest[],
+    access?: AccountAccess,
   ): Promise<{ connection: ConnectionDto; sync: SyncResult | null; pending: boolean }> {
     const conn = await this.find(workspaceId, id);
     const provider = this.deps.sync.providerFor(conn);
@@ -597,7 +641,17 @@ export class ConnectionService {
       seen.add(asset.assetKey);
       if (req.accountId) {
         const account = accounts.find((a) => a.id === req.accountId);
-        if (!account) throw new ConnectionError('Account not found.', 404, 'ACCOUNT_NOT_FOUND');
+        if (!account || (access && !access.canSee(account.id))) {
+          throw new ConnectionError('Account not found.', 404, 'ACCOUNT_NOT_FOUND');
+        }
+        // Syncing books transactions into the account.
+        if (access && !access.can(account.id, 'transactions:create')) {
+          throw new ConnectionError(
+            "You don't have permission to add transactions to this account.",
+            403,
+            'ACCOUNT_ACCESS_DENIED',
+          );
+        }
         if (account.currency !== asset.currencyCode) {
           throw new ConnectionError(
             `${account.name} is in ${account.currency}; ${asset.symbol} needs a ${asset.currencyCode} account.`,
@@ -649,6 +703,8 @@ export class ConnectionService {
                 color: req.newAccount!.color,
               })
             ).id;
+          // A restricted member keeps access to the account they just created.
+          if (!req.accountId) await grantCreatorAccess(trx, access, accountId);
           await links.create({
             connectionId: conn.id,
             accountId,
@@ -695,15 +751,20 @@ export class ConnectionService {
       if (timer) clearTimeout(timer);
     }
 
-    return { connection: await this.get(workspaceId, conn.id), sync, pending };
+    return { connection: await this.get(workspaceId, conn.id, access), sync, pending };
   }
 
   // ----- sync -----
 
-  async sync(workspaceId: string, userId: string, id: string) {
+  async sync(workspaceId: string, userId: string, id: string, access?: AccountAccess) {
     const conn = await this.find(workspaceId, id);
+    this.assertLinksWritable(
+      await this.deps.links.findByConnection(conn.id),
+      access,
+      'transactions:create',
+    );
     const result = await this.deps.sync.syncConnection(conn.id, { trigger: 'manual', userId });
-    return { connection: await this.get(workspaceId, conn.id), result };
+    return { connection: await this.get(workspaceId, conn.id, access), result };
   }
 
   // ----- unlink / delete -----
@@ -714,18 +775,24 @@ export class ConnectionService {
     id: string,
     linkId: string,
     deleteImported: boolean,
+    access?: AccountAccess,
   ): Promise<ConnectionDto> {
     const conn = await this.find(workspaceId, id);
     const link = await this.deps.links.findById(linkId);
-    if (!link || link.connectionId !== conn.id) {
+    if (!link || link.connectionId !== conn.id || (access && !access.canSee(link.accountId))) {
       throw new ConnectionError('Link not found.', 404, 'LINK_NOT_FOUND');
     }
+    this.assertLinksWritable(
+      [link],
+      access,
+      deleteImported ? 'transactions:delete' : 'transactions:create',
+    );
     await this.deps.db.transaction(async (trx) => {
       await this.removeLink(trx, link, deleteImported);
     });
     await this.deps.transactions.invalidateAccountStatsCache(link.accountId);
     this.log(workspaceId, userId, conn.id, 'unlink', { assetKey: link.assetKey, deleteImported });
-    return this.get(workspaceId, conn.id);
+    return this.get(workspaceId, conn.id, access);
   }
 
   async remove(
@@ -733,9 +800,15 @@ export class ConnectionService {
     userId: string,
     id: string,
     deleteImported: boolean,
+    access?: AccountAccess,
   ): Promise<void> {
     const conn = await this.find(workspaceId, id);
     const links = await this.deps.links.findByConnection(conn.id);
+    this.assertLinksWritable(
+      links,
+      access,
+      deleteImported ? 'transactions:delete' : 'transactions:create',
+    );
     await this.deps.db.transaction(async (trx) => {
       for (const link of links) await this.removeLink(trx, link, deleteImported);
       await this.deps.connections.withDb(trx).delete(conn.id);

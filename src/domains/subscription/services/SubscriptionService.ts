@@ -121,48 +121,6 @@ export class SubscriptionService {
   }
 
   /**
-   * Check if account has reached monthly transaction limit
-   * @param userId - The user ID (workspace owner)
-   * @param accountId - The account ID to check
-   * @param currentMonthCount - Current transaction count for this account this month
-   * @throws AppError if limit exceeded
-   */
-  async checkAccountTransactionLimit(
-    userId: string,
-    accountId: string,
-    currentMonthCount: number,
-  ): Promise<void> {
-    const subscription = await this.subRepo.findByUserId(userId);
-
-    if (!subscription) {
-      // No subscription - apply default limit
-      const defaultLimit = 100; // Free tier
-      if (currentMonthCount >= defaultLimit) {
-        throw new AppError(
-          `This account has reached ${defaultLimit} transactions this month. Please upgrade your plan to add more.`,
-          403,
-        );
-      }
-      return;
-    }
-
-    const limits = subscription.limitsSnapshot;
-    const limit = limits['transactions_per_account'];
-
-    // If no limit defined or -1 (unlimited), allow
-    if (limit === undefined || limit === -1) {
-      return;
-    }
-
-    if (currentMonthCount >= limit) {
-      throw new AppError(
-        `This account has reached ${limit} transactions this month. Please upgrade your plan to add more.`,
-        403,
-      );
-    }
-  }
-
-  /**
    * Check if user can access transaction history beyond their plan's limit
    * @param userId - The user ID
    * @param startDate - Optional start date to check (ISO string or date string)

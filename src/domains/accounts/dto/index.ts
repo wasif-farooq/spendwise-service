@@ -7,6 +7,12 @@ export const CreateAccountSchema = z.object({
   balance: z.number().min(0, 'Balance must be positive'),
   currency: currencyCode(),
   color: z.string().optional(),
+  /** How a non-zero opening amount is recorded; defaults by account type when omitted. */
+  openingBalanceType: z
+    .enum(['income', 'expense'], {
+      errorMap: () => ({ message: "Opening balance type must be 'income' or 'expense'" }),
+    })
+    .optional(),
 });
 
 export const UpdateAccountSchema = z.object({

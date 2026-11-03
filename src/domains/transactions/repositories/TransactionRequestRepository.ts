@@ -10,6 +10,7 @@ import {
 } from '../services/TransactionService';
 import { Container } from '@di/Container';
 import { TOKENS } from '@di/tokens';
+import type { AccountAccess } from '@domains/workspaces/services/AccountAccess';
 
 export class TransactionRequestRepository {
   private config = ConfigLoader.getInstance();
@@ -59,11 +60,12 @@ export class TransactionRequestRepository {
     workspaceId: string,
     pagination: { limit: number; cursor?: string },
     filters?: any,
+    access?: AccountAccess,
   ) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
       return this.wrap(
-        service.getTransactionsByAccountCursor(accountId, workspaceId, pagination, filters),
+        service.getTransactionsByAccountCursor(accountId, workspaceId, pagination, filters, access),
       );
     }
     throw new Error('RPC mode not implemented');
@@ -73,34 +75,46 @@ export class TransactionRequestRepository {
     workspaceId: string,
     pagination: { limit: number; cursor?: string },
     filters?: any,
+    access?: AccountAccess,
   ) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
-      return this.wrap(service.getTransactionsByWorkspaceCursor(workspaceId, pagination, filters));
+      return this.wrap(
+        service.getTransactionsByWorkspaceCursor(workspaceId, pagination, filters, access),
+      );
     }
     throw new Error('RPC mode not implemented');
   }
 
-  async getTransactionsByWorkspace(workspaceId: string, options: any) {
+  async getTransactionsByWorkspace(workspaceId: string, options: any, access?: AccountAccess) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
-      return this.wrap(service.getTransactionsByWorkspace(workspaceId, options));
+      return this.wrap(service.getTransactionsByWorkspace(workspaceId, options, access));
     }
     throw new Error('RPC mode not implemented');
   }
 
-  async getTransactionWithDetails(transactionId: string, workspaceId: string) {
+  async getTransactionWithDetails(
+    transactionId: string,
+    workspaceId: string,
+    access?: AccountAccess,
+  ) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
-      return this.wrap(service.getTransactionWithDetails(transactionId, workspaceId));
+      return this.wrap(service.getTransactionWithDetails(transactionId, workspaceId, access));
     }
     throw new Error('RPC mode not implemented');
   }
 
-  async create(workspaceId: string, userId: string, data: CreateTransactionDTO) {
+  async create(
+    workspaceId: string,
+    userId: string,
+    data: CreateTransactionDTO,
+    access?: AccountAccess,
+  ) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
-      return this.wrap(service.createTransaction(data, userId, workspaceId));
+      return this.wrap(service.createTransaction(data, userId, workspaceId, access));
     }
     throw new Error('RPC mode not implemented');
   }
@@ -108,28 +122,29 @@ export class TransactionRequestRepository {
   async update(
     workspaceId: string,
     transactionId: string,
-    _userId: string,
+    userId: string,
     data: UpdateTransactionDTO,
+    access?: AccountAccess,
   ) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
-      return this.wrap(service.updateTransaction(transactionId, data, workspaceId));
+      return this.wrap(service.updateTransaction(transactionId, data, workspaceId, userId, access));
     }
     throw new Error('RPC mode not implemented');
   }
 
-  async delete(workspaceId: string, transactionId: string, _userId: string) {
+  async delete(workspaceId: string, transactionId: string, userId: string, access?: AccountAccess) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
-      return this.wrap(service.deleteTransaction(transactionId, workspaceId));
+      return this.wrap(service.deleteTransaction(transactionId, workspaceId, userId, access));
     }
     throw new Error('RPC mode not implemented');
   }
 
-  async transfer(workspaceId: string, userId: string, data: TransferDTO) {
+  async transfer(workspaceId: string, userId: string, data: TransferDTO, access?: AccountAccess) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
-      return this.wrap(service.transfer(data, userId, workspaceId));
+      return this.wrap(service.transfer(data, userId, workspaceId, access));
     }
     throw new Error('RPC mode not implemented');
   }
@@ -139,6 +154,7 @@ export class TransactionRequestRepository {
     transactionId: string,
     _userId: string,
     data: { linkedTransactionId: string },
+    access?: AccountAccess,
   ) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
@@ -147,6 +163,7 @@ export class TransactionRequestRepository {
           transactionId,
           { linkedTransactionId: data.linkedTransactionId },
           workspaceId,
+          access,
         ),
       );
     }
@@ -158,11 +175,12 @@ export class TransactionRequestRepository {
     transactionId: string,
     _userId: string,
     data: { linkedId: string },
+    access?: AccountAccess,
   ) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
       return this.wrap(
-        service.unlinkTransaction(transactionId, { linkedId: data.linkedId }, workspaceId),
+        service.unlinkTransaction(transactionId, { linkedId: data.linkedId }, workspaceId, access),
       );
     }
     throw new Error('RPC mode not implemented');
@@ -173,18 +191,24 @@ export class TransactionRequestRepository {
     workspaceId: string,
     startDate?: string,
     endDate?: string,
+    access?: AccountAccess,
   ) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
-      return this.wrap(service.getAccountStats(accountId, workspaceId, startDate, endDate));
+      return this.wrap(service.getAccountStats(accountId, workspaceId, startDate, endDate, access));
     }
     throw new Error('RPC mode not implemented');
   }
 
-  async getWorkspaceAccountStats(workspaceId: string, startDate?: string, endDate?: string) {
+  async getWorkspaceAccountStats(
+    workspaceId: string,
+    startDate?: string,
+    endDate?: string,
+    access?: AccountAccess,
+  ) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
-      return this.wrap(service.getWorkspaceAccountStats(workspaceId, startDate, endDate));
+      return this.wrap(service.getWorkspaceAccountStats(workspaceId, startDate, endDate, access));
     }
     throw new Error('RPC mode not implemented');
   }
@@ -194,22 +218,13 @@ export class TransactionRequestRepository {
     startDate?: string,
     endDate?: string,
     currency?: string,
+    access?: AccountAccess,
   ) {
     if (this.getMode() === 'direct') {
       const service = await this.getService();
-      return this.wrap(service.getWorkspaceStats(workspaceId, startDate, endDate, currency));
-    }
-    throw new Error('RPC mode not implemented');
-  }
-
-  async countByAccountThisMonth(accountId: string): Promise<number> {
-    if (this.getMode() === 'direct') {
-      const db = Container.getInstance().resolve<DatabaseFacade>(TOKENS.Database);
-      const {
-        TransactionRepository,
-      } = require('@domains/transactions/repositories/TransactionRepository');
-      const repo = new TransactionRepository(db);
-      return repo.countByAccountThisMonth(accountId);
+      return this.wrap(
+        service.getWorkspaceStats(workspaceId, startDate, endDate, currency, access),
+      );
     }
     throw new Error('RPC mode not implemented');
   }
