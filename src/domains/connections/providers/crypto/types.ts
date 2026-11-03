@@ -8,6 +8,7 @@ import type {
   ProviderId,
   ProviderLink,
 } from '../types';
+import type { PayPalConfig } from '../paypal/PayPalProvider';
 import type { StripeConfig } from '../stripe/StripeProvider';
 import type { CryptoFamily } from './assets';
 
@@ -20,6 +21,7 @@ export interface ConnectionsConfig {
   tron?: { baseUrl?: string; apiKey?: string };
   solana?: { rpcUrl?: string };
   stripe?: StripeConfig;
+  paypal?: PayPalConfig;
   syncCron?: { enabled?: boolean; intervalMinutes?: number };
 }
 
