@@ -29,6 +29,12 @@ jest.mock('@shared/ActivityCaptureService', () => ({
 }));
 
 const mockPermission = { denied: new Set<string>() };
+// Per-account access is covered by accountAccess.test.ts; here the caller sees every account.
+jest.mock('@domains/workspaces/services/AccountAccess', () => {
+  const actual = jest.requireActual('@domains/workspaces/services/AccountAccess');
+  return { ...actual, accountAccessFor: async () => actual.AccountAccess.unrestricted() };
+});
+
 jest.mock('@shared/middleware/permission.middleware', () => ({
   requirePermission: (permission: string) => (_req: any, res: any, next: any) =>
     mockPermission.denied.has(permission)

@@ -317,7 +317,14 @@ export class StorageService {
   /**
    * List attachments by workspace
    */
-  async listByWorkspace(workspaceId: string, limit = 50, offset = 0): Promise<Attachment[]> {
-    return this.repository.findByWorkspace(workspaceId, limit, offset);
+  async listByWorkspace(
+    workspaceId: string,
+    limit = 50,
+    offset = 0,
+    accountIds?: string[],
+  ): Promise<Attachment[]> {
+    return accountIds
+      ? this.repository.findByWorkspace(workspaceId, limit, offset, accountIds)
+      : this.repository.findByWorkspace(workspaceId, limit, offset);
   }
 }

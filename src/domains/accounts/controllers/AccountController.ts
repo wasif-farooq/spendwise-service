@@ -5,6 +5,7 @@ import { AppError } from '@shared/errors/AppError';
 import { SubscriptionRequestRepository } from '@domains/subscription/repositories/SubscriptionRequestRepository';
 import { UserPreferencesRequestRepository } from '@domains/users/repositories/UserPreferencesRequestRepository';
 import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
+import { accountAccessFor } from '@domains/workspaces/services/AccountAccess';
 
 export class AccountController {
   constructor(
@@ -31,7 +32,11 @@ export class AccountController {
         throw new AppError('Workspace not found', 404);
       }
 
-      const result = await this.accountRequestRepository.getAccounts(workspaceId, userId);
+      const result = await this.accountRequestRepository.getAccounts(
+        workspaceId,
+        userId,
+        await accountAccessFor(req),
+      );
 
       if (result.error) {
         throw new AppError(result.error, result.statusCode);
@@ -53,7 +58,12 @@ export class AccountController {
         throw new AppError('Workspace not found', 404);
       }
 
-      const result = await this.accountRequestRepository.getAccountById(workspaceId, id, userId);
+      const result = await this.accountRequestRepository.getAccountById(
+        workspaceId,
+        id,
+        userId,
+        await accountAccessFor(req),
+      );
 
       if (result.error) {
         throw new AppError(result.error, result.statusCode);
@@ -102,6 +112,7 @@ export class AccountController {
         workspaceId,
         userId,
         data,
+        await accountAccessFor(req),
       );
 
       if (result.error) {
@@ -125,7 +136,13 @@ export class AccountController {
         throw new AppError('Workspace not found', 404);
       }
 
-      const result = await this.accountRequestRepository.update(workspaceId, id, userId, data);
+      const result = await this.accountRequestRepository.update(
+        workspaceId,
+        id,
+        userId,
+        data,
+        await accountAccessFor(req),
+      );
 
       if (result.error) {
         throw new AppError(result.error, result.statusCode);
@@ -147,7 +164,12 @@ export class AccountController {
         throw new AppError('Workspace not found', 404);
       }
 
-      const result = await this.accountRequestRepository.delete(workspaceId, id, userId);
+      const result = await this.accountRequestRepository.delete(
+        workspaceId,
+        id,
+        userId,
+        await accountAccessFor(req),
+      );
 
       if (result.error) {
         throw new AppError(result.error, result.statusCode);
@@ -180,6 +202,7 @@ export class AccountController {
         workspaceId,
         targetCurrency,
         userId,
+        await accountAccessFor(req),
       );
 
       if (result.error) {

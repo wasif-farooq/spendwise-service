@@ -263,7 +263,8 @@ export class WorkspaceController {
   }
 
   async updateMember(req: Request, res: Response) {
-    const workspaceId = req.params.id;
+    // The route is /:workspaceId/members/:memberId.
+    const workspaceId = req.params.workspaceId || req.params.id;
     const { memberId } = req.params;
     const userId = this.getUserId(req);
 

@@ -3,6 +3,7 @@ import { TOKENS } from '@di/tokens';
 import { controllerMiddleware } from '@shared/middlewares/controller.middleware';
 import { getStripeWebhookHandler } from '../webhooks/StripeWebhookHandler';
 import { getPaddleWebhookHandler } from '../webhooks/PaddleWebhookHandler';
+import { rejectIfManagedByGooglePlay } from '@domains/store-billing/storeBilling.middleware';
 
 const router = Router();
 
@@ -31,7 +32,11 @@ export const RAW_BODY_WEBHOOK_PATHS = [...STRIPE_WEBHOOK_PATHS, ...PADDLE_WEBHOO
 router.use(controllerMiddleware(TOKENS.PaymentControllerFactory));
 
 router.get('/gateways', (req, res, next) => req.controller.getGateways(req, res).catch(next));
-router.post('/checkout', (req, res, next) => req.controller.createCheckout(req, res).catch(next));
+// One biller per user: no web checkout while Google Play bills the plan (409
+// SUBSCRIPTION_MANAGED_BY_GOOGLE_PLAY; see store-billing/subscriptionSource.ts).
+router.post('/checkout', rejectIfManagedByGooglePlay(), (req, res, next) =>
+  req.controller.createCheckout(req, res).catch(next),
+);
 router.post('/paddle/confirm', (req, res, next) =>
   req.controller.confirmPaddle(req, res).catch(next),
 );

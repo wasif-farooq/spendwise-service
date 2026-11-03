@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ActivityLogService } from '../services/ActivityLogService';
 import { AppError } from '@shared/errors/AppError';
+import { accountAccessFor } from '@domains/workspaces/services/AccountAccess';
 import { ActivityResponse, ActivityListResponse, PartitionResponse } from '../dto/activity.dto';
 
 export class ActivityLogController {
@@ -8,6 +9,18 @@ export class ActivityLogController {
 
   private getWorkspaceId(req: Request): string {
     return req.params.workspaceId || (req.query.workspaceId as string);
+  }
+
+  /**
+   * Account and transaction entries carry amounts, so they are limited to the
+   * caller's accessible accounts. Non-members get nothing.
+   */
+  private async accessibleAccounts(req: Request): Promise<string[] | undefined> {
+    const access = await accountAccessFor(req);
+    if (!access.unrestricted && !access.memberId) {
+      throw new AppError('You are not a member of this workspace', 403);
+    }
+    return access.accountIdsWith('transactions:view');
   }
 
   private getUserId(req: Request): string | null {
@@ -31,6 +44,7 @@ export class ActivityLogController {
       action: action as string | undefined,
       limit: limit ? parseInt(limit as string) : 50,
       cursor: cursor as string | undefined,
+      accountIds: await this.accessibleAccounts(req),
     });
 
     const response: ActivityListResponse = {
@@ -56,6 +70,7 @@ export class ActivityLogController {
       startDate: startDate as string,
       endDate: endDate as string,
       limit: limit ? parseInt(limit as string) : 100,
+      accountIds: await this.accessibleAccounts(req),
     });
 
     res.status(200).json({

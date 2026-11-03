@@ -1,5 +1,5 @@
 import { ScheduledReportRepository } from '../repositories/ScheduledReportRepository';
-import { ReportService } from './ReportService';
+import { AccountAccessResolver, ReportService } from './ReportService';
 import { calculateNextRunAt } from './reportUtils';
 import { ScheduledReportQueue } from '@messaging/queues/ScheduledReportQueue';
 import { TransactionRepository } from '@domains/transactions/repositories/TransactionRepository';
@@ -20,9 +20,15 @@ export class ScheduledReportService {
     transactionRepo: TransactionRepository,
     categoryRepo: CategoryRepository,
     exchangeRateService: ExchangeRateService,
+    resolveAccess?: AccountAccessResolver,
   ) {
     this.scheduledRepo = new ScheduledReportRepository();
-    this.reportService = new ReportService(transactionRepo, categoryRepo, exchangeRateService);
+    this.reportService = new ReportService(
+      transactionRepo,
+      categoryRepo,
+      exchangeRateService,
+      resolveAccess,
+    );
   }
 
   async create(data: CreateScheduledReport) {

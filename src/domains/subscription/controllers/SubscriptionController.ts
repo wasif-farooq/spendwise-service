@@ -2,13 +2,34 @@ import { Request, Response } from 'express';
 import { SubscriptionRequestRepository } from '../repositories/SubscriptionRequestRepository';
 import { AccountRequestRepository } from '@domains/accounts/repositories/AccountRequestRepository';
 import { WorkspaceRequestRepository } from '@domains/workspaces/repositories/WorkspaceRequestRepository';
+import { billingFieldsOf } from '@domains/store-billing/subscriptionSource';
+import type { TransactionLimitService } from '@domains/transactions/services/TransactionLimit';
 
 export class SubscriptionController {
   constructor(
     private subscriptionRequestRepository: SubscriptionRequestRepository,
     private accountRequestRepository?: AccountRequestRepository,
     private workspaceRequestRepository?: WorkspaceRequestRepository,
+    /** Monthly transaction allowance, for `usage.transactionsThisMonth`. */
+    private getTransactionLimit?: () => TransactionLimitService,
   ) {}
+
+  /**
+   * Transactions people added to this workspace this calendar month (UTC), the number
+   * the plan's `limits.transactions` is checked against; plus when it resets.
+   */
+  private async transactionUsage(
+    workspaceId: string,
+  ): Promise<{ transactionsThisMonth: number; transactionsResetAt: string | null }> {
+    if (!this.getTransactionLimit) return { transactionsThisMonth: 0, transactionsResetAt: null };
+    try {
+      const usage = await this.getTransactionLimit().getUsage(workspaceId);
+      return { transactionsThisMonth: usage.used, transactionsResetAt: usage.resetsAt };
+    } catch (error) {
+      console.error('Error calculating transaction usage:', error);
+      return { transactionsThisMonth: 0, transactionsResetAt: null };
+    }
+  }
 
   private getUserId(req: Request): string {
     return (req as any).user?.userId || (req as any).user?.id || (req as any).user?.sub;
@@ -75,6 +96,7 @@ export class SubscriptionController {
             startDate: new Date(),
             features: defaultPlan?.features || [],
             limits: defaultPlan?.limits || {},
+            ...billingFieldsOf(null),
           },
           featureUsage,
         });
@@ -91,6 +113,16 @@ export class SubscriptionController {
           features: subscription.featuresSnapshot || plan?.features || [],
           limits: subscription.limitsSnapshot || plan?.limits || {},
           paymentProvider: subscription.paymentProvider,
+          // P15: who bills the plan, and the store's renewal facts.
+          ...billingFieldsOf({
+            status: subscription.status,
+            paymentProvider: subscription.paymentProvider,
+            planKey: plan?.name,
+            cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+            currentPeriodEnd: subscription.currentPeriodEnd,
+            billingCycle: subscription.billingCycle,
+            storeManagementUrl: subscription.storeManagementUrl,
+          }),
         },
         featureUsage,
       });
@@ -290,7 +322,10 @@ export class SubscriptionController {
 
       const subscriptionResult =
         await this.subscriptionRequestRepository.getCurrentSubscription(ownerId);
-      const featureUsage = await this.calculateOwnerUsage(ownerId);
+      const featureUsage = {
+        ...(await this.calculateOwnerUsage(ownerId)),
+        ...(await this.transactionUsage(workspaceId)),
+      };
 
       if (subscriptionResult.error) {
         throw new Error(subscriptionResult.error);

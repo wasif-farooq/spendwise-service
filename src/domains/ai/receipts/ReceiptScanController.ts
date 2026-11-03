@@ -1,3 +1,4 @@
+import { accountAccessFor } from '@domains/workspaces/services/AccountAccess';
 import { Request, Response } from 'express';
 import type { ReceiptScanService } from './ReceiptScanService';
 import { ReceiptImageMimeType, ReceiptScanError } from './types';
@@ -30,6 +31,8 @@ export class ReceiptScanController {
         userId: this.userIdOf(req),
         image: file.buffer,
         mimeType: file.mimetype as ReceiptImageMimeType,
+        // Only suggest an account the caller can book the expense into.
+        accountIds: (await accountAccessFor(req)).accountIdsWith('transactions:create'),
       });
       res.setHeader('Cache-Control', 'no-store');
       res.json({ data: result });

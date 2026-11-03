@@ -102,7 +102,7 @@ describe('ConnectionSyncService', () => {
     expect(store.rowsFor(link.id).filter((t) => t.source === 'adjustment')).toHaveLength(2);
   });
 
-  it('pages a long history across runs and reconciles only when it is complete', async () => {
+  it('pages a long history across runs and matches the provider balance after every run', async () => {
     const store = new Store();
     const ctx = build(store);
     ctx.provider.pageSize = 1; // 5 rows a run
@@ -111,12 +111,36 @@ describe('ConnectionSyncService', () => {
     );
     ctx.provider.balanceValue = '15';
     const { conn, result, link } = await connectAndLink(store, ctx, { syncMode: 'history' });
-    expect(result.sync?.links[0]).toMatchObject({ imported: 5, hasMore: true, adjustment: null });
+    const openings = () => store.rowsFor(link.id).filter((t) => t.externalId === `open:${link.id}`);
+    const oldestMovement = () =>
+      Math.min(...store.rowsFor(link.id).filter((t) => t.source === 'sync').map((t) => t.date.getTime()));
+
+    // Still importing: a provisional opening balance already matches the provider.
+    expect(result.sync?.links[0]).toMatchObject({ imported: 5, hasMore: true, adjustment: '10.00000000' });
     expect(result.connection.links[0].backfillComplete).toBe(false);
-    await ctx.sync.syncConnection(conn.id, { trigger: 'scheduled' });
+    expect(store.accounts.get(link.accountId)!.balance).toBe('15.00000000');
+    expect(store.links.get(link.id)!.cursor).toMatchObject({ done: false, opened: false });
+
+    // Each run rewrites it (never a second row), dated before the oldest movement so far.
+    const second = await ctx.sync.syncConnection(conn.id, { trigger: 'scheduled' });
+    expect(second.links[0]).toMatchObject({ imported: 5, hasMore: true, adjustment: '5.00000000' });
+    expect(openings()).toHaveLength(1);
+    expect(openings()[0].date.getTime()).toBeLessThan(oldestMovement());
+    expect(store.accounts.get(link.accountId)!.balance).toBe('15.00000000');
+
     const last = await ctx.sync.syncConnection(conn.id, { trigger: 'scheduled' });
     expect(last.links[0]).toMatchObject({ imported: 2, hasMore: false, adjustment: '3.00000000' });
+    expect(openings()).toHaveLength(1);
+    expect(openings()[0]).toMatchObject({ type: 'income', amount: '3.00000000' });
+    expect(openings()[0].date.getTime()).toBeLessThan(oldestMovement());
+    expect(store.links.get(link.id)!.cursor).toMatchObject({ done: true, opened: true });
     expect(store.accounts.get(link.accountId)!.balance).toBe('15.00000000');
+
+    // Final: later runs leave the opening balance alone and use the daily adjustment.
+    ctx.provider.balanceValue = '16';
+    await ctx.sync.syncConnection(conn.id, { trigger: 'scheduled' });
+    expect(openings()[0]).toMatchObject({ amount: '3.00000000' });
+    expect(store.accounts.get(link.accountId)!.balance).toBe('16.00000000');
   });
 
   it('caps the first import and skips the rest of the backfill', async () => {

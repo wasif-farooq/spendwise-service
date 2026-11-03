@@ -60,6 +60,7 @@ export class ReportRequestRepository {
       customDates?: { startDate: string; endDate: string };
       format: 'csv' | 'xlsx';
       userId?: string;
+      accountIds?: string[];
     },
   ) {
     if (this.getMode() === 'direct') {
@@ -72,6 +73,7 @@ export class ReportRequestRepository {
           dateRange: data.dateRange || 'thisMonth',
           customDates: data.customDates,
           format: data.format,
+          accountIds: data.accountIds,
         }),
       );
     }
@@ -91,6 +93,7 @@ export class ReportRequestRepository {
         | 'custom';
       customDates?: { startDate: string; endDate: string };
       format: 'csv' | 'xlsx';
+      accountIds?: string[];
     },
   ) {
     if (this.getMode() === 'direct') {
@@ -101,6 +104,7 @@ export class ReportRequestRepository {
           data.dateRange || 'thisMonth',
           data.customDates,
           data.format,
+          data.accountIds,
         ),
       );
     }

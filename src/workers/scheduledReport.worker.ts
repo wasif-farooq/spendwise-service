@@ -8,6 +8,7 @@ import { ExchangeRateRepository } from '@domains/exchange-rates/repositories/Exc
 import { ExchangeRateService } from '@domains/exchange-rates/services/ExchangeRateService';
 import { ScheduledReportService } from '@domains/reports/services/ScheduledReportService';
 import { ScheduledReportJobData } from '@messaging/queues/ScheduledReportQueue';
+import { resolveAccountAccess } from '@domains/workspaces/services/AccountAccess';
 
 export class ScheduledReportWorker {
   private worker: Worker | null = null;
@@ -21,6 +22,8 @@ export class ScheduledReportWorker {
       transactionRepo,
       categoryRepo,
       new ExchangeRateService(new ExchangeRateRepository(db)),
+      // A scheduled report only covers the accounts its owner can see when it runs.
+      (userId, workspaceId) => resolveAccountAccess(db, userId, workspaceId),
     );
   }
 
