@@ -127,6 +127,7 @@ export default {
     bitcoin: { baseUrl: 'https://mempool.space/api' },
     tron: { baseUrl: 'https://api.trongrid.io', apiKey: '' },
     solana: { rpcUrl: '' },
+    stripe: { clientId: '', secretKey: '', redirectUri: '', authorizeUrl: '', apiBaseUrl: '' },
     syncCron: { enabled: false, intervalMinutes: 15 },
   },
 };

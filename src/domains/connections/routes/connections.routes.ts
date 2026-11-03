@@ -31,6 +31,8 @@ import {
  *   GET    /providers                       integrations:view
  *   GET    /                                integrations:view  { connections, usage }
  *   POST   /                                integrations:manage  402/409/400/503
+ *   POST   /oauth/:provider/start           integrations:manage  { authorizeUrl }  402/503
+ *   POST   /oauth/:provider/complete        integrations:manage  { connection, returnTo, reconnected }  400/502
  *   GET    /:id/assets                      integrations:manage  { assets, accounts, accountsUsage }
  *   POST   /:id/links                       integrations:manage  200, or 202 while the first sync runs
  *   DELETE /:id/links/:linkId?deleteImported=  integrations:manage
@@ -55,6 +57,15 @@ export const CreateConnectionSchema = z.object({
   address: z.string().trim().max(128).optional(),
   displayName: z.string().trim().max(100).optional(),
   chains: z.array(z.string().max(20)).max(20).optional(),
+});
+
+const OAuthParams = WorkspaceParams.extend({ provider: z.enum(['stripe', 'paypal']) });
+
+export const OAuthStartSchema = z.object({ returnTo: z.enum(['web', 'mobile']).optional() });
+
+export const OAuthCompleteSchema = z.object({
+  code: z.string().trim().min(1).max(512),
+  state: z.string().trim().min(16).max(128),
 });
 
 export const LinkSchema = z.object({
@@ -124,6 +135,24 @@ export const createConnectionsRouter = (
     canManage,
     validateBody(CreateConnectionSchema),
     controller.create,
+  );
+  router.post(
+    `${base}/oauth/:provider/start`,
+    flagOn,
+    requireAuth,
+    validateParams(OAuthParams),
+    canManage,
+    validateBody(OAuthStartSchema),
+    controller.oauthStart,
+  );
+  router.post(
+    `${base}/oauth/:provider/complete`,
+    flagOn,
+    requireAuth,
+    validateParams(OAuthParams),
+    canManage,
+    validateBody(OAuthCompleteSchema),
+    controller.oauthComplete,
   );
   router.get(
     `${base}/:id/assets`,

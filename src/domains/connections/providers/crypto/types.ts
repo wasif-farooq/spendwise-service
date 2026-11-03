@@ -8,6 +8,7 @@ import type {
   ProviderId,
   ProviderLink,
 } from '../types';
+import type { StripeConfig } from '../stripe/StripeProvider';
 import type { CryptoFamily } from './assets';
 
 /** `connections` in config/environments/*. */
@@ -18,6 +19,7 @@ export interface ConnectionsConfig {
   bitcoin?: { baseUrl?: string };
   tron?: { baseUrl?: string; apiKey?: string };
   solana?: { rpcUrl?: string };
+  stripe?: StripeConfig;
   syncCron?: { enabled?: boolean; intervalMinutes?: number };
 }
 

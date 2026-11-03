@@ -3,8 +3,8 @@ import { randomToken } from '@shared/utils/secureRandom';
 
 /**
  * One-time handoff codes let a signed-in native client open the web app
- * already signed in (for example to reach the Paddle checkout) without ever
- * putting a token in a URL.
+ * already signed in (for example to reach the Paddle checkout, or to connect
+ * Stripe or PayPal by signing in to them) without ever putting a token in a URL.
  *
  * - The code is 256 bits from the CSPRNG (43 URL-safe characters), so guessing
  *   one inside its 60 second life is not a realistic attack.
@@ -17,7 +17,13 @@ import { randomToken } from '@shared/utils/secureRandom';
 export const HANDOFF_TTL_SECONDS = 60;
 export const HANDOFF_CODE_BYTES = 32;
 
-export const HANDOFF_SCOPES = ['checkout'] as const;
+/**
+ * What the web page is opened for: `checkout` (upgrade) or `connections`
+ * (connect Stripe / PayPal). The scope is recorded with the code for the audit
+ * trail; the session it exchanges for is the user's normal session either way,
+ * and the web only continues to same-origin paths.
+ */
+export const HANDOFF_SCOPES = ['checkout', 'connections'] as const;
 export type HandoffScope = (typeof HANDOFF_SCOPES)[number];
 
 /** Stored under the hashed code; never contains the code itself. */

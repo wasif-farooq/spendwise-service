@@ -57,6 +57,44 @@ export class ConnectionRepository {
     return result.rows[0] ? mapRow(result.rows[0]) : null;
   }
 
+  /** Row-locked until the transaction ends (rolling OAuth tokens). */
+  async findByIdForUpdate(id: string): Promise<ConnectionRow | null> {
+    const result = await this.db.query('SELECT * FROM connections WHERE id = $1 FOR UPDATE', [id]);
+    return result.rows[0] ? mapRow(result.rows[0]) : null;
+  }
+
+  async findByExternalRef(
+    workspaceId: string,
+    provider: string,
+    externalRef: string,
+  ): Promise<ConnectionRow | null> {
+    const result = await this.db.query(
+      `SELECT * FROM connections
+        WHERE workspace_id = $1 AND provider = $2 AND external_ref = $3`,
+      [workspaceId, provider, externalRef],
+    );
+    return result.rows[0] ? mapRow(result.rows[0]) : null;
+  }
+
+  /** The user signed in again: new tokens, errors cleared, due for a sync now. */
+  async reconnect(
+    id: string,
+    credentialsEnc: Buffer,
+    metadata: Record<string, any>,
+  ): Promise<ConnectionRow | null> {
+    const result = await this.db.query(
+      `UPDATE connections
+          SET credentials_enc = $2, metadata = metadata || $3::jsonb,
+              status = CASE WHEN status = 'syncing' THEN status ELSE 'active' END,
+              last_error = NULL, last_error_code = NULL, consecutive_failures = 0,
+              next_sync_at = NOW(), updated_at = NOW()
+        WHERE id = $1
+        RETURNING *`,
+      [id, credentialsEnc, JSON.stringify(metadata ?? {})],
+    );
+    return result.rows[0] ? mapRow(result.rows[0]) : null;
+  }
+
   async findInWorkspace(id: string, workspaceId: string): Promise<ConnectionRow | null> {
     const result = await this.db.query(
       'SELECT * FROM connections WHERE id = $1 AND workspace_id = $2',

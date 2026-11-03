@@ -74,6 +74,18 @@ export class HttpClient {
     });
   }
 
+  /** A form-encoded POST (OAuth token endpoints). */
+  postForm<T = any>(
+    url: string,
+    params: Record<string, string>,
+    headers: Record<string, string> = {},
+  ): Promise<T> {
+    return this.request<T>('POST', url, new URLSearchParams(params).toString(), {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      ...headers,
+    });
+  }
+
   /** Waits for this provider's next free slot (the rate cap). */
   private async throttle(): Promise<void> {
     if (!this.minGapMs) return;

@@ -45,7 +45,7 @@ export interface Availability {
 /** The decrypted connection, as the provider sees it. */
 export interface ProviderConnection {
   id: string;
-  /** Normalised address (or account id). Never log it in full. */
+  /** Normalised address, or the serialised tokens of an OAuth source. Never log it. */
   address: string;
   metadata: Record<string, any>;
 }
@@ -119,12 +119,39 @@ export interface ValidatedInput {
   metadata: Record<string, any>;
 }
 
+/** What exchanging an OAuth code gives back. */
+export interface OAuthGrant {
+  /** The provider's account id: one connection per account and workspace. Never returned in full. */
+  accountRef: string;
+  /** The tokens, serialised; stored encrypted and handed back as ProviderConnection.address. */
+  credentials: string;
+  displayName: string;
+  /** Plain metadata kept on the connection (a short account hint). */
+  metadata: Record<string, any>;
+}
+
+/** Sources the user signs in to (Stripe, later PayPal) instead of giving an address. */
+export interface ProviderOAuth {
+  /** Where the user is sent to sign in; `state` comes back to the callback. */
+  authorizeUrl(state: string): string;
+  /** Throws ProviderError when the provider refuses the code. */
+  exchangeCode(code: string, now: Date): Promise<OAuthGrant>;
+  /**
+   * New serialised tokens when the stored ones are about to expire, null while
+   * they are still good. The caller must store what it gets back: a rolled
+   * refresh token replaces the old one. Throws AuthRevokedError.
+   */
+  refresh(credentials: string, now: Date): Promise<string | null>;
+}
+
 export interface ConnectionProvider {
   id: ProviderId;
   kind: ConnectionKind;
   auth: ProviderAuth;
   name: string;
   description: string;
+  /** Present when `auth` is 'oauth'. */
+  oauth?: ProviderOAuth;
   isAvailable(): Availability;
   /** Networks the user can pick (EVM) or the one network it reads. */
   chains(): ChainInfo[];

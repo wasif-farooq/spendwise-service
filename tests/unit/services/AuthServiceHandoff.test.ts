@@ -108,6 +108,15 @@ describe('AuthService handoff: issue', () => {
     expect(parseHandoffRecord(stored)).toMatchObject({ userId: USER_ID, scope: 'checkout' });
   });
 
+  it('records the connections scope (connecting Stripe / PayPal from the app)', async () => {
+    const { service } = buildService(buildUser(), redis);
+    const result = await service.issueHandoffCode(USER_ID, 'connections');
+
+    expect(result.scope).toBe('connections');
+    const stored = redis.store.get(`auth_handoff:${hashHandoffCode(result.code)}`)!.value;
+    expect(parseHandoffRecord(stored)).toMatchObject({ userId: USER_ID, scope: 'connections' });
+  });
+
   it('issues a different code every time', async () => {
     const { service } = buildService(buildUser(), redis);
     const codes = new Set<string>();
@@ -139,6 +148,17 @@ describe('AuthService handoff: exchange', () => {
 
   beforeEach(() => {
     redis = createFakeRedis();
+  });
+
+  it('exchanges a connections code for the same login-shaped token pair', async () => {
+    const { service } = buildService(buildUser(), redis);
+    const { code } = await service.issueHandoffCode(USER_ID, 'connections');
+
+    const result = await service.exchangeHandoffCode(code);
+
+    expect(result.user.id).toBe(USER_ID);
+    expect(typeof result.token).toBe('string');
+    expect(typeof result.refreshToken).toBe('string');
   });
 
   it('exchanges a fresh code for a login-shaped token pair', async () => {

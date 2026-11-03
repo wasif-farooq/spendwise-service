@@ -1,0 +1,9 @@
+{
+  "object": "list",
+  "url": "/v1/balance_transactions",
+  "has_more": false,
+  "data": [
+    { "id": "txn_2fee", "object": "balance_transaction", "amount": -1500, "fee": 0, "net": -1500, "currency": "usd", "created": 1790000200, "type": "stripe_fee", "description": null, "status": "available" },
+    { "id": "txn_1charge", "object": "balance_transaction", "amount": 2000, "fee": 88, "net": 1912, "currency": "usd", "created": 1790000100, "type": "charge", "description": "Order 1001", "status": "available" }
+  ]
+}
